@@ -445,3 +445,26 @@ test.**
 One attack also remains untested: a generator that jitters the palette **and** pans the camera
 defeats both halves of the variety distance at once, since the histogram half falls to a repalette and
 the structure half falls to a translation.
+
+---
+
+# Why `tempoBpm` is useless — diagnosed
+
+`tempoBpm` and `ioiEntropy` were recorded above as near-useless gates: both passed all six synthetic
+control files. The synth builder found the mechanism while choosing a tempo range.
+
+**The autocorrelation estimator locks to the bar, not the beat, on dense music.** A track genuinely at
+140–172 BPM measures as 35–43 BPM — a factor of four out, because the bar (1.40–1.71 s) is what the
+autocorrelation actually finds. The corpus band of 32.5–142.9 BPM is therefore not a band of tempi at
+all; it is a mixture of beat-rate readings from sparse tracks and bar-rate readings from dense ones,
+which is exactly why it is wide enough to admit anything.
+
+Two consequences:
+
+1. **Do not treat `tempoBpm` as a tempo.** Either fix the estimator to disambiguate beat from bar
+   (onset-interval histogram rather than raw autocorrelation), or retire the metric. Leaving a metric
+   in the suite that measures a different quantity for sparse and dense inputs is how the pixel band
+   came to measure artwork identity.
+2. **A musically correct tempo that reads out of band should be reported out of band.** It is one of
+   the cheapest fails to spend against the ≤5-of-17 budget, and the alternative — choosing tempi to
+   satisfy a broken estimator — is writing to the test.

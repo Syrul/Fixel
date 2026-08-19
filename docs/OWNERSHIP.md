@@ -75,7 +75,23 @@ a genuine artwork on it.
    of the biased judge brief in `docs/JUDGE-PROMPT.md`: it wins the thing being
    measured and loses the thing that matters. Critics check the whole hard-fail
    list, not the metric the builder was given.
-6. **Never report a PASS count as progress.** Leave-one-out shows an all-pass
+6. **A correct artefact that reads out of band is REPORTED out of band.**
+   Never bend the artefact to fit a metric you have just shown measures the
+   wrong thing. Worked example: the synth builder found that `tempoBpm` locks
+   to the **bar** rather than the beat on dense music, so a genuine 140-172 BPM
+   track reports as 35-43. Measured across the corpus, the readings fall into
+   three clusters — bar-rate (32.5-44.9), half-bar (63.8-77.4) and true
+   beat-rate (117.5, 161.5). The band "32.5-142.9 BPM" is therefore not a band
+   of tempi at all but a mixture of three different quantities, which is exactly
+   why it was wide enough to admit a sustained square wave.
+
+   The right response was to keep the music correct and report the metric as
+   broken. This is also **why the synth builder may not edit the bar**: a
+   builder who could widen the band might have done so in good faith, and the
+   defect would have been buried instead of found. The separation paid for
+   itself the first time it was tested.
+
+7. **Never report a PASS count as progress.** Leave-one-out shows an all-pass
    gate rejects 84% of the reference's own crops, and seven of the sixty metrics
    correlate at r=1.0000. 36 vs 35 PASS is noise; the direction of a specific
    hard fail is the signal.

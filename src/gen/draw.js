@@ -12,12 +12,44 @@ import { drawBox as rawBox, asShade } from '../core/iso.js';
 let INK = 0;
 export function setInk(i) { INK = i; }
 
+/**
+ * A FACE NARROWER THAN ~2px CANNOT CARRY A SHADING LADDER.
+ *
+ * In this projection the +y face is 2*w px across and the +x face is 2*d px, so
+ * a 0.7-unit parapet return or a 0.8-unit lamp post presents a face one or two
+ * pixels wide holding the RIGHT or DARK step of the ladder. One pixel of a
+ * mid-value sitting between a lit face and black ink is the literal definition
+ * of `edge.fracAA` — the metric whose failure message is "ANTIALIASED / scaled
+ * / resampled output". Mapping the AA pixels showed them lying almost entirely
+ * on poles, parapet returns and railing posts; nothing in this generator
+ * blends, it just draws slivers of the middle of its own ladder.
+ *
+ * So a sliver takes its neighbour's value. Two consequences beyond the metric,
+ * both wanted: a pole becomes ONE flat colour plus its keyline, which is what
+ * eBoy poles are, and two 1px faces stop counting as two separate flat faces —
+ * and the face count is 2.6x the reference's.
+ */
+function unsliver(w, d, mat) {
+  const thinL = w < 1.05, thinR = d < 1.05;
+  if (!thinL && !thinR) return mat;
+  if (thinL && thinR) return { top: mat.top, left: mat.left, right: mat.left };
+  if (thinR) return { top: mat.top, left: mat.left, right: mat.left };
+  return { top: mat.top, left: mat.right, right: mat.right };
+}
+
 export function box(cv, iso, x, y, z, w, d, h, mat, tag) {
-  rawBox(cv, iso, x, y, z, w, d, h, mat, tag);
+  rawBox(cv, iso, x, y, z, w, d, h, unsliver(w, d, mat), tag);
   // Gate at 0.8: dropping it to 0.55 buys outline.run1Share by carpeting the
   // frame with vertical arrises, and slope.corrDx0Share — the metric that
   // exists to catch exactly that — blows out. Measured, twice. Do not lower it.
+  //
+  // The upper gate is new and is the same argument as unsliver(): on a post
+  // 3px wide the arris separates two faces that now hold the SAME value, so it
+  // is a vertical black stroke that encloses nothing. Ink is currently over
+  // budget, not under, and `slope.corrDx0Share` is +1.65 bandwidths of "too
+  // much of the outline mass is vertical". This is ink taken back.
   if (!INK || w < 0.8 || d < 0.8 || h < 0.6) return;
+  if (w < 1.05 && d < 1.05) return;
   const X = x + w, Y = y + d;
   const sx = Math.round(iso.ox + 2 * (X - Y));
   const yBase = Math.round(iso.oy + (X + Y) - 2 * z);

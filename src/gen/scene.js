@@ -295,7 +295,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw) {
         if (!ps.bool(0.72)) continue;
         cv.t = tag();
         drawVehicle(cv, iso, C, ps, x0 + u + 0.6, yy, Z, 0,
-          ps.weighted([['car', 6], ['van', 2], ['pickup', 2], ['taxi', 1]]));
+          ps.weighted([['car', 6], ['van', 2], ['pickup', 2], ['taxi', 1]]), tag);
       }
     }
     cv.t = tag(); S.fenceRun(cv, iso, C, ps, x0, y0 + d - 0.4, Z, w, 0, 2.4);
@@ -508,7 +508,7 @@ function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw) {
         if (vis(a, y, b, y + 12, 8) && ts.bool(0.66)) {
           cv.t = tag();
           drawVehicle(cv, iso, CT, ts, lane, y, 0, 1,
-            ts.weighted([['car', 8], ['van', 3], ['pickup', 3], ['taxi', 2], ['moto', 1]]));
+            ts.weighted([['car', 8], ['van', 3], ['pickup', 3], ['taxi', 2], ['moto', 1]]), tag);
         }
         y += ts.range(9.5, 17);
       }
@@ -521,7 +521,7 @@ function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw) {
         if (vis(x, c, x + 12, d, 8) && ts.bool(0.66)) {
           cv.t = tag();
           drawVehicle(cv, iso, CT, ts, x, lane, 0, 0,
-            ts.weighted([['car', 8], ['van', 3], ['pickup', 3], ['taxi', 2], ['moto', 1]]));
+            ts.weighted([['car', 8], ['van', 3], ['pickup', 3], ['taxi', 2], ['moto', 1]]), tag);
         }
         x += ts.range(9.5, 17);
       }
@@ -535,7 +535,7 @@ function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw) {
         const kind = ts.weighted(KINDS);
         if (vis(a, y, b, y + 14, 8) && ts.bool(0.84)) {
           cv.t = tag();
-          drawVehicle(cv, iso, CT, ts, lanes[li], y, 0, 1, kind);
+          drawVehicle(cv, iso, CT, ts, lanes[li], y, 0, 1, kind, tag);
         }
         y += ts.range(11, 26);
       }
@@ -549,7 +549,7 @@ function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw) {
         const kind = ts.weighted(KINDS);
         if (vis(x, c, x + 14, d, 8) && ts.bool(0.84)) {
           cv.t = tag();
-          drawVehicle(cv, iso, CT, ts, x, lanes[li], 0, 0, kind);
+          drawVehicle(cv, iso, CT, ts, x, lanes[li], 0, 0, kind, tag);
         }
         x += ts.range(11, 26);
       }
