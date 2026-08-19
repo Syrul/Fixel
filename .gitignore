@@ -15,3 +15,7 @@ corpus/controls/
 dist/
 .vercel
 .env*
+
+# Third-party reference artwork — kept locally, never committed.
+# See docs/BAR.md; the harness expects these on disk.
+refs/
