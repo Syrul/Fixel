@@ -131,6 +131,20 @@ const REAL_WORDS = /^(SLEEP|SLEEK|SLIP|SLOT|STOP|START|STORE|SHOT|SHIP|SHOP|TRIP
  * like signage) or a register lookup (which this generator cannot carry).
  * Recorded rather than papered over.
  */
+// A third filter, and the one with the least tolerance for a miss. The other
+// two lists guard against looking unoriginal; this one guards against putting
+// a slur or an obscenity on a billboard in a public feed. A nonsense syllabary
+// coins real words by chance — a night city shipped a hero sign reading SLUT,
+// which passed both lists above because it is neither a mark nor a trade word.
+//
+// Two differences from the lists above, both deliberate:
+//   - It is matched as a SUBSTRING, not just as a prefix. An obscenity in the
+//     middle of a coined word is exactly as visible as one at the start.
+//   - A false positive costs one re-roll of a nonsense word, and a miss costs
+//     an offensive sign on a public site. The trade is not symmetric, so this
+//     list errs long.
+const OFFENSIVE = /(ANAL|ARSE|ASS|BALLS|BASTARD|BITCH|BOLLOCK|BONER|BOOB|CHINK|CLIT|COCK|COON|CRAP|CUM|CUNT|DAGO|DAMN|DICK|DIKE|DILDO|DYKE|FAG|FANNY|FART|FUCK|FUK|GOOK|HELL|HOMO|HORNY|JAP|JERK|JISM|JIZZ|KIKE|KNOB|KUNT|MICK|MONG|MUFF|NAZI|NEGRO|NIG|NONCE|PAKI|PEDO|PENIS|PIKEY|PISS|POO|PORN|PRICK|PUSSY|QUEER|RAPE|RETARD|SCUM|SEMEN|SEX|SHAG|SHIT|SKANK|SLAG|SLUT|SPAZ|SPERM|SPIC|TARD|TIT|TURD|TWAT|VAG|WANK|WHORE|WOG|WOP)/;
+
 function displayable(w) {
   if (w.length < 3 || w.length > 8) return false;
   // Every prefix the panel can show: 3 on a disc, up to 6 elsewhere, plus the
@@ -138,7 +152,10 @@ function displayable(w) {
   for (let k = 3; k <= w.length; k++) {
     const p = w.slice(0, k);
     if (FORBIDDEN.test(p) || REAL_WORDS.test(p)) return false;
+    if (OFFENSIVE.test(p)) return false;
   }
+  // and the whole coined word, since OFFENSIVE matches anywhere in it
+  if (OFFENSIVE.test(w)) return false;
   return true;
 }
 
