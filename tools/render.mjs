@@ -38,10 +38,13 @@ const biome = arg('biome', undefined);
 // under a feature nobody asked to enable would invalidate all of them at once.
 const frames = parseInt(arg('frames', '1'), 10);
 const frame = parseInt(arg('frame', '0'), 10);
+// Amplitude gain, the `?anim=` knob. A render parameter like --w, never part of
+// the seed: the same seed at a different gain is the same post drawn softer.
+const gain = parseFloat(arg('gain', '1'));
 
 const t0 = Date.now();
 const cv = renderScene(seed, {
-  w, h, frames, frame,
+  w, h, frames, frame, gain,
   ...(biome ? { biome } : {}),
 });
 const ms = Date.now() - t0;
@@ -49,4 +52,4 @@ mkdirSync(dirname(out), { recursive: true });
 writePNG(out, cv.w, cv.h, cv.toRGBA());
 process.stderr.write(
   `seed=${seed}${biome ? ` biome=${biome}` : ''} ${cv.w}x${cv.h} palette=${cv.pal.size}` +
-  `${frames > 1 ? ` frame=${frame}/${frames} anim=${cv.anim ? cv.anim.n : 0}px` : ''} ${ms}ms -> ${out}\n`);
+  `${frames > 1 ? ` frame=${frame}/${frames} gain=${gain} anim=${cv.anim ? cv.anim.n : 0}px` : ''} ${ms}ms -> ${out}\n`);

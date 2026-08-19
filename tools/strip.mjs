@@ -41,10 +41,11 @@ const W = Number(arg('w', 440));
 const H = Number(arg('h', 1000));
 const K = Number(arg('frames', FRAMES));
 const BIOME = arg('biome', undefined);
+const GAIN = Number(arg('gain', 1));
 const ZOOM = Math.max(1, Number(arg('zoom', 1)));
 const GAP = Number(arg('gap', 2));
 
-const o = { w: W, h: H, frames: K };
+const o = { w: W, h: H, frames: K, gain: GAIN };
 if (BIOME && BIOME !== true) o.biome = BIOME;
 
 const base = renderScene(seed, { ...o, frame: 0 });
