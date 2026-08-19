@@ -24,11 +24,20 @@
 //
 // Usage:
 //   node tools/strip.mjs --seed s --out out/look [--biome shore]
+//                        [--time night] [--weather rain]
 //                        [--w 440 --h 1000] [--x 120 --y 500 --size 160 --zoom 4]
+//
+// --time / --weather OVERRIDE THE SEED'S OWN DRAW and are measurement tools
+// only, exactly as in `tools/render.mjs`. Without them a named precipitation
+// post could not be looked at at all: rain and snow are ~5% of the feed, so
+// finding a seed that draws one by chance is not a workflow. They were accepted
+// and SILENTLY DISCARDED here until the resolver call below existed.
 
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { renderScene } from '../src/gen/scene.js';
+import { pickConditions, resolveConditions, TIME_KEYS, WEATHER_KEYS } from '../src/gen/conditions.js';
+import { pickBiome } from '../src/gen/biome-mix.js';
 import { writePNG } from '../src/core/png.js';
 import { FRAMES } from '../src/core/frame.js';
 
@@ -44,8 +53,43 @@ const BIOME = arg('biome', undefined);
 const ZOOM = Math.max(1, Number(arg('zoom', 1)));
 const GAP = Number(arg('gap', 2));
 
+// THIS FILE'S `arg()` IS NOT render.mjs's, and reading it the obvious way is
+// wrong. It returns a BOOLEAN for a valueless flag: `--time --weather rain`
+// yields TIME === true, while a trailing `--time` yields undefined, which is
+// indistinguishable from the flag being absent. So:
+//   - only a STRING counts as an override, or the boolean `true` would be
+//     handed to the resolver as a time name;
+//   - presence is read from `argv` DIRECTLY rather than from `arg()`, or the
+//     trailing-flag case stays exactly the silent discard this change removes.
+const str = (v) => (typeof v === 'string' && v.length ? v : undefined);
+const TIME = str(arg('time', undefined));
+const WEATHER = str(arg('weather', undefined));
+for (const [flag, val, keys] of [['time', TIME, TIME_KEYS], ['weather', WEATHER, WEATHER_KEYS]]) {
+  if (!argv.includes('--' + flag)) continue;
+  // An unknown name is REFUSED rather than passed on. Nothing downstream
+  // validates one: `resolveConditions` falls through to daySun 0.10 for any
+  // unrecognised time and to the fog branch for any unrecognised weather, so
+  // `--time nite` renders a silent night and reports it as `nite`.
+  if (val === undefined || !keys.includes(val)) {
+    console.error(`--${flag} ${val === undefined ? 'needs a value' : `"${val}" is not a ${flag}`}; one of: ${keys.join(' ')}`);
+    process.exit(2);
+  }
+}
+
 const o = { w: W, h: H, frames: K };
 if (BIOME && BIOME !== true) o.biome = BIOME;
+
+// Re-derived through the same resolver the feed uses, so the INTERACTIONS stay
+// consistent: overriding the two names on an already-resolved object would keep
+// the old `sun`, `warmth` and `wet` and produce a state the resolver would
+// never emit — a golden night, a dry rain. Copied from `tools/render.mjs` lines
+// 51-67 deliberately, so the two tools cannot drift into disagreeing about what
+// `--time night --weather rain` means.
+if (TIME || WEATHER) {
+  const kind = o.biome || pickBiome(seed);
+  const b = pickConditions(seed, kind);
+  o.cond = resolveConditions(TIME || b.time, WEATHER || b.weather, kind);
+}
 
 const base = renderScene(seed, { ...o, frame: 0 });
 const loop = base.anim;
@@ -159,7 +203,11 @@ for (let k = 1; k < K; k++) {
   // finding's clothes, and it would have been quoted.
   sizes.sort((a, b2) => b2 - a);
   const q = (f) => sizes.length ? sizes[Math.min(sizes.length - 1, Math.floor((1 - f) * sizes.length))] : 0;
-  console.log(`seed=${seed} ${W}x${H} frames=${K}${o.biome ? ` biome=${o.biome}` : ''}`);
+  // The condition is printed because these numbers are NOT comparable across
+  // conditions — a precipitation layer moves pixels the clear version never
+  // moves — so a churn figure quoted without its condition is unattributable.
+  console.log(`seed=${seed} ${W}x${H} frames=${K}${o.biome ? ` biome=${o.biome}` : ''}` +
+    `${o.cond ? ` ${o.cond.time}/${o.cond.weather}` : ''}`);
   console.log(`  ever moves      ${ever} px = ${(100 * ever / (W * H)).toFixed(2)}% of frame`);
   console.log(`  loop union      ${loop.n} px   dropped ${loop.dropped}   flat ${loop.flat}   shadowed ${loop.shadowed ?? 0}`);
   console.log(`  islands         ${sizes.length}   largest ${sizes[0] || 0}   p50 ${q(0.5)}   p90 ${q(0.9)}`);
