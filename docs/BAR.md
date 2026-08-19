@@ -826,3 +826,94 @@ pixel art", it was never checked in five rounds, and it was about to set a numbe
 
 **Measure the reference before you take a number from it, including when the number is the
 whole reason you looked.**
+
+---
+
+# THE AMPLITUDE FLOOR — subtler than about one pixel is not subtler, it is noise
+
+**The most transferable result of the animation round, and it was found twice, by two
+subsystems, through different mechanisms, without either knowing the other's number.**
+
+The intuition going in — stated in the user's brief, in the lead's dispatch, and in both
+builders' first drafts — was that "slightly" poses a question about how far DOWN to go, and
+that the risk all lay above. It does not, and it does not.
+
+> **A band edge displaced by less than a pixel cannot move AS AN EDGE.** Only the pixels
+> whose threshold happens to fall inside the displacement flip, and independent pixels
+> flipping is per-pixel noise by construction.
+
+Measured, with each mechanism running ALONE so the others could not dilute the ratio, six
+seeds each, using `tools/animcheck.mjs`'s island test (share of moving pixels living in 1–2px
+components):
+
+| mechanism | amplitude | specks | verdict |
+|---|---|---|---|
+| shore swell | 0.0060 (~0.5 px) | 44–65% | fails 6/6 |
+| shore swell | 0.0090 (~0.8 px) | 13.6–45.5% | fails 4/6 |
+| **shore swell** | **0.0125 (~1.4–2.6 px)** | **1.5–13.8%** | **passes 6/6 — shipped** |
+| shore foam | 0.26 (1 px, the brief's target) | 18.8–41.0% | fails 5/6 |
+| **shore foam** | **0.40 (1.4–2.1 px)** | **2.9–13.9%** | **passes 6/6 — shipped** |
+| city canopy | 1 px | 22.3–38.8% | fails |
+| **city canopy** | **2 px** | **5.6–15.9%** | **passes — shipped** |
+
+Water finds the floor at about one pixel; foliage finds it at two, because a canopy's tone
+field is itself noisy at the 2px octave so a one-pixel displacement flips a scatter along
+every contour instead of moving a contour. **Different mechanisms, different exact values,
+same conclusion.** Every shipped amplitude in the round sits ON its floor, not comfortably
+above it — which is why `AMP_STEPS` in `src/core/frame.js` brackets the user's A/B **upward
+only**, and why a "fainter" step was cut: it would have shipped a knob whose sole effect was
+to make the water sparkle.
+
+The corollary is the useful part, because it inverts the obvious tuning move:
+
+> **When motion reads as noise, the fix is MORE amplitude, not less.** Coherence improves
+> monotonically with it — across the shipped steps, specks fall 5.6–10.7% → 0.6–1.7% →
+> 0.3–0.8% as gain goes 1 → 1.8 → 3.
+
+One caution on the foam row, recorded because it is the kind of pass this repo has learned to
+distrust: **0.26 clears the gate when measured in the finished frame** — the swell's coherent
+arcs dilute the ratio — and fails it when measured alone. A component must clear a floor **on
+its own**, not on its neighbours' coherence. Same shape as the composite-supercrop artefact
+that produced the bogus "Lufthansa = 27".
+
+## The related law, for anything blitted
+
+`Canvas.blitAnim` carries the contract, and it is narrower than its first doc comment claimed:
+
+> **A sprite may animate its COLOURS, at pixels whose tag, depth and silhouette are identical
+> in every pose.**
+
+Silhouette motion is not available. **The oracle established that; nobody reasoned it out.** A
+grown silhouette wins depth tests it lost at frame 0 (252 px on the measured seed) and changes
+tag ADJACENCY, so `outlinePass` un-blackens a pixel of the building behind it — 36 px that no
+sprite touched and no recorder saw. Two designs that both looked correct, both rejected by
+rendering the whole scene at frame k and comparing.
+
+This is why palms and desert tussocks ship at zero silhouette motion: a frond is a tapered arc
+1–5 px wide, every additive motion it has adds one or two loose pixels, and loose pixels are
+the one thing that may not ship. **A reasoned exclusion is a result.** What remains available
+to them is colour over a fixed silhouette — a frond turning and catching the light, which is
+what a palm looks like at this scale anyway.
+
+---
+
+# Standing rule 11: every instrument in this repo has been wrong at least once
+
+Not a series of anecdotes any more. Five, across three subsystems, and **every one was caught
+by looking at the OUTPUT rather than at the number**:
+
+1. **WSOLA manufacturing transients** — `atempo` invalidated the tempo resampling test;
+   `onsetRate` read 126–134% of expected at 0.8x. Caught by controlling the instrument before
+   trusting the test.
+2. **The duty fit querying harmonics the band-limiter never rendered** — a mixture returning
+   47.5% for a 12.5% pulse.
+3. **The tempo estimator returning the centre of its own search window** — 6 of 24 on a
+   self-consistency check, after an octave fix that made every number look right.
+4. **A non-interleaved A/B reading run-to-run drift as an effect** — dirty bands "9% slower",
+   which vanished when the runs were interleaved.
+5. **`tools/strip.mjs` reading island quantiles off the wrong end of a descending sort** —
+   printing p50 4 and p90 2. A p90 below the median is not a distribution; it is an indexing
+   bug wearing a finding's clothes, and it was one report away from being quoted.
+
+**A number you have not seen the shape of is a number you do not have.** Plot it, strip it,
+render it, sort it and read both ends — before it goes in a table.
