@@ -42,7 +42,10 @@
 // references, and **it describes neither regime this generator actually emits.**
 //
 // Measured, 8 seeds x 8 conditions at 440x1000, K=8, digest-bracketed
-// (`6d5609f638f61333` before and after — a torn run is void, not a data point):
+// (`6d5609f638f61333` before and after — a torn run is void, not a data point),
+// and re-confirmed byte-for-byte at `c65409bf62d73881` after the emissive and
+// intro changes landed, which is the check that says these are properties of the
+// weather rather than of one tree state:
 //
 //   clear / fog / overcast    1,248-9,987 px   0.28-2.27%    24-195 KB
 //   rain                     12,824-24,423 px  2.91-5.55%   250-477 KB
