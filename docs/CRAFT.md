@@ -149,3 +149,34 @@ Two digest conventions were in play during round 2 and they do not agree:
 builder correctly reported it could not verify hand-quoted digests against the
 tool's. Quote `node tools/treehash.mjs --short` and nothing else; if you need
 per-file digests use `shasum -a 256`.
+
+---
+
+## Two metrics that pass the ordering test the band failed
+
+`tools/colour.mjs`. Median over 9 seeded 320px interior crops:
+
+| | ink closure (faces per ink-enclosed cell) | colour radius of gyration (px) |
+|---|---:|---:|
+| **LA reference** — the bar | **3.23** | **59.96** |
+| Lufthansa Pixorama — genuine, same craft family | 4.95 | 87.69 |
+| **Fixel** | **8.98** | **117.32** |
+
+**Both order correctly: reference best, genuine-second-opinion second, generator
+worst.** That is exactly the test the 60-metric band failed — there, Fixel
+*beat* Lufthansa, which is what proved the band measures artwork identity rather
+than craft (`docs/DIFF.md` section 3). A metric that ranks a real Pixorama
+between the bar and us is measuring something real about craft.
+
+That does not make them a score. Two numbers cannot be a verdict and the duel
+remains the bar. But it does make them the two best diagnostics we have, and
+they are the ones round 3 is aimed at.
+
+**Ink closure is robust across implementations** — this script reports 3.23/8.98
+where an independent critic implementation reported 2.94/8.25 on the same
+images. **Radius of gyration is not**: the same critic reported 20.5 vs 58.8
+where this script reports 59.96 vs 117.32. Same direction, same rough ratio,
+completely different absolutes. So for radius of gyration **only the ratio to
+the reference travels between agents** — quote the reference measured by the
+same script in the same breath, or the number means nothing. Two digest
+conventions already cost us a round of confusion; do not repeat it with metrics.
