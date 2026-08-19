@@ -98,7 +98,6 @@ export function renderScene(seed, opts = {}) {
 
   const gs = rng.stream('ground');
   const seedN = gs.int(1, 1 << 28);
-  const plan = planCity(rng, X0, X1, Y0, Y1);
 
   let tagN = 0;
   const noOutline = new Uint8Array(65536);
@@ -136,7 +135,28 @@ export function renderScene(seed, opts = {}) {
     roofSign: ds.range(0.12, 0.5),
     heroSign: ds.range(0.35, 1.0),
     lotTrees: ds.bool(0.5),
+    // ---- structure. The variety gate's remaining narrow axes are all
+    // structural — slope mix, run lengths, change rate, flat share, palette
+    // size — and they are narrow because these were constants. How dense a
+    // city is, how it roofs itself, how big its blocks are and how much
+    // palette it spends are things a city HAS, not things a generator has.
+    density: ds.range(0.82, 1.62),
+    pitchRate: ds.range(0.06, 0.66),
+    tallBias: ds.range(0.0, 1.0),
+    nAcc: ds.int(1, 5),
+    nWall: ds.int(1, 3),
+    blockScale: ds.range(0.72, 1.16),
+    streetScale: ds.range(0.80, 1.28),
   };
+  D.mix = [
+    ['build', 44 + ds.range(0, 34)], ['park', ds.range(1, 14)],
+    ['lot', ds.range(1, 13)], ['plaza', ds.range(1, 11)],
+    ['market', ds.range(0.5, 12)], ['yard', ds.range(0.5, 12)],
+    ['pool', ds.range(0.2, 7)], ['site', ds.range(0.5, 11)],
+    ['low', ds.range(1, 16)],
+  ];
+  const plan = planCity(rng, X0, X1, Y0, Y1,
+    { blockScale: D.blockScale, streetScale: D.streetScale, mix: D.mix });
 
   // ---------------------------------------------------------------- ground
   const cs0 = rng.stream('surfaces');
@@ -168,8 +188,8 @@ export function renderScene(seed, opts = {}) {
   for (const b of plan.blocks) {
     const bw = b.x1 - b.x0, bd = b.y1 - b.y0;
     if (!vis(b.x0, b.y0, b.x1, b.y1, 100)) continue;
-    const CB = localC(C, cs, 3, 2);
-    const CW = localC(C, cs, 3, 1);
+    const CB = localC(C, cs, D.nAcc, D.nWall);
+    const CW = localC(C, cs, D.nAcc, 1);
 
     // THIS BLOCK'S OWN PAVEMENT. Minted here, not drawn from an eleven-entry
     // pool shared by the whole frame: a pooled tone recurs in six places a
@@ -203,13 +223,13 @@ export function renderScene(seed, opts = {}) {
     const parcels = b.parcels.slice().sort((p, q) => (p.x0 + p.y0) - (q.x0 + q.y0));
     for (const p of parcels) {
       if (!vis(p.x0, p.y0, p.x1, p.y1, 100)) continue;
-      const CP = localC(CB, cs, 2, 1);
+      const CP = localC(CB, cs, Math.max(1, D.nAcc - 1), 1);
       parcel(cv, iso, CP, { bs, ps, ns, pes, sg }, p, seedN, tag, tagRaw, D);
     }
     sidewalkProps(cv, iso, CB, { ps, ns, pes, sg }, b, tag, CW, tagRaw, D);
   }
 
-  traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw);
+  traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw, D);
   if (opts.outline !== false && !opts.noOut) outlinePass(cv, C.black, noOutline);
   return cv;
 }
@@ -326,7 +346,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
     cv.t = tag();
     N.grassPlot(cv, iso, C, ns, x0, y0, Z, w, d);
     if (ns.bool(0.6)) { cv.t = tag(); drawSlab(cv, iso, x0, y0 + d * 0.45, Z + 0.01, w, 4.5, C.pave.t); }
-    const n = Math.max(3, Math.round(w * d / 130));
+    const n = Math.max(3, Math.round(w * d * D.density / 130));
     for (let i = 0; i < n; i++) {
       cv.t = tagRaw();
       const px = x0 + ns.range(1.0, Math.max(1.1, w - 3)), py = y0 + ns.range(1.0, Math.max(1.1, d - 3));
@@ -338,7 +358,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
       else if (k === 'bench') S.bench(cv, iso, C, ps, px, py, Z, ps.int(0, 1));
       else N.hedge(cv, iso, C, ns, px, py, Z, ns.range(6, 16), 2.0, 2.2);
     }
-    for (let i = 0; i < Math.max(2, Math.round(w * d / 260)); i++) {
+    for (let i = 0; i < Math.max(2, Math.round(w * d * D.density / 260)); i++) {
       cv.t = tagRaw();
       drawPerson(cv, iso, C, pes, x0 + pes.range(1, w - 1), y0 + pes.range(1, d - 1), Z);
     }
@@ -378,15 +398,22 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
   }
 
   if (p.type === 'plaza') {
+    // A PAVED SQUARE IS JOINTED IN INK, and this is the one place where a
+    // lattice of strokes is the right answer rather than the wrong one: each
+    // joint CLOSES a slab. The biggest single loss on the ink-closure ratio was
+    // one 20,508px open ground cell holding 315 flat faces, and open paving is
+    // most of it. The rule is not "no long strokes", it is "no strokes that
+    // enclose nothing" — this is the same ink doing the opposite job.
     cv.t = tag();
     const F = topFace(iso, Z, x0, y0);
+    const pitch = ps.range(7.5, 13.0);
     drawSlab(cv, iso, x0, y0, Z, w, d, (sx, sy) => {
       const u = F.au * sx + F.bu * sy + F.cu, v = F.av * sx + F.bv * sy + F.cv;
-      const cu = Math.floor(u / 6), cvv = Math.floor(v / 6);
-      if ((u % 6) < 0.62 || (v % 6) < 0.62) return C.pave.l;
+      const cu = Math.floor(u / pitch), cvv = Math.floor(v / pitch);
+      if ((u % pitch) < 0.55 || (v % pitch) < 0.55) return C.black;
       return ((cu + cvv) & 1) ? C.pave.t : C.concrete.t;
     });
-    for (let i = 0; i < Math.max(3, Math.round(w * d / 120)); i++) {
+    for (let i = 0; i < Math.max(3, Math.round(w * d * D.density / 120)); i++) {
       cv.t = tag();
       const px = x0 + ps.range(1.2, Math.max(1.3, w - 5)), py = y0 + ps.range(1.2, Math.max(1.3, d - 5));
       const k = ps.weighted([['planter', 5], ['bench', 4], ['parasol', 3], ['stall', 3], ['bin', 3], ['lamp', 3], ['tree', 4]]);
@@ -398,7 +425,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
       else if (k === 'lamp') S.lampPost(cv, iso, C, ps, px, py, Z, 0);
       else N.tree(cv, iso, C, ps, px, py, Z, false);
     }
-    for (let i = 0; i < Math.max(3, Math.round(w * d / 130)); i++) {
+    for (let i = 0; i < Math.max(3, Math.round(w * d * D.density / 130)); i++) {
       cv.t = tagRaw();
       drawPerson(cv, iso, C, pes, x0 + pes.range(1, w - 1), y0 + pes.range(1, d - 1), Z);
     }
@@ -411,7 +438,15 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
 
   if (p.type === 'market') {
     cv.t = tag();
-    drawSlab(cv, iso, x0, y0, Z, w, d, C.pave.t);
+    {
+      const F = topFace(iso, Z, x0, y0);
+      const pitch = ps.range(8.0, 14.0);
+      drawSlab(cv, iso, x0, y0, Z, w, d, (sx, sy) => {
+        const u = F.au * sx + F.bu * sy + F.cu, v = F.av * sx + F.bv * sy + F.cv;
+        if ((u % pitch) < 0.55 || (v % pitch) < 0.55) return C.black;
+        return C.pave.t;
+      });
+    }
     for (let u = 1.0; u < w - 7; u += 8.0) {
       for (let v = 1.0; v < d - 6; v += 7.5) {
         if (!ps.bool(0.85)) continue;
@@ -419,7 +454,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
         S.marketStall(cv, iso, C, ps, x0 + u, y0 + v, Z, 6.0, 5.0);
       }
     }
-    for (let i = 0; i < Math.max(4, Math.round(w * d / 100)); i++) {
+    for (let i = 0; i < Math.max(4, Math.round(w * d * D.density / 100)); i++) {
       cv.t = tagRaw();
       drawPerson(cv, iso, C, pes, x0 + pes.range(1, w - 1), y0 + pes.range(1, d - 1), Z);
     }
@@ -600,7 +635,7 @@ function sidewalkProps(cv, iso, C, st, b, tag, CW, tagRaw, D) {
       else if (k === 'light') S.trafficLight(cv, iso, C, ps, x, y, Z);
       else if (k === 'barrier') S.barrier(cv, iso, C, ps, x, y, Z, dx ? 0 : 1);
       else if (k === 'pylon') S.pylonSign(cv, iso, C, ps, x, y, Z, coinWord(sg), dx ? 0 : 1);
-      t += ps.range(4.0, 10.5);
+      t += ps.range(4.0, 10.5) / D.density;
     }
     let q = pes.range(0, 3);
     while (q < len) {
@@ -608,14 +643,14 @@ function sidewalkProps(cv, iso, C, st, b, tag, CW, tagRaw, D) {
       const jx = dx ? pes.range(-1.6, 1.6) : pes.range(-3.4, 3.4);
       const jy = dy ? pes.range(-1.6, 1.6) : pes.range(-3.4, 3.4);
       drawPerson(cv, iso, CW, pes, ex + dx * q + jx, ey + dy * q + jy, Z);
-      q += pes.range(1.6, 4.4);
+      q += pes.range(1.6, 4.4) / D.density;
     }
   }
 }
 
 // ---------------------------------------------------------------------------
 
-function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw) {
+function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw, D) {
   const KINDS = [['car', 10], ['taxi', 3], ['van', 3], ['pickup', 3], ['truck', 2], ['bus', 1], ['moto', 2], ['bike', 2]];
   const { bx, by, X0, X1, Y0, Y1 } = plan;
   // Traffic keeps its own committed palette: mostly the neutral families with a
@@ -644,7 +679,7 @@ function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw) {
           drawVehicle(cv, iso, CT, ts, lane, y, 0, 1,
             ts.weighted([['car', 8], ['van', 3], ['pickup', 3], ['taxi', 2], ['moto', 1]]), tag);
         }
-        y += ts.range(9.5, 17);
+        y += ts.range(9.5, 17) / D.density;
       }
     }
   }
@@ -657,7 +692,7 @@ function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw) {
           drawVehicle(cv, iso, CT, ts, x, lane, 0, 0,
             ts.weighted([['car', 8], ['van', 3], ['pickup', 3], ['taxi', 2], ['moto', 1]]), tag);
         }
-        x += ts.range(9.5, 17);
+        x += ts.range(9.5, 17) / D.density;
       }
     }
   }
@@ -671,7 +706,7 @@ function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw) {
           cv.t = tag();
           drawVehicle(cv, iso, CT, ts, lanes[li], y, 0, 1, kind, tag);
         }
-        y += ts.range(11, 26);
+        y += ts.range(11, 26) / D.density;
       }
     }
   }
@@ -685,14 +720,14 @@ function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw) {
           cv.t = tag();
           drawVehicle(cv, iso, CT, ts, x, lanes[li], 0, 0, kind, tag);
         }
-        x += ts.range(11, 26);
+        x += ts.range(11, 26) / D.density;
       }
     }
   }
   for (const [a, b] of bx.streets) {
     for (const [c, d] of by.streets) {
       if (!vis(a, c, b, d, 4)) continue;
-      const n = pes.int(2, 9);
+      const n = Math.round(pes.int(2, 9) * D.density);
       for (let i = 0; i < n; i++) {
         cv.t = tag();
         if (pes.bool(0.5)) drawPerson(cv, iso, C, pes, a + pes.range(1, b - a - 1), c - pes.range(1, 10), 0);

@@ -207,9 +207,13 @@ export function drawBuilding(cv, iso, C, st, x, y, z, w, d, opt) {
     Math.min(0.97, w0._L * st.range(0.9, 1.1)));
   const style = st.weighted([[0, 5], [1, 3], [2, 3], [3, 4]]);
   const seed = st.int(1, 1 << 28);
+  // The height mix is the scene's, not the generator's: a low-rise seaside
+  // strip and a tower district are different pictures, and a fixed 3/5/4/2
+  // weighting made every seed the same skyline.
+  const tb = opt.D && opt.D.tallBias !== undefined ? opt.D.tallBias : 0.5;
   const tall = Math.min(opt.maxH, st.weighted([
-    [st.range(11, 20), 3], [st.range(20, 34), 5],
-    [st.range(34, 58), 4], [st.range(58, 104), 2],
+    [st.range(11, 20), 5 - 4 * tb], [st.range(20, 34), 3 + 2 * tb],
+    [st.range(34, 58), 1.2 + 5 * tb], [st.range(58, 104), 0.3 + 4.5 * tb],
   ]));
 
   const masses = [];
@@ -232,7 +236,8 @@ export function drawBuilding(cv, iso, C, st, x, y, z, w, d, opt) {
     mass(cv, iso, C, st, mx, my, mz, mw, md, mh, wall, style, seed + Math.round(mz));
   }
 
-  const pitched = tall < 40 && Math.min(w, d) < 40 && st.bool(0.5);
+  const pitched = tall < 40 && Math.min(w, d) < 40
+    && st.bool(opt.D && opt.D.pitchRate !== undefined ? opt.D.pitchRate : 0.5);
   for (let i = 0; i < masses.length; i++) {
     const [mx, my, mz, mw, md, mh] = masses[i];
     const rz = mz + mh;
@@ -283,7 +288,8 @@ export function drawBuilding(cv, iso, C, st, x, y, z, w, d, opt) {
       R.railing(cv, iso, C, st, mx + mw - 1.6, my + 0.9, rz + ph, md - 1.8, 1, st.range(2.0, 3.2));
     }
     const area = mw * md;
-    let budget = Math.max(3, Math.min(26, Math.round(area / 45)));
+    const dens = opt.D && opt.D.density ? opt.D.density : 1;
+    let budget = Math.max(2, Math.min(30, Math.round(area * dens / 45)));
     if (i < masses.length - 1) budget = Math.max(1, budget >> 1);
     for (let k = 0; k < budget; k++) {
       const px = mx + st.range(1.8, Math.max(2.0, mw - 6));

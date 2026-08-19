@@ -10,14 +10,14 @@ import { h3 } from './palette.js';
 const CROSS_D = 9;      // depth of a painted crossing, world units
 const SIDEWALK = 6.0;   // pavement width inside each block edge
 
-function axisBands(st, a0, a1) {
+function axisBands(st, a0, a1, o) {
   const streets = [], blocks = [];
   let p = a0 - st.int(0, 30);
   while (p < a1 + 40) {
-    const sw = st.int(15, 26);
+    const sw = Math.round(st.int(15, 26) * o.streetScale);
     streets.push([p, p + sw]);
     p += sw;
-    const bw = st.int(52, 124);
+    const bw = Math.round(st.int(52, 124) * o.blockScale);
     blocks.push([p, p + bw]);
     p += bw;
   }
@@ -66,11 +66,22 @@ const PARCEL_MIX = [
   ['market', 4], ['yard', 5], ['pool', 3], ['site', 5], ['low', 5],
 ];
 
-export function planCity(rng, X0, X1, Y0, Y1) {
+export function planCity(rng, X0, X1, Y0, Y1, o = {}) {
+  // GRID PITCH AND LAND USE ARE PER SCENE.
+  //
+  // The block size distribution and the parcel mix used to be module constants,
+  // so every city the feed will ever emit had the same average block, the same
+  // 58% built / 7% park / 8% lot split, and therefore the same change rate, run
+  // lengths and flat-area share. The variety gate reads that as the structural
+  // half of "every Fixel scene is, statistically, the same scene".
   const st = rng.stream('layout');
   const stp = rng.stream('parcels');
-  const bx = axisBands(st, X0, X1);
-  const by = axisBands(st, Y0, Y1);
+  const opt = {
+    blockScale: o.blockScale || 1, streetScale: o.streetScale || 1,
+    mix: o.mix || PARCEL_MIX,
+  };
+  const bx = axisBands(st, X0, X1, opt);
+  const by = axisBands(st, Y0, Y1, opt);
   const nx = X1 - X0, ny = Y1 - Y0;
   const ix = axisIndex(bx, X0, nx);
   const iy = axisIndex(by, Y0, ny);
@@ -86,7 +97,7 @@ export function planCity(rng, X0, X1, Y0, Y1) {
       if (px1 - px0 > 6 && py1 - py0 > 6) {
         const raw = [];
         subdivide(stp, px0, py0, px1, py1, raw);
-        for (const r of raw) parcels.push({ x0: r[0], y0: r[1], x1: r[2], y1: r[3], type: stp.weighted(PARCEL_MIX) });
+        for (const r of raw) parcels.push({ x0: r[0], y0: r[1], x1: r[2], y1: r[3], type: stp.weighted(opt.mix) });
       }
       blocks.push({ x0: a, y0: c, x1: b, y1: d, parcels });
     }
