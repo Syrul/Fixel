@@ -143,7 +143,7 @@ export function renderScene(seed, opts = {}) {
     density: ds.range(0.82, 1.62),
     pitchRate: ds.range(0.06, 0.66),
     tallBias: ds.range(0.0, 1.0),
-    nAcc: ds.int(1, 5),
+    nAcc: ds.int(2, 6),
     nWall: ds.int(1, 3),
     blockScale: ds.range(0.72, 1.16),
     streetScale: ds.range(0.80, 1.28),
@@ -152,7 +152,7 @@ export function renderScene(seed, opts = {}) {
     // crowd share a short list. `palette.distinct` spans 211-435 across seeds
     // against the reference's own 410 of crop-to-crop width, and this is the
     // knob that widens it without touching how local any one colour is.
-    ownColour: ds.range(0.15, 1.0),
+    ownColour: ds.range(0.40, 1.0),
   };
   D.mix = [
     ['build', 44 + ds.range(0, 34)], ['park', ds.range(1, 14)],
