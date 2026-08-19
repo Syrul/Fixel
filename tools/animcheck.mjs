@@ -46,6 +46,12 @@ const H = Number(arg('h', 1000));
 const BIOME = arg('biome', undefined);
 const K = Number(arg('frames', FRAMES));
 
+// The share of moving pixels allowed to live in islands of 1-2 px. A design in
+// which independent pixels flip puts nearly all of its mass here; coherent
+// regional motion puts almost none. Set where it separates those two
+// categorically rather than where it flatters anything — it is a floor.
+const SPECK_MAX = Number(arg('speck-max', 0.25));
+
 const TREE = treeHash().digest;
 console.log(`tree ${TREE}   ${W}x${H}   frames ${K}${BIOME ? `   biome ${BIOME}` : ''}\n`);
 
@@ -94,31 +100,102 @@ for (const seed of seeds) {
   let wd = 0;
   for (let i = 0; i < wrap.idx.length; i++) if (wrap.idx[i] !== base.idx[i]) wd++;
 
+  // ---- THE SHAPE OF THE MOTION, WHICH IS A GATE AND NOT A REPORT LINE -------
+  //
+  // NOTHING MAY TWINKLE. This is a do-not-ship rule, not a preference, and it
+  // is here rather than in a builder's report because a rule that is only
+  // checked by reading a report is a rule that erodes.
+  //
+  // The one genuinely pixel-scale element in either reference video is a
+  // speckle sphere that re-randomises every frame: spatial autocorrelation
+  // lag-1 of 0.341, which is pure per-pixel white noise, with no translation
+  // explaining any of it. Per-pixel noise animation is the worst thing this
+  // project could ship. It would also read as dithering, which `docs/BAR.md`
+  // records as absent from every reference at a 2x2 checkerboard rate of
+  // 1.7-2.1%, and it manufactures orphan 1px islands, which are already at the
+  // ceiling on desert and highland.
+  //
+  // So: take the mask of pixels that EVER move, 4-connect it, and ask how much
+  // of the motion lives in islands too small to be anything. Independent
+  // per-pixel flipping puts nearly all of its mass there. Coherent regional
+  // motion — a stretch of swell surging, a canopy clump leaning a pixel — puts
+  // almost none.
+  //
+  // IT IS A FLOOR, NEVER A SCORE, which is this repo's standing rule about
+  // every count in it. It rejects noise. It does not rank two designs that both
+  // clear it, and a lower speck share is not "better" — the duel is the bar.
+  const mask = new Uint8Array(W * H);
+  for (let i = 0; i < loop.n; i++) mask[loop.off[i]] = 1;
+  const seen = new Uint8Array(W * H);
+  const stack = new Int32Array(loop.n + 1);
+  const sizes = [];
+  for (let i = 0; i < loop.n; i++) {
+    const s0 = loop.off[i];
+    if (seen[s0]) continue;
+    let sp = 0, sz = 0;
+    stack[sp++] = s0; seen[s0] = 1;
+    while (sp) {
+      const q = stack[--sp]; sz++;
+      const x = q % W, y = (q / W) | 0;
+      if (x > 0 && mask[q - 1] && !seen[q - 1]) { seen[q - 1] = 1; stack[sp++] = q - 1; }
+      if (x + 1 < W && mask[q + 1] && !seen[q + 1]) { seen[q + 1] = 1; stack[sp++] = q + 1; }
+      if (y > 0 && mask[q - W] && !seen[q - W]) { seen[q - W] = 1; stack[sp++] = q - W; }
+      if (y + 1 < H && mask[q + W] && !seen[q + W]) { seen[q + W] = 1; stack[sp++] = q + W; }
+    }
+    sizes.push(sz);
+  }
+  sizes.sort((a, b) => b - a);
+  let speck = 0;
+  for (const s of sizes) if (s <= 2) speck += s;
+  const speckShare = loop.n ? speck / loop.n : 0;
+  const big = sizes.slice(0, 3).reduce((a, b) => a + b, 0);
+  const bigShare = loop.n ? big / loop.n : 0;
+  const p = (f) => sizes.length ? sizes[Math.min(sizes.length - 1, Math.floor((1 - f) * sizes.length))] : 0;
+  const twinkles = loop.n > 0 && speckShare > SPECK_MAX;
+
   const px = W * H;
-  const ok = mism === 0 && wd === 0;
+  const ok = mism === 0 && wd === 0 && !twinkles;
   if (!ok) bad++;
   rows.push({
-    seed, n: loop.n, share: (100 * loop.n / px).toFixed(2),
+    seed, n: loop.n, share: 100 * loop.n / px,
     dropped: loop.dropped, flat: loop.flat, shadowed: loop.shadowed,
     mism, mismFrames, firstAt, wd, tFast, tSlow, ok,
+    islands: sizes.length, largest: sizes[0] || 0, p50: p(0.5), p90: p(0.9),
+    speckShare, bigShare, twinkles,
   });
   console.log(
     `${ok ? 'ok  ' : 'FAIL'}  ${seed.padEnd(16)} animated ${String(loop.n).padStart(7)} px ` +
     `(${String((100 * loop.n / px).toFixed(2)).padStart(5)}%)  ` +
-    `dropped ${String(loop.dropped).padStart(6)}  shadowed ${String(loop.shadowed ?? 0).padStart(5)}  ` +
+    `dropped ${String(loop.dropped).padStart(6)}  ` +
     `mismatch ${String(mism).padStart(6)}${mism ? ` @${firstAt % W},${(firstAt / W) | 0}` : ''}  ` +
-    `wrap ${wd}  fast ${tFast.toFixed(0)}ms vs full-loop ${tSlow.toFixed(0)}ms`);
+    `wrap ${wd}  ${tFast.toFixed(0)}ms vs ${tSlow.toFixed(0)}ms`);
+  console.log(
+    `      islands ${String(sizes.length).padStart(6)}  largest ${String(sizes[0] || 0).padStart(6)}  ` +
+    `p50 ${String(p(0.5)).padStart(5)}  p90 ${String(p(0.9)).padStart(5)}  ` +
+    `in 1-2px specks ${(100 * speckShare).toFixed(1)}%${twinkles ? '  <-- TWINKLES' : ''}  ` +
+    `in largest 3 ${(100 * bigShare).toFixed(1)}%`);
 }
 
 const tot = rows.reduce((a, r) => a + r.n, 0) / rows.length;
-const shares = rows.map((r) => Number(r.share)).sort((a, b) => a - b);
+const shares = rows.map((r) => r.share).sort((a, b) => a - b);
+const specks = rows.map((r) => r.speckShare).sort((a, b) => a - b);
+const p50s = rows.map((r) => r.p50).sort((a, b) => a - b);
+const twinkling = rows.filter((r) => r.twinkles).length;
 const fast = rows.reduce((a, r) => a + r.tFast, 0) / rows.length;
 const slow = rows.reduce((a, r) => a + r.tSlow, 0) / rows.length;
-console.log(`\nanimated pixels: mean ${tot.toFixed(0)}  range ${shares[0]}%-${shares[shares.length - 1]}% of frame`);
+console.log(`\nanimated pixels: mean ${tot.toFixed(0)}  range ${shares[0].toFixed(2)}%-${shares[shares.length - 1].toFixed(2)}% of frame`);
+console.log(`motion shape:    island p50 ${p50s[0]}-${p50s[p50s.length - 1]} px, ` +
+  `${(100 * specks[0]).toFixed(1)}-${(100 * specks[specks.length - 1]).toFixed(1)}% of moving pixels in 1-2px specks ` +
+  `(ceiling ${(100 * SPECK_MAX).toFixed(0)}%) — a FLOOR that rejects per-pixel noise, never a score`);
 console.log(`cost: fast path ${fast.toFixed(0)}ms for the whole loop, against ${slow.toFixed(0)}ms to render it frame by frame ` +
   `(${(slow / Math.max(fast, 0.001)).toFixed(1)}x)`);
 
 const after = treeHash().digest;
 if (after !== TREE) { console.error(`\nTORN RUN: tree moved ${TREE} -> ${after}. Void.`); process.exit(2); }
-if (bad) { console.error(`\nANIMCHECK FAILED on ${bad} seed(s)`); process.exit(1); }
+if (bad) {
+  console.error(`\nANIMCHECK FAILED on ${bad} seed(s)` +
+    (twinkling ? ` — ${twinkling} of them TWINKLE: the motion is independent pixels flipping, ` +
+      `not a region moving. Shrinking the amplitude will not fix this; the design is wrong.` : ''));
+  process.exit(1);
+}
 console.log(`\nANIMCHECK OK   tree ${after}`);

@@ -226,7 +226,11 @@ export class AnimRec {
   finish(cv) {
     const K = this.frames;
     if (!this.on || !this.n) {
-      return { frames: K, w: cv.w, h: cv.h, n: 0, off: new Uint32Array(0), val: new Uint16Array(0) };
+      return {
+        frames: K, w: cv.w, h: cv.h, n: 0,
+        off: new Uint32Array(0), val: new Uint16Array(0),
+        dropped: 0, flat: 0, shadowed: 0,
+      };
     }
     const idx = cv.idx, tg = cv.tag;
     const keep = new Uint8Array(this.n);
