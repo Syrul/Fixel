@@ -254,7 +254,7 @@ export function paintDesert(stage) {
   // (1/period) or the fold locally reverses and the contours shred into single-
   // cell chevrons — measured by eye on the first attempt. One octave of value
   // noise at a long wavelength, so the bend is a slow curve rather than a wobble.
-  const warp = es.range(0.30, 0.48);
+  const warp = es.range(0.42, 0.62);
   const fw = es.range(0.0055, 0.0090);
   // AMPLITUDE IS BOUNDED BY THE TREAD, NOT BY THE PICTURE OF A BIG DUNE.
   //
@@ -275,7 +275,22 @@ export function paintDesert(stage) {
   // therefore CAPPED BY THE PROJECTION at about a sixteenth of the period, which
   // is a low broad dune — and a low broad dune is what an erg looks like from
   // this angle anyway. The form comes back in the slip face and the material.
-  const amp = es.range(8, 12);
+  //
+  // AND THE SEED DOES NOT GET TO DECIDE IT BY LUCK. The relation is exact and it
+  // is worth writing down, because it is the whole of this defect:
+  //
+  //     tread on screen   2.1 * step / slope                    2.1
+  //     ------------- =  -------------------------  =  ---------------------
+  //     riser on screen   4 * step + 2 * cell           slope * (4 + 2*cell/step)
+  //
+  // The STEP CANCELS. Raising it widens the tread and deepens the riser in the
+  // same proportion, so the stripiness of a terraced field is set by its MEAN
+  // SLOPE and by nothing else. Fixing the amplitudes and hoping is what made
+  // some seeds read as dune fields and others as quarry benches from identical
+  // code. So the relief is measured over exactly the ground that will be drawn
+  // and scaled to hit a slope target, and the step is then solved from the
+  // scaled amplitude. Nothing is chosen that can be measured.
+  const amp = es.range(9, 13);
   const sharp = es.range(0.80, 0.88);
   // TERRACE COUNT IS SPECIFIED AS A PICTURE and the step is solved from it, so a
   // seed with a taller dune gets taller terraces rather than more of them. Three
@@ -285,8 +300,9 @@ export function paintDesert(stage) {
   // CONTRAST IS THE DUNE FORM — wide pale bands on the windward side, a tight
   // stack of four risers at the brink. Equal bands everywhere is corduroy, and
   // corduroy is what six bands produced.
-  const step = Math.min(4.2, Math.max(3.0, amp / es.range(2.3, 2.9)));
   const cell = es.range(2.8, 3.3);
+  const tgtSlope = es.range(0.115, 0.150);
+  const bands = es.range(2.5, 3.3);
 
   // The draa: a second fold ten times longer in a different direction, so the
   // frame carries large-scale form and the dunes ride on it rather than tiling
@@ -294,6 +310,14 @@ export function paintDesert(stage) {
   const dPeriod = es.range(340, 500);
   const dAmp = es.range(3, 5.5);
   const rollAmp = es.range(1.1, 2.2);
+  // A CONTOUR OF A SMOOTH RAMP IS A STRAIGHT LINE, and a set of them is a ruled
+  // page. Whatever the tread arithmetic says, a dune ramp terraced without any
+  // mid-scale irregularity comes out as eight parallel bands running edge to
+  // edge, because that is genuinely what the field's level sets are. The wobble
+  // is deliberately BELOW the ramp's own gradient — about half — so it displaces
+  // each contour sideways by six or eight units without adding crossings.
+  const wobAmp = es.range(1.2, 2.0);
+  const wobF = es.range(0.013, 0.019);
 
   // Where sand exists at all. Multiplying the dune AMPLITUDE by this rather than
   // adding a mask is what gives dune fields edges instead of a uniform corduroy.
@@ -301,6 +325,12 @@ export function paintDesert(stage) {
   // a narrow edge puts a twenty-unit escarpment of stacked risers around every
   // dune field, which is corduroy arriving by the back door.
   const supF = es.range(0.0032, 0.0044);
+  // AND THE RIDGE MUST BREAK. A transverse fold of constant amplitude is a
+  // corrugated roof however far apart the folds are: what makes a dune field
+  // read as dunes is that individual crests rise, run and die out, leaving gaps
+  // that the next set covers. One mid-frequency field on the amplitude does it,
+  // and it is the same mechanism a barchan field actually has.
+  const segF = es.range(0.011, 0.017);
 
   // THE THRESHOLDS ARE QUANTILES OF THE FIELD, NOT CONSTANTS ON IT.
   //
@@ -325,7 +355,13 @@ export function paintDesert(stage) {
     const n = a.length - 1;
     return ps.map((p) => a[Math.max(0, Math.min(n, Math.round(p * n)))]);
   };
-  const pLo = es.range(0.22, 0.34), pHi = pLo + es.range(0.26, 0.40);
+  // AND THE ERG IS THE MINORITY OF THE FRAME. An active dune face honestly
+  // carries nothing — no plant roots in moving sand, nobody builds on it — so
+  // every unit of it is a unit that has to be articulated by the ground shader
+  // alone, and the ground shader is not allowed to buy articulation with noise.
+  // The reg is where the stones, the scrub, the track, the camp and the wire
+  // live. Half the frame stony, a third sand, the rest crust.
+  const pLo = es.range(0.44, 0.58), pHi = pLo + es.range(0.22, 0.30);
   const [supLo, supHi] = qOf((x, y) => fbm(x * supF, y * supF, S0 + 911, 3),
     [pLo, Math.min(0.92, pHi)]);
   const supW = Math.max(0.012, supHi - supLo);
@@ -427,7 +463,7 @@ export function paintDesert(stage) {
     out[5] = y + rWarp * (fbm(x * rwF, y * rwF, S0 + 2777, 2) - 0.5);
   });
 
-  const height = (x, y) => {
+  const relief = (x, y) => {
     const t = (x * wx + y * wy) / period + (vnoise(x * fw, y * fw, S0 + 41) - 0.5) * warp;
     const f = tri(t);
     const crest = f < sharp ? f / sharp : 1 - (f - sharp) / (1 - sharp);
@@ -438,14 +474,38 @@ export function paintDesert(stage) {
     // risers deep. Smoothstep only the windward half, so the crest is rounded
     // and the brink stays a brink.
     const dune = f < sharp ? sm(crest) : crest;
-    const env = sm(cl01((fbm(x * supF, y * supF, S0 + 911, 3) - supLo) / supW));
+    const env = sm(cl01((fbm(x * supF, y * supF, S0 + 911, 3) - supLo) / supW))
+      * (0.45 + 1.05 * fbm(x * segF, y * segF, S0 + 1601, 2));
     const dr = tri((x * dxD + y * dyD) / dPeriod);
     return dAmp * sm(dr) + env * amp * dune
+      + wobAmp * (fbm(x * wobF, y * wobF, S0 + 1451, 2) - 0.5) * 2
       + rollAmp * fbm(x * 0.0105, y * 0.0105, S0 + 97, 3)
-      + mesaAt(x, y)
       - panDepth * (1 - env) * (1 - env)
         * cl01((fbm(x * 0.0072, y * 0.0072, S0 + 1301, 3) - panBias) * 5.5);
   };
+
+  // MEASURE THE SLOPE THIS SEED ACTUALLY HAS, along the wind, which is the
+  // steepest direction and therefore the one that decides the tread. Twelve
+  // walks across the visible world is enough to be stable and costs under a
+  // millisecond.
+  let acc = 0, nAcc = 0;
+  {
+    const DS = 2.2;
+    for (let k = 0; k < 12; k++) {
+      const bx = X0 + (X1 - X0) * (0.30 + (k % 4) * 0.16);
+      const by = Y0 + (Y1 - Y0) * (0.30 + ((k / 4) | 0) * 0.16);
+      let prev = relief(bx, by);
+      for (let i = 1; i < 56; i++) {
+        const h = relief(bx + wx * i * DS, by + wy * i * DS);
+        acc += Math.abs(h - prev) / DS; nAcc++; prev = h;
+      }
+    }
+  }
+  // Capped rather than solved exactly: a seed whose field is already gentle is
+  // left alone rather than inflated into a dune field it does not have.
+  const KR = Math.min(1.0, tgtSlope / Math.max(1e-4, acc / Math.max(1, nAcc)));
+  const step = Math.min(4.4, Math.max(2.9, amp * KR / bands));
+  const height = (x, y) => relief(x, y) * KR + mesaAt(x, y);
 
   const T = makeTerrain({ X0, Y0, X1, Y1, cell, step, height });
   stage.terrain = T;
@@ -728,12 +788,17 @@ export function paintDesert(stage) {
     // frame-wide bands of near-black across a flat erg, which is the corduroy a
     // third time, now in the value channel. Measured by eye on seed 2 of six.
     const env = (sc + 0.14 - 0.16 * (crest - 0.5)) / 1.16;
-    if (ff > sharp && env > 0.74) {
+    // THE BRINK CATCHES THE LIGHT. A dark face alone is a stripe; a pale line
+    // with a dark face under it is an edge, and the edge is the thing that says
+    // dune. It is drawn on both sides of the crest phase, so it is the top of
+    // the windward ramp and the lip of the slip face at once.
+    if (env > 0.68 && crest > 0.93) return LV[2].t;
+    if (ff > sharp && env > 0.72) {
       const t2 = (ff - sharp) / (1 - sharp);
       const pw = u * -wy + v * wx;
       const g = h3(Math.floor(pw / 3.4), Math.floor(fold), S1 + 131) & 7;
-      if (t2 < 0.13) return SD.k;                    // the brink shadow
-      if (t2 > 0.72) return g < 3 ? LV[2].l : SD.l;  // the apron at the foot
+      if (t2 < 0.10) return SD.k;                    // the brink shadow
+      if (t2 > 0.52) return g < 3 ? LV[2].l : SD.l;  // the apron at the foot
       return g < 2 ? SD.d : g < 5 ? SD.r : SD.l;
     }
 
@@ -760,10 +825,18 @@ export function paintDesert(stage) {
     if (sk) return sk === 1 ? R.drift.t : R.drift.l;
     const sd2 = streak(u, v, strP * 1.7, S1 + 89, 2, 3.0);
     if (sd2) return sd2 === 1 ? (active ? base.l : R.grit.l) : base.r;
+    // Ripple crests, and ONLY on the upper windward face, which is where a dune
+    // has them: one stroke per set at a dozen units, so it is a line closing a
+    // flat field rather than the frame-wide weave the first two attempts drew.
+    if (crest > 0.68 && env > 0.6) {
+      const rr = tri(fold * (period / ripL) * R.rk + ((fh >>> 9) & 255) / 256);
+      if (rr < 0.13) return base.l;
+    }
     return base.t;
   };
 
   const groundSide = (u, v, plane, axis, q, z0) => {
+
 
 
 
@@ -794,19 +867,30 @@ export function paintDesert(stage) {
       // The riser belongs to the terrace ABOVE it: a contour band is a different
       // value of the same material and the wall is the step between two of them.
       const F = R.sandLv[((Math.round(z0 / step + 1) % 6) + 6) % 6][1];
-      if (v < 0.42) return F.k;
-      if (tall) return axis === 1 ? F.d : F.r;
-      return axis === 1 ? F.r : F.l;
+      if (v < 0.42) return F.r;
+      if (tall) return axis === 1 ? F.r : F.l;
+      // Both walls take the SAME step. On a box the two vertical faces must
+      // differ or the volume collapses; a terrace riser is not a box, it is a low
+      // bank whose top edge the silhouette sweep has already inked, and at the
+      // RIGHT step it read as a black band fourteen pixels deep repeated across
+      // the frame. The light model survives because every built thing in the
+      // frame still carries the full ladder.
+      return F.l;
     }
     // ROCK IS BEDDED, AND THE BEDS ARE LEVEL. Keying the tone off the ground
     // coordinate put vertical stripes down every butte — a picket fence, measured
     // by eye on three seeds. The bed index is ABSOLUTE WORLD HEIGHT, so a bed runs
     // level across every cell of the wall instead of restarting at each one.
+    // THE RISER TAKES THE SAME ROCK ITS TREAD DOES. Indexing it off the bed hash
+    // alone put a different rock tone on the wall from the one on the ground
+    // above it, so every contour came out as a saturated rust stripe against pale
+    // sand — a hue change where a value step belonged. The bed hash now only
+    // chooses which STEP of that tone the band takes.
     const bh = h3(Math.floor((z0 + v) / 1.7), 0, S1 + 149);
-    const F = R.rock[bh % 3];
-    if (v < 0.42) return F.k;
+    const F = R.rock[buf[2] < 0.40 ? 0 : buf[2] < 0.58 ? 1 : 2];
+    if (v < 0.42) return F.r;
     const g = (bh >>> 4) & 7;
-    if (!tall) return axis === 1 ? (g < 6 ? F.r : F.d) : (g < 6 ? F.l : F.r);
+    if (!tall) return g < 6 ? F.l : F.r;
     if (g < 2) return R.varn.l;
     return axis === 1 ? (g < 6 ? F.d : F.k) : (g < 6 ? F.r : F.d);
   };
@@ -839,9 +923,16 @@ export function paintDesert(stage) {
       if (MF.one(x, y, 1) > 0.12) continue;           // never on the crust
       if (T.slopeAt(x, y) > 0.09) continue;           // never on a slip face
       if (mesaAt(x, y) > 0.6) continue;               // never on a butte
+      // THE HERO IS THE THING THE EYE LANDS ON, so it may not drift to the frame
+      // edge: on two seeds of six the station sat against the right margin with
+      // its sign cut off, which is a focal point that has to be found rather than
+      // seen. Distance from the target is now a hard veto as well as the largest
+      // term in the score.
+      const d2 = Math.sqrt(a * a + b * b);
+      if (d2 > 7.2) continue;
       const flat = 1 - T.slopeAt(x, y) / 0.09;
-      const near = 1 - Math.sqrt(a * a + b * b) / 12;
-      const s = flat * 0.44 + near * 0.36 + (1 - sc / 0.28) * 0.20;
+      const near = 1 - d2 / 7.2;
+      const s = flat * 0.30 + near * 0.54 + (1 - sc / 0.28) * 0.16;
       if (s > heroScore) { heroScore = s; hero = [x, y]; }
     }
   }
@@ -1283,17 +1374,25 @@ export function paintDesert(stage) {
       3 + (hR & 3) + ((hR >>> 4) & 1) * 3);
   });
 
-  // stones half-buried in the sand margin, where the sheet is thin
-  scatter(7.2, 0.88, 0x1b51, (x, y, gi, gj) => {
+  // STONES HALF-BURIED IN THE SAND, each with the tail the wind has combed out
+  // behind it. This is the erg's whole density budget and it is spent on the one
+  // thing that is honestly there: the sheet is thin enough over most of a dune
+  // field that the lag beneath shows through, and every one of those stones is
+  // an obstacle, so every one of them earns a drift tail. A tail without a stone
+  // at its head is placement without affordance, and a scatter of them looked
+  // exactly like what it was.
+  scatter(6.4, 0.88, 0x1b51, (x, y, gi, gj) => {
     const sc = MF.one(x, y, 0);
-    if (sc < HAM * 0.9 || sc > ACT) return;
-    if ((h3(gi, gj, S0 ^ 0x1b55) & 255) > 60 + stand(x, y, 0.021, 409) * 250) return;
+    if (sc < HAM * 0.9) return;
+    if (MF.one(x, y, 1) > 0.24) return;
+    if ((h3(gi, gj, S0 ^ 0x1b55) & 255) > 30 + stand(x, y, 0.021, 409) * 300) return;
     if (nearBuilt(x, y)) return;
     if (!vis(x - 4, y - 4, x + 4, y + 4, 4)) return;
     const z = T.surfaceZ(x, y);
     const R = regOf(x, y);
     cv.t = tagRaw();
-    P.driftTail(cv, iso, C, x, y, z + 0.02, wx, wy, 6.5, 2.2, R.drift);
+    P.driftTail(cv, iso, C, x, y, z + 0.02, wx, wy,
+      5 + ((h3(gi, gj, S0 ^ 0x1b61) >>> 6) & 7), 2.2, R.drift);
     cv.t = tagRaw();
     P.stone(cv, iso, C, ns, x, y, z, R.rock[(h3(gi, gj, S0 ^ 0x1b59) >>> 3) % 3],
       3 + ((h3(gi, gj, S0 ^ 0x1b5d) >>> 5) & 3));
@@ -1388,16 +1487,12 @@ export function paintDesert(stage) {
     else { cv.t = tag(); P.litter(cv, iso, C, ns, x, y, z, k & 1, C.accentTone(ns)); }
   });
 
-  // drift tails alone, on the open sand: the wind's own mark on empty ground,
-  // and the only articulation an active dune face honestly carries
-  scatter(11, 0.92, 0x7a61, (x, y, gi, gj) => {
-    const sc = MF.one(x, y, 0);
-    if (sc < 0.46) return;
-    if ((h3(gi, gj, S0 ^ 0x7a65) & 255) > 60 + stand(x, y, 0.020, 433) * 250) return;
-    if (nearBuilt(x, y)) return;
-    if (!vis(x - 12, y - 12, x + 12, y + 12, 4)) return;
-    cv.t = tagRaw();
-    P.driftTail(cv, iso, C, x, y, T.surfaceZ(x, y) + 0.03, wx, wy,
-      7 + ((h3(gi, gj, S0 ^ 0x7a69) >>> 4) & 7), 2.8, regOf(x, y).drift);
-  });
+  // A DRIFT TAIL NEEDS SOMETHING TO HAVE CAUSED IT. The standalone set — a
+  // scatter of tails over open sand with nothing at the head of any of them —
+  // came out as pale hard-edged wedges lying about the frame like paper, which
+  // is placement without affordance and looked exactly like it. Tails now exist
+  // only behind stones, boulders, nebkha, dumped junk and fences, where the wind
+  // has something to work around. What is left standing on an active dune face
+  // is nothing, and that is the correct answer: the erg is the quiet half of this
+  // picture and the reg carries the density.
 }
