@@ -59,7 +59,7 @@ const MASKS = new Map();
  * boundary crosses every angle and almost none of them is on the lattice.
  */
 function organic(R, sqN, variant, shift = 0) {
-  const key = ((R * 32 + sqN) * 64 + variant) * 16 + (shift + 8);
+  const key = ((R * 32 + sqN) * 64 + variant) * 64 + (shift + 32);
   const had = MASKS.get(key);
   if (had) return had;
   const sq = sqN / 10;
@@ -232,7 +232,19 @@ const GUSTS = [
 // still render; drawing them from anything that saw the frame index would make
 // frame 2 a different scene rather than the same scene two frames later.
 const swing = (k, off) => triPhase(k, off) - triPhase(0, off);
-const stepPx = (v, amp) => { const a = amp * v; return a < 0 ? -Math.round(-a) : Math.round(a); };
+// Whole screen pixels, symmetric about zero, and CLAMPED TO +/-DISP_MAX. The
+// clamp is not cosmetic: every table cache in this file keys on the
+// displacement in a fixed-width slot, and `?anim=` lets the user ask for a gain
+// of 8. A displacement that overflowed its slot collided with a NEIGHBOURING
+// VARIANT'S key and handed back a mask of a different shape — caught by the
+// oracle at gain 3 on desert as 39 pixels whose tag changed under a sprite that
+// cannot change its own silhouette.
+const DISP_MAX = 31;
+const stepPx = (v, amp) => {
+  let a = amp * v;
+  a = a < 0 ? -Math.round(-a) : Math.round(a);
+  return a > DISP_MAX ? DISP_MAX : a < -DISP_MAX ? -DISP_MAX : a;
+};
 
 /**
  * This instance's phase offset, or -1 when it is one of the ones that holds
@@ -251,8 +263,16 @@ function movePhase(wx, wy, salt, oneIn) {
  */
 function poseSet(A, off, amp, make) {
   if (!A || A.frames < 2 || off < 0) return [make(0)];
+  // `stage.gain` is the user's `?anim=` knob and it multiplies HERE, at the one
+  // site every amplitude in this file is applied, so there is no second code
+  // path to keep alive: gain 0 is the still picture by arithmetic rather than by
+  // a branch, and frame 0 is the still picture at EVERY gain because `swing` is
+  // anchored to zero at k = 0 before the multiply. It cannot reach an Rng draw
+  // or a layout decision — it only scales a displacement that is already a pure
+  // function of the frame index.
+  const g = A.gain === undefined ? 1 : A.gain;
   const out = new Array(A.frames);
-  for (let j = 0; j < A.frames; j++) out[j] = make(stepPx(swing(A.frame + j, off), amp));
+  for (let j = 0; j < A.frames; j++) out[j] = make(stepPx(swing(A.frame + j, off), amp * g));
   return out;
 }
 
