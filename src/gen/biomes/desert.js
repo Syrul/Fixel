@@ -1160,7 +1160,7 @@ export function paintDesert(stage) {
   const pes = rng.stream('people');
   for (let i = 0; i < 5; i++) {
     cv.t = tagRaw();
-    drawPerson(cv, iso, CS, pes, hxA + pes.range(-14, 16), hyA + pes.range(-6, 14), hz + 0.4);
+    drawPerson(cv, iso, CS, pes, hxA + pes.range(-14, 16), hyA + pes.range(-6, 14), hz + 0.4, undefined, stage);
   }
   const heroDist = (x, y) => {
     const du = Math.abs(x - hxA) - yardW * 0.5, dv = Math.abs(y - hyA) - yardD * 0.5;
@@ -1218,7 +1218,7 @@ export function paintDesert(stage) {
     P.cairn(cv, iso, CC, cps, camp[0] + 9, camp[1] - 9, cz, regOf(camp[0] + 9, camp[1] - 9).clast[0]);
     for (let i = 0; i < 4; i++) {
       cv.t = tagRaw();
-      drawPerson(cv, iso, CC, pes, camp[0] + pes.range(-11, 11), camp[1] + pes.range(-9, 9), cz);
+      drawPerson(cv, iso, CC, pes, camp[0] + pes.range(-11, 11), camp[1] + pes.range(-9, 9), cz, undefined, stage);
     }
   }
   const campDist = (x, y) => {
@@ -1476,7 +1476,7 @@ export function paintDesert(stage) {
     cv.t = tagRaw();
     P.tussock(cv, iso, C, ns, x, y, T.surfaceZ(x, y),
       SCRUB[(h3(gi, gj, S0 ^ 0x3c29) >>> 4) % 3],
-      7 + ((h3(gi, gj, S0 ^ 0x3c2b) >>> 6) & 3));
+      7 + ((h3(gi, gj, S0 ^ 0x3c2b) >>> 6) & 3), stage);
   });
 
   // nebkha — the MARGIN species, and the one made of the axis itself. A shrub
@@ -1496,7 +1496,7 @@ export function paintDesert(stage) {
     cv.t = tagRaw();
     P.nebkha(cv, iso, C, ns, x, y, z, R.sandLv[0][2],
       SCRUB[(h3(gi, gj, S0 ^ 0x4d39) >>> 4) % 3],
-      5 + ((h3(gi, gj, S0 ^ 0x4d3b) >>> 6) & 3));
+      5 + ((h3(gi, gj, S0 ^ 0x4d3b) >>> 6) & 3), stage);
   });
 
   // saltbush — the pavement and the pan edge
@@ -1511,7 +1511,7 @@ export function paintDesert(stage) {
     cv.t = tagRaw();
     P.saltbush(cv, iso, C, ns, x, y, T.surfaceZ(x, y),
       SCRUB[(h3(gi, gj, S0 ^ 0x5e49) >>> 4) % 3],
-      6 + ((h3(gi, gj, S0 ^ 0x5e4b) >>> 6) & 3));
+      6 + ((h3(gi, gj, S0 ^ 0x5e4b) >>> 6) & 3), stage);
   });
 
   // bones, tyres and litter — rare, and always where something walked. The

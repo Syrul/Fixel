@@ -23,6 +23,7 @@ import { box } from '../draw.js';
 import { topFace, leftFace, rightFace } from '../faces.js';
 import { h3 } from '../palette.js';
 import { dep, projR } from '../view.js';
+import { FRAMES, triPhase } from '../../core/frame.js';
 
 const M = (f) => ({ top: f.t, left: f.l, right: f.r });
 const MD = (f) => ({ top: f.l, left: f.r, right: f.d });
@@ -155,6 +156,86 @@ function spray(R, n, variant, sqN) {
   return out;
 }
 
+
+// ---------------------------------------------------------------------------
+// HOW MUCH THE SCRUB MOVES, IN SCREEN PIXELS. One grep finds every amplitude in
+// this file; the unit is a whole screen pixel of displacement at the extreme of
+// the loop. Set at 0 in this commit: the plumbing lands first and is provably
+// inert, then the motion lands on top of it.
+//
+// The desert is the biome with the least headroom here. Orphan 1px islands are
+// already over on three seeds in six, and scrub is exactly the kind of small
+// ragged mass that manufactures them — so the scrub moves as whole clumps or it
+// does not move.
+
+/** A bunchgrass tussock: how far the OUTER half of its blades leans. */
+const TUSSOCK_LEAN_PX = 0;
+/** A saltbush: how far one clump of its rim travels. */
+const SALTBUSH_PULL_PX = 0;
+/** One tussock, nebkha or saltbush in this many moves at all. */
+const SCRUB_MOVES_ONE_IN = 3;
+
+// ---------------------------------------------------------------------------
+// MOTION. Everything in this file that moves goes through these few lines, and
+// they are the same few lines in every props file so one grep finds them all.
+//
+// PERIODIC IN phase(k), ANCHORED AT FRAME 0. `swing` is `triPhase` minus its
+// own value at k = 0. `triPhase` has period 1 in `phase(k)` and no kick at the
+// wrap, so frame FRAMES is frame 0 by construction and the loop closes.
+// Subtracting the k = 0 value makes the swing exactly zero at frame 0 for EVERY
+// offset, which is what keeps an animated frame 0 byte-identical to the still
+// render every number in `docs/` was measured on.
+//
+// WHOLE PIXELS, NEVER A FRACTION. `stepPx` rounds to a signed integer count of
+// screen pixels before anything reads it. A fractional displacement moves only
+// those edge pixels whose distance happened to sit near the boundary — that is
+// scattered single-pixel substitution, i.e. flicker, i.e. the thing
+// `tools/animcheck.mjs` fails a seed for. An integer displacement moves a whole
+// stretch of contour together, which is what "a clump moved" means.
+//
+// NO Rng DRAW HAPPENS HERE. Whether an instance moves at all, and on what
+// phase, come from a hash of its own world position. Drawing them from `st`
+// would shift every draw after it and the still render would stop being the
+// still render; drawing them from anything that saw the frame index would make
+// frame 2 a different scene rather than the same scene two frames later.
+const swing = (k, off) => triPhase(k, off) - triPhase(0, off);
+const stepPx = (v, amp) => { const a = amp * v; return a < 0 ? -Math.round(-a) : Math.round(a); };
+
+/**
+ * This instance's phase offset, or -1 when it is one of the ones that holds
+ * still. One in `oneIn` moves; the rest are the still world the moving ones are
+ * read against, which is the shape the reference measurement argued for.
+ */
+function movePhase(wx, wy, salt, oneIn) {
+  const u = h3(Math.round(wx * 8), Math.round(wy * 8), salt) >>> 0;
+  return (u % oneIn) ? -1 : ((u >>> 7) % FRAMES) / FRAMES;
+}
+
+/**
+ * K tables, one per frame, starting at the stage's CURRENT frame — so pose 0 is
+ * always the picture this render is meant to be, and the recorder's k-th entry
+ * is the frame k steps later.
+ */
+function poseSet(A, off, amp, make) {
+  if (!A || A.frames < 2 || off < 0) return [make(0)];
+  const out = new Array(A.frames);
+  for (let j = 0; j < A.frames; j++) out[j] = make(stepPx(swing(A.frame + j, off), amp));
+  return out;
+}
+
+const ORIGINS = new Map();
+function origins(K) {
+  let o = ORIGINS.get(K);
+  if (!o) { o = []; for (let i = 0; i < K; i++) o.push([0, 0]); ORIGINS.set(K, o); }
+  return o;
+}
+
+/** Draw pose 0 exactly as `blit` would; record the rest only when recording. */
+function putPoses(cv, x0, y0, ps, map, d, A) {
+  if (ps.length > 1 && A && A.anim) cv.blitAnim(x0, y0, ps, origins(ps.length), map, d, A.anim);
+  else cv.blit(x0, y0, ps[0], map, d);
+}
+
 const massMap = (C, f) => ({ d: C.black, a: f.t, l: f.l, m: f.r, x: f.k, '.': -1 });
 
 // ---------------------------------------------------------------------------
@@ -180,11 +261,13 @@ export function boulder(cv, iso, C, st, x, y, z, f, R) {
 }
 
 /** Bunchgrass — never on mobile sand. */
-export function tussock(cv, iso, C, st, x, y, z, f, R) {
-  const rows = spray(R, st.int(7, 11), st.int(0, 15), st.int(6, 8));
+export function tussock(cv, iso, C, st, x, y, z, f, R, A) {
+  const n = st.int(7, 11), variant = st.int(0, 15), sqN = st.int(6, 8);
+  const off = movePhase(x, y, 0x7ae413, SCRUB_MOVES_ONE_IN);
+  const ps = poseSet(A, off, TUSSOCK_LEAN_PX, (m) => spray(R, n, variant, sqN, m));
   const p = projR(iso, x, y, z);
-  cv.blit(p[0] - (rows[0].length >> 1), p[1] - rows.length + 3, rows,
-    massMap(C, f), dep(iso, x, y, z, 0.9));
+  putPoses(cv, p[0] - (ps[0][0].length >> 1), p[1] - ps[0].length + 3, ps,
+    massMap(C, f), dep(iso, x, y, z, 0.9), A);
 }
 
 /**
@@ -194,23 +277,31 @@ export function tussock(cv, iso, C, st, x, y, z, f, R) {
  * the placement axis — a nebkha exists exactly where sand is mobile enough to
  * be caught and not so mobile that it buries the plant.
  */
-export function nebkha(cv, iso, C, st, x, y, z, sandF, bushF, R) {
+export function nebkha(cv, iso, C, st, x, y, z, sandF, bushF, R, A) {
   const mound = organic(Math.round(R * 1.5), 4, st.int(0, 15));
   const p = projR(iso, x, y, z);
+  // The MOUND never moves. Sand that has been sitting there long enough to bury
+  // a shrub is the stillest thing in the biome; only the shrub on top of it
+  // catches the wind.
   cv.blit(p[0] - (mound[0].length >> 1), p[1] - mound.length + 3, mound,
     { d: C.black, a: sandF.t, l: sandF.t, m: sandF.l, x: sandF.r, '.': -1 },
     dep(iso, x, y, z, 0.5));
-  const rows = spray(R, st.int(6, 9), st.int(0, 15), st.int(7, 9));
-  cv.blit(p[0] - (rows[0].length >> 1), p[1] - rows.length - 1, rows,
-    massMap(C, bushF), dep(iso, x, y, z + 1.2, 1.2));
+  const n = st.int(6, 9), variant = st.int(0, 15), sqN = st.int(7, 9);
+  const off = movePhase(x, y, 0x2b90cf, SCRUB_MOVES_ONE_IN);
+  const ps = poseSet(A, off, TUSSOCK_LEAN_PX, (m) => spray(R, n, variant, sqN, m));
+  putPoses(cv, p[0] - (ps[0][0].length >> 1), p[1] - ps[0].length - 1, ps,
+    massMap(C, bushF), dep(iso, x, y, z + 1.2, 1.2), A);
 }
 
 /** A low woody saltbush, on pavement and pan margin. */
-export function saltbush(cv, iso, C, st, x, y, z, f, R) {
-  const rows = organic(R, st.int(5, 6), st.int(0, 15));
+export function saltbush(cv, iso, C, st, x, y, z, f, R, A) {
+  const sqN = st.int(5, 6), variant = st.int(0, 15);
+  const off = movePhase(x, y, 0x51c7a9, SCRUB_MOVES_ONE_IN);
+  const ps = poseSet(A, off, SALTBUSH_PULL_PX, (m) => organic(R, sqN, variant, m));
+  const rows = ps[0];
   const p = projR(iso, x, y, z);
-  cv.blit(p[0] - (rows[0].length >> 1), p[1] - rows.length + 3, rows,
-    massMap(C, f), dep(iso, x, y, z, 0.9));
+  putPoses(cv, p[0] - (rows[0].length >> 1), p[1] - rows.length + 3, ps,
+    massMap(C, f), dep(iso, x, y, z, 0.9), A);
   // three stems, so it is bedded in the ground rather than floating on it
   for (let k = -1; k <= 1; k++) {
     cv.putZ(p[0] + k * 2, p[1] - 1, f.k, dep(iso, x, y, z, 0.95));

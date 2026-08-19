@@ -1418,7 +1418,7 @@ function scatterHighland(stage, X) {
       variant: (hh >>> 19) & 7,
       kind: ((hh >>> 2) & 3) < 2 ? 'spruce' : 'pine',
       tone: CONIF[reg], trunk: TRUNK[reg], tip: TIPS[reg].t,
-    });
+    }, stage);
   });
 
   // ---- krummholz: the same tree, beaten flat, in the band and just above it
@@ -1439,7 +1439,7 @@ function scatterHighland(stage, X) {
       hw: 1.7 + ((hh >>> 6) & 31) / 8, aspect: 0.76 + ((hh >>> 15) & 15) / 20,
       variant: (hh >>> 19) & 7, kind: 'krummholz',
       tone: CONIF[reg], trunk: TRUNK[reg], tip: CONIF[reg].l,
-    });
+    }, stage);
   });
 
   // ---- boulders: where a cliff put them, and on the moraine

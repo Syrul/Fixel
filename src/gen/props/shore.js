@@ -41,6 +41,7 @@ import { box, gable } from '../draw.js';
 import { topFace, leftFace, rightFace } from '../faces.js';
 import { h3 } from '../palette.js';
 import { dep, projR } from '../view.js';
+import { FRAMES, triPhase } from '../../core/frame.js';
 
 const M = (f) => ({ top: f.t, left: f.l, right: f.r });
 const MD = (f) => ({ top: f.l, left: f.r, right: f.d });
@@ -172,6 +173,83 @@ function ellipseMass(R, variant, flat, salt) {
   return out;
 }
 
+
+// ---------------------------------------------------------------------------
+// HOW MUCH THE STRANDLINE MOVES, IN SCREEN PIXELS. One grep finds every
+// amplitude in this file; the unit is a whole screen pixel of displacement at
+// the extreme of the loop. Set at 0 in this commit.
+//
+// NOTE FOR WHOEVER OWNS `src/gen/biomes/shore.js`: none of this is reachable
+// yet. The prop takes the stage as an optional trailing argument and does
+// nothing without it, and the seven `weedPile(...)` call sites in the shore
+// biome do not pass one. Adding `, stage` to those calls is the whole change.
+
+/** A raft of stranded weed: how far one lobe of it lifts. */
+const WEED_PULL_PX = 0;
+/** One weed pile in this many moves at all. */
+const WEED_MOVES_ONE_IN = 3;
+
+// ---------------------------------------------------------------------------
+// MOTION. Everything in this file that moves goes through these few lines, and
+// they are the same few lines in every props file so one grep finds them all.
+//
+// PERIODIC IN phase(k), ANCHORED AT FRAME 0. `swing` is `triPhase` minus its
+// own value at k = 0. `triPhase` has period 1 in `phase(k)` and no kick at the
+// wrap, so frame FRAMES is frame 0 by construction and the loop closes.
+// Subtracting the k = 0 value makes the swing exactly zero at frame 0 for EVERY
+// offset, which is what keeps an animated frame 0 byte-identical to the still
+// render every number in `docs/` was measured on.
+//
+// WHOLE PIXELS, NEVER A FRACTION. `stepPx` rounds to a signed integer count of
+// screen pixels before anything reads it. A fractional displacement moves only
+// those edge pixels whose distance happened to sit near the boundary — that is
+// scattered single-pixel substitution, i.e. flicker, i.e. the thing
+// `tools/animcheck.mjs` fails a seed for. An integer displacement moves a whole
+// stretch of contour together, which is what "a clump moved" means.
+//
+// NO Rng DRAW HAPPENS HERE. Whether an instance moves at all, and on what
+// phase, come from a hash of its own world position. Drawing them from `st`
+// would shift every draw after it and the still render would stop being the
+// still render; drawing them from anything that saw the frame index would make
+// frame 2 a different scene rather than the same scene two frames later.
+const swing = (k, off) => triPhase(k, off) - triPhase(0, off);
+const stepPx = (v, amp) => { const a = amp * v; return a < 0 ? -Math.round(-a) : Math.round(a); };
+
+/**
+ * This instance's phase offset, or -1 when it is one of the ones that holds
+ * still. One in `oneIn` moves; the rest are the still world the moving ones are
+ * read against, which is the shape the reference measurement argued for.
+ */
+function movePhase(wx, wy, salt, oneIn) {
+  const u = h3(Math.round(wx * 8), Math.round(wy * 8), salt) >>> 0;
+  return (u % oneIn) ? -1 : ((u >>> 7) % FRAMES) / FRAMES;
+}
+
+/**
+ * K tables, one per frame, starting at the stage's CURRENT frame — so pose 0 is
+ * always the picture this render is meant to be, and the recorder's k-th entry
+ * is the frame k steps later.
+ */
+function poseSet(A, off, amp, make) {
+  if (!A || A.frames < 2 || off < 0) return [make(0)];
+  const out = new Array(A.frames);
+  for (let j = 0; j < A.frames; j++) out[j] = make(stepPx(swing(A.frame + j, off), amp));
+  return out;
+}
+
+const ORIGINS = new Map();
+function origins(K) {
+  let o = ORIGINS.get(K);
+  if (!o) { o = []; for (let i = 0; i < K; i++) o.push([0, 0]); ORIGINS.set(K, o); }
+  return o;
+}
+
+/** Draw pose 0 exactly as `blit` would; record the rest only when recording. */
+function putPoses(cv, x0, y0, ps, map, d, A) {
+  if (ps.length > 1 && A && A.anim) cv.blitAnim(x0, y0, ps, origins(ps.length), map, d, A.anim);
+  else cv.blit(x0, y0, ps[0], map, d);
+}
+
 const massMap = (C, g) => ({ d: C.black, x: g.k, m: g.r, l: g.l, a: g.t, '.': -1 });
 
 /** Blit a cached table centred on a world point. */
@@ -186,12 +264,16 @@ function stamp(cv, iso, rows, map, x, y, z, bias, dy) {
  * organic mass in a colour that means exactly one thing, sitting on the line
  * the last tide reached.
  */
-export function weedPile(cv, iso, C, st, x, y, z, big) {
+export function weedPile(cv, iso, C, st, x, y, z, big, A) {
   const g = st.pick([C.leaf, C.green, C.teal, C.grass, C.leaf]);
   const gg = C.mk(g._h + st.range(-16, 16), Math.min(1, g._s * st.range(0.45, 0.95)),
     Math.min(0.62, g._L * st.range(0.52, 0.86)));
-  const rows = ellipseMass(big ? st.int(8, 13) : st.int(4, 8), st.int(0, 23), 0.52, 0x5b17);
-  stamp(cv, iso, rows, massMap(C, gg), x, y, z, 0.55, 1);
+  const R = big ? st.int(8, 13) : st.int(4, 8), variant = st.int(0, 23);
+  const off = movePhase(x, y, 0x6f2ad1, WEED_MOVES_ONE_IN);
+  const ps = poseSet(A, off, WEED_PULL_PX, (m) => ellipseMass(R, variant, 0.52, 0x5b17, m));
+  const p = projR(iso, x, y, z);
+  putPoses(cv, p[0] - (ps[0][0].length >> 1), p[1] - (ps[0].length >> 1) - 1, ps,
+    massMap(C, gg), dep(iso, x, y, z, 0.55), A);
 }
 
 /** A boulder or a riprap block. Same generator, stone tones, less squashed. */

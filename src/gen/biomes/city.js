@@ -159,17 +159,17 @@ export function paintCity(stage) {
     for (const p of parcels) {
       if (!vis(p.x0, p.y0, p.x1, p.y1, 100)) continue;
       const CP = localC(CB, cs, Math.max(1, D.nAcc - 1), 1);
-      parcel(cv, iso, CP, { bs, ps, ns, pes, sg }, p, seedN, tag, tagRaw, D);
+      parcel(cv, iso, CP, { bs, ps, ns, pes, sg }, p, seedN, tag, tagRaw, D, stage);
     }
-    sidewalkProps(cv, iso, CB, { ps, ns, pes, sg }, b, tag, CW, tagRaw, D);
+    sidewalkProps(cv, iso, CB, { ps, ns, pes, sg }, b, tag, CW, tagRaw, D, stage);
   }
 
-  traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw, D);
+  traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw, D, stage);
 }
 
 // ---------------------------------------------------------------------------
 
-function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
+function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D, A) {
   const { bs, ps, ns, pes, sg } = st;
   const x0 = p.x0, y0 = p.y0, w = p.x1 - p.x0, d = p.y1 - p.y0;
   const Z = 2.4;
@@ -219,7 +219,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
         const px = x0 + 0.4, py = y0 + ps.range(0.5, Math.max(0.6, d - 3));
         const k = ps.int(0, 3);
         if (k === 0) S.bin(cv, iso, C, ps, px, py, Z);
-        else if (k === 1) N.bush(cv, iso, C, ns, px, py, Z);
+        else if (k === 1) N.bush(cv, iso, C, ns, px, py, Z, A);
         else if (k === 2) S.crateStackShim(cv, iso, C, ps, px, py, Z);
         else S.bollard(cv, iso, C, ps, px, py, Z);
       }
@@ -236,16 +236,16 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
       cv.t = tagRaw();
       const px = x0 + ns.range(1.0, Math.max(1.1, w - 3)), py = y0 + ns.range(1.0, Math.max(1.1, d - 3));
       const k = ns.weighted([['tree', 7], ['palm', 3], ['bush', 4], ['bed', 3], ['bench', 3], ['hedge', 3]]);
-      if (k === 'tree') N.tree(cv, iso, C, ns, px, py, Z, ns.bool(0.5));
-      else if (k === 'palm') N.palm(cv, iso, C, ns, px, py, Z);
-      else if (k === 'bush') N.bush(cv, iso, C, ns, px, py, Z);
+      if (k === 'tree') N.tree(cv, iso, C, ns, px, py, Z, ns.bool(0.5), A);
+      else if (k === 'palm') N.palm(cv, iso, C, ns, px, py, Z, A);
+      else if (k === 'bush') N.bush(cv, iso, C, ns, px, py, Z, A);
       else if (k === 'bed') N.flowerBed(cv, iso, C, ns, px, py, Z + 0.02, ns.range(4, 9), ns.range(4, 9));
       else if (k === 'bench') S.bench(cv, iso, C, ps, px, py, Z, ps.int(0, 1));
       else N.hedge(cv, iso, C, ns, px, py, Z, ns.range(6, 16), 2.0, 2.2);
     }
     for (let i = 0; i < Math.max(2, Math.round(w * d * D.density / 115)); i++) {
       cv.t = tagRaw();
-      drawPerson(cv, iso, C, pes, x0 + pes.range(1, w - 1), y0 + pes.range(1, d - 1), Z);
+      drawPerson(cv, iso, C, pes, x0 + pes.range(1, w - 1), y0 + pes.range(1, d - 1), Z, undefined, A);
     }
     return;
   }
@@ -276,7 +276,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
     if (D.lotTrees) {
       for (let q = 0; q < Math.max(1, Math.round(w / 16)); q++) {
         cv.t = tagRaw();
-        N.tree(cv, iso, C, ns, x0 + ps.range(1, Math.max(1.1, w - 2)), y0 + d * 0.5 + ps.range(-1, 1), Z, ps.bool(0.5));
+        N.tree(cv, iso, C, ns, x0 + ps.range(1, Math.max(1.1, w - 2)), y0 + d * 0.5 + ps.range(-1, 1), Z, ps.bool(0.5), A);
       }
     }
     return;
@@ -308,11 +308,11 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
       else if (k === 'stall') S.marketStall(cv, iso, C, ps, px, py, Z, 6, 5);
       else if (k === 'bin') S.bin(cv, iso, C, ps, px, py, Z);
       else if (k === 'lamp') S.lampPost(cv, iso, C, ps, px, py, Z, 0);
-      else N.tree(cv, iso, C, ps, px, py, Z, false);
+      else N.tree(cv, iso, C, ps, px, py, Z, false, A);
     }
     for (let i = 0; i < Math.max(3, Math.round(w * d * D.density / 82)); i++) {
       cv.t = tagRaw();
-      drawPerson(cv, iso, C, pes, x0 + pes.range(1, w - 1), y0 + pes.range(1, d - 1), Z);
+      drawPerson(cv, iso, C, pes, x0 + pes.range(1, w - 1), y0 + pes.range(1, d - 1), Z, undefined, A);
     }
     if (ps.bool(0.28 * D.heroSign)) {
       cv.t = tag();
@@ -341,7 +341,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
     }
     for (let i = 0; i < Math.max(4, Math.round(w * d * D.density / 62)); i++) {
       cv.t = tagRaw();
-      drawPerson(cv, iso, C, pes, x0 + pes.range(1, w - 1), y0 + pes.range(1, d - 1), Z);
+      drawPerson(cv, iso, C, pes, x0 + pes.range(1, w - 1), y0 + pes.range(1, d - 1), Z, undefined, A);
     }
     return;
   }
@@ -395,7 +395,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
     }
     for (let i = 0; i < 4; i++) {
       cv.t = tagRaw();
-      drawPerson(cv, iso, C, pes, x0 + pes.range(0.6, 2.4), y0 + pes.range(1, d - 1), Z);
+      drawPerson(cv, iso, C, pes, x0 + pes.range(0.6, 2.4), y0 + pes.range(1, d - 1), Z, undefined, A);
     }
     return;
   }
@@ -432,7 +432,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
 
 // ---------------------------------------------------------------------------
 
-function sidewalkProps(cv, iso, C, st, b, tag, CW, tagRaw, D) {
+function sidewalkProps(cv, iso, C, st, b, tag, CW, tagRaw, D, A) {
   const { ps, ns, pes, sg } = st;
   const Z = 2.4;
 
@@ -475,9 +475,9 @@ function sidewalkProps(cv, iso, C, st, b, tag, CW, tagRaw, D) {
           const px = rx + (along ? t + ns.range(0.4, seg - 0.4) : ns.range(0.3, rw - 0.3));
           const py = ry + (along ? ns.range(0.3, rd - 0.3) : t + ns.range(0.4, seg - 0.4));
           const kk = ns.weighted([['tree', 6], ['palm', 3], ['bush', 4], ['hedge', 2]]);
-          if (kk === 'tree') N.tree(cv, iso, C, ns, px, py, Z + 0.04, ns.bool(0.5));
-          else if (kk === 'palm') N.palm(cv, iso, C, ns, px, py, Z + 0.04);
-          else if (kk === 'bush') N.bush(cv, iso, C, ns, px, py, Z + 0.04);
+          if (kk === 'tree') N.tree(cv, iso, C, ns, px, py, Z + 0.04, ns.bool(0.5), A);
+          else if (kk === 'palm') N.palm(cv, iso, C, ns, px, py, Z + 0.04, A);
+          else if (kk === 'bush') N.bush(cv, iso, C, ns, px, py, Z + 0.04, A);
           else { cv.t = tag(); N.hedge(cv, iso, C, ns, px, py, Z + 0.04, along ? ns.range(4, 10) : 1.8, along ? 1.8 : ns.range(4, 10), 1.9); }
         }
         t += seg + ns.range(5, 22);
@@ -510,8 +510,8 @@ function sidewalkProps(cv, iso, C, st, b, tag, CW, tagRaw, D) {
         ['barrier', 3], ['pylon', 0.9 * D.heroSign], ['none', 2],
       ]);
       if (k === 'lamp') S.lampPost(cv, iso, C, ps, x, y, Z, dx ? 1 : 0);
-      else if (k === 'tree') { cv.t = tagRaw(); N.tree(cv, iso, C, ns, x, y, Z, ns.bool(0.4)); }
-      else if (k === 'palm') { cv.t = tagRaw(); N.palm(cv, iso, C, ns, x, y, Z); }
+      else if (k === 'tree') { cv.t = tagRaw(); N.tree(cv, iso, C, ns, x, y, Z, ns.bool(0.4), A); }
+      else if (k === 'palm') { cv.t = tagRaw(); N.palm(cv, iso, C, ns, x, y, Z, A); }
       else if (k === 'bin') S.bin(cv, iso, C, ps, x, y, Z);
       else if (k === 'hydrant') S.hydrant(cv, iso, C, ps, x, y, Z);
       else if (k === 'bollard') { for (let q = 0; q < 3; q++) { cv.t = tag(); S.bollard(cv, iso, C, ps, x + dx * q * 2.4, y + dy * q * 2.4, Z); } }
@@ -532,7 +532,7 @@ function sidewalkProps(cv, iso, C, st, b, tag, CW, tagRaw, D) {
       cv.t = tag();
       const jx = dx ? pes.range(-1.6, 1.6) : pes.range(-3.4, 3.4);
       const jy = dy ? pes.range(-1.6, 1.6) : pes.range(-3.4, 3.4);
-      drawPerson(cv, iso, CW, pes, ex + dx * q + jx, ey + dy * q + jy, Z);
+      drawPerson(cv, iso, CW, pes, ex + dx * q + jx, ey + dy * q + jy, Z, undefined, A);
       q += pes.range(2.4, 6.6) / D.density;
     }
   }
@@ -540,7 +540,7 @@ function sidewalkProps(cv, iso, C, st, b, tag, CW, tagRaw, D) {
 
 // ---------------------------------------------------------------------------
 
-function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw, D) {
+function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw, D, A) {
   const KINDS = [['car', 10], ['taxi', 3], ['van', 3], ['pickup', 3], ['truck', 2], ['bus', 1], ['moto', 2], ['bike', 2]];
   const { bx, by, X0, X1, Y0, Y1 } = plan;
   // Traffic keeps its own committed palette: mostly the neutral families with a
@@ -620,8 +620,8 @@ function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw, D) {
       const n = Math.round(pes.int(3, 10) * D.density);
       for (let i = 0; i < n; i++) {
         cv.t = tag();
-        if (pes.bool(0.5)) drawPerson(cv, iso, C, pes, a + pes.range(1, b - a - 1), c - pes.range(1, 10), 0);
-        else drawPerson(cv, iso, C, pes, a - pes.range(1, 10), c + pes.range(1, d - c - 1), 0);
+        if (pes.bool(0.5)) drawPerson(cv, iso, C, pes, a + pes.range(1, b - a - 1), c - pes.range(1, 10), 0, undefined, A);
+        else drawPerson(cv, iso, C, pes, a - pes.range(1, 10), c + pes.range(1, d - c - 1), 0, undefined, A);
       }
     }
   }
