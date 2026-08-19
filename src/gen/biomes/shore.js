@@ -56,9 +56,9 @@ import { makeTerrain, drawTerrain, walkTrack } from '../terrain.js';
 import { drawSlab } from '../../core/iso.js';
 import { box, gable } from '../draw.js';
 import { h3 } from '../palette.js';
-import { topFace, leftFace, rightFace, textPanel } from '../faces.js';
+import { topFace, groundInv } from '../faces.js';
 import { localC } from '../stage.js';
-import { coinWord, coinTag, textBitmap, signInk } from '../font.js';
+import { coinWord, textBitmap, signInk } from '../font.js';
 import { dep, projR } from '../view.js';
 import * as P from '../props/shore.js';
 import * as S from '../props/street.js';
@@ -612,12 +612,478 @@ export function paintShore(stage) {
   healSeams(cv);
 
   // Everything below reads the field rather than re-deriving it.
-  stage.shore = {
+  const eAt = (x, y) => MF.one(x, y, 0) / slope;
+  const SH = {
     MF, T, cxu, cyu, nx, ny, slope, Ox, Oy, REG, REGL, REGW, NR,
-    E_WET, E_DRY, E_BERM, E_DUNE, step, cell,
-    eAt: (x, y) => MF.one(x, y, 0) / slope,
+    E_WET, E_DRY, E_BERM, E_DUNE, step, cell, eAt,
     regionAt: (x, y) => regionAt(x, y, MF.one(x, y, 1)),
   };
+  stage.shore = SH;
+
+  // ---------------------------------------------------------------- the hero
+  const PIER = pier(stage, SH);
+  SH.pier = PIER;
+}
+
+// ---------------------------------------------------------------------------
+// THE PIER.
+//
+// "Terrain and ecology are what one walks through; authored places are what one
+// walks to." A coast has exactly one place-kind that is honestly its own and it
+// is not a building on the sand — it is the thing built OUT OVER THE WATER,
+// which is the one structure that only a shore can have and the one that puts a
+// hard, tall, man-made silhouette across the biome's biggest flat surface.
+//
+// It is placed EXPLICITLY. Its mid-point is aimed at the middle of the frame
+// and its two ends are then found by MARCHING THE EXPOSURE FIELD — landward to
+// the berm, seaward until the water is deep — so the pier's length is whatever
+// the bathymetry gives it and a seed with a wide shallow shelf gets a long one.
+// Nothing about it is on the 2:1 lattice: the deck runs perpendicular to the
+// mean coast, which is a bearing chosen against the projection, and the deck,
+// the fascia, the parapet and the pavilion's four walls are all drawn with the
+// arbitrary-direction primitives in `props/shore.js` rather than with `box`.
+// ---------------------------------------------------------------------------
+
+/** The face inverse for a vertical wall along an ARBITRARY world direction.
+ *
+ *  `wallQuad` solves the DEPTH plane for such a face; this solves the surface
+ *  coordinates, which is what lets a shader cut planking, glazing, a plinth and
+ *  a sign into a wall that does not run along an axis. Derivation: a point on
+ *  the face is (ax + t*ex, ay + t*ey, z), so
+ *      sx = ox + 2s[(ax-ay) + t(ex-ey)]        =>  t is linear in sx alone
+ *      sy = oy + s[(ax+ay) + t(ex+ey)] - 2sz   =>  z is linear in (sx, sy)
+ *  and u = t*L, v = z - z0. Substituting the axis-aligned directions reproduces
+ *  `faces.js` leftFace/rightFace coefficient for coefficient — checked.
+ */
+function wallInv(iso, ax, ay, bx, by, z0) {
+  const s = iso.s === undefined ? 1 : iso.s;
+  const ex = bx - ax, ey = by - ay;
+  const den = ex - ey;
+  const L = Math.sqrt(ex * ex + ey * ey) || 1;
+  const at = 1 / (2 * s * den);
+  const ct = -(iso.ox + 2 * s * (ax - ay)) / (2 * s * den);
+  const k = (ex + ey) / 2;
+  return {
+    au: at * L, bu: 0, cu: ct * L,
+    av: k * at, bv: -1 / (2 * s),
+    cv: (iso.oy + s * (ax + ay)) / (2 * s) - z0 + k * ct,
+    q: 1 / s, L,
+  };
+}
+
+function pier(stage, SH) {
+  // NOTE the scale is bound as `SC`, not `S`: `S` is the street-prop namespace
+  // in this module, and destructuring the stage's scale over it silently turned
+  // every `S.bin(...)` into a call on a number.
+  const { C, cv, iso, rng, X0, X1, Y0, Y1, W, H, ox, oy, tag, tagRaw, vis } = stage;
+  const SC = stage.S;
+  const { T, nx, ny, eAt, E_BERM } = SH;
+  const ps = rng.stream('pier');
+  const CP = localC(C, ps, 4, 2);
+
+  const clx = (x) => (x < X0 + 8 ? X0 + 8 : x > X1 - 8 ? X1 - 8 : x);
+  const cly = (y) => (y < Y0 + 8 ? Y0 + 8 : y > Y1 - 8 ? Y1 - 8 : y);
+  const march = (x0, y0, target, maxN) => {
+    let x = x0, y = y0;
+    const up = eAt(x, y) < target ? 1 : -1;
+    for (let k = 0; k < maxN; k++) {
+      const e = eAt(x, y);
+      if (up > 0 ? e >= target : e <= target) break;
+      const nxx = clx(x + nx * 2.0 * up), nyy = cly(y + ny * 2.0 * up);
+      if (nxx === x && nyy === y) break;
+      x = nxx; y = nyy;
+    }
+    return [x, y];
+  };
+
+  const cSx = (W * 0.5 - ox) / (2 * SC);
+  const cSy = (H * ps.range(0.36, 0.46) - oy) / SC;
+  const [rx, ry] = march((cSy + cSx) / 2, (cSy - cSx) / 2, E_BERM + ps.range(1, 9), 110);
+  const [hx0, hy0] = march(rx, ry, ps.range(-58, -38), 140);
+  let L = Math.sqrt((hx0 - rx) * (hx0 - rx) + (hy0 - ry) * (hy0 - ry));
+  if (L < 46) L = 46; else if (L > 132) L = 132;
+  const dx = -nx, dy = -ny;                 // seaward
+  const acx = -dy, acy = dx;                // across, so the deck is CCW
+  const hw = ps.range(4.6, 6.4);            // half the deck width
+  const gz = T.surfaceZ(rx, ry);
+  const deckZ = Math.max(gz, 0) + ps.range(2.8, 4.4);
+
+  const P4 = (t, c) => [rx + dx * t + acx * c, ry + dy * t + acy * c];
+  const at = (t, c) => P4(t, c);
+
+  // The head: a wider platform for the last stretch, which is what makes a pier
+  // a pier rather than a jetty and gives the pavilion something to stand on.
+  const headL = Math.min(L * 0.42, ps.range(22, 34));
+  const headW = hw * ps.range(1.85, 2.35);
+  const t0 = L - headL;
+
+  const timber = ps.pick([C.wood, C.taupe, C.stone, C.wood]);
+  const deckA = C.mk(timber._h + ps.range(-10, 10), timber._s * ps.range(0.6, 1.2),
+    Math.min(0.9, timber._L * ps.range(0.92, 1.22)));
+  const deckB = C.mk(deckA._h + ps.range(-14, 14), deckA._s * ps.range(0.7, 1.3),
+    Math.min(0.92, deckA._L * ps.range(0.84, 1.10)));
+
+  // ---- the deck's shadow and the piles' reflections, on the water.
+  //
+  // A shadow is the cheapest thing that breaks a calm sea and the only one that
+  // is not an object: it is a long flat field of the sea's own darker step,
+  // thrown down-screen along the (1,1) view ray, and it terminates against the
+  // pier above it — so unlike a free swell stroke it CLOSES something.
+  const G0 = groundInv(iso, 0.03);
+  const wetOnly = (val) => (sx, sy) => {
+    const wx = G0.ax * sx + G0.bx * sy + G0.cx;
+    const wy = G0.ay * sx + G0.by * sy + G0.cy;
+    return T.isWet(wx, wy) ? val : -1;
+  };
+  const shR = SH.regionAt(rx + dx * L * 0.8, ry + dy * L * 0.8);
+  const shade0 = shR.sea[1][0].k, shade1 = shR.sea[1][0].r;
+  const SHD = ps.range(3.4, 6.0);           // how far the shadow is thrown
+  {
+    cv.t = tagRaw();
+    const a = at(L * 0.12, -hw), b = at(L, -hw);
+    P.polyTop(cv, iso, [
+      [a[0], a[1]], [b[0], b[1]],
+      [b[0] + SHD, b[1] + SHD], [a[0] + SHD, a[1] + SHD],
+    ], 0.03, wetOnly(shade0), cv.t);
+    cv.t = tagRaw();
+    const c = at(L * 0.12, hw), d = at(L, hw);
+    P.polyTop(cv, iso, [
+      [c[0] + SHD * 0.9, c[1] + SHD * 0.9], [d[0] + SHD * 0.9, d[1] + SHD * 0.9],
+      [d[0] + SHD * 1.9, d[1] + SHD * 1.9], [c[0] + SHD * 1.9, c[1] + SHD * 1.9],
+    ], 0.03, wetOnly(shade1), cv.t);
+  }
+
+  // ---- the piles. Three to a bent, and the bent spacing is what gives the
+  // structure its rhythm across the water.
+  const gap = ps.range(6.0, 8.5);
+  const pw = ps.range(0.95, 1.35);
+  for (let t = gap * 0.6; t < L - 0.5; t += gap) {
+    const wide = t > t0;
+    const half = wide ? headW : hw;
+    const n = wide ? 4 : 3;
+    for (let i = 0; i < n; i++) {
+      const c = -half + 0.9 + (2 * half - 1.8) * (n === 1 ? 0.5 : i / (n - 1));
+      const [x, y] = at(t, c);
+      if (!vis(x - 2, y - 2, x + 2, y + 2, deckZ + 4)) continue;
+      const g = T.surfaceZ(x, y);
+      const z0 = Math.min(g, 0) - 0.8;
+      cv.t = tag();
+      P.pile(cv, iso, C, ps, x, y, z0, deckZ - 0.55, pw);
+      // A pile standing in water throws a reflection. Two units of the sea's
+      // contour step directly down-screen: it is the vertical the water has no
+      // other way of carrying.
+      if (T.isWet(x, y)) {
+        cv.t = tagRaw();
+        const rl = ps.range(2.2, 4.2);
+        P.polyTop(cv, iso, [
+          [x, y], [x + pw, y + pw], [x + pw + rl, y + pw + rl], [x + rl, y + rl],
+        ], 0.05, wetOnly(shR.sea[1][2].k), cv.t);
+      }
+    }
+  }
+
+  // ---- the deck, its fascia, and the head platform.
+  const deckShade = (z, x0, y0, half) => {
+    const G = groundInv(iso, z);
+    const bay = ps.range(7.5, 11.5);
+    return (sx, sy) => {
+      const wx = G.ax * sx + G.bx * sy + G.cx;
+      const wy = G.ay * sx + G.by * sy + G.cy;
+      const al = (wx - x0) * dx + (wy - y0) * dy;
+      const ac = (wx - x0) * acx + (wy - y0) * acy;
+      const q = G.q;
+      if (ac < -half + 0.55 * q || ac > half - 0.55 * q) return deckA.k;
+      // A BAY SEAM, NOT A PLANK. At plank pitch this would be a 4px lattice
+      // over a 400px deck, which is the pavement-seam defect verbatim. A seam
+      // every eight to twelve units is a structural bay, and each bay is a flat
+      // field closed on both sides.
+      const f = al / bay;
+      if (f - Math.floor(f) < 1.1 * q / bay) return deckA.k;
+      const bi = h3(Math.floor(f), 0, 0x51) & 3;
+      const F = bi === 0 ? deckB : deckA;
+      // A worn centre lane: the strip everyone walks on, in the same timber a
+      // value up. One flat field bounded by two seams, which is the whole ink
+      // closure argument applied to a deck.
+      return (ac > -half * 0.40 && ac < half * 0.40) ? F.l : F.t;
+    };
+  };
+
+  const deckQuad = (ta, tb, half) => {
+    const a = at(ta, -half), b = at(tb, -half), c = at(tb, half), d = at(ta, half);
+    return [a, b, c, d];
+  };
+
+  const drawDeck = (ta, tb, half) => {
+    const Q = deckQuad(ta, tb, half);
+    cv.t = tag();
+    P.polyTop(cv, iso, Q, deckZ, deckShade(deckZ, rx, ry, half), cv.t);
+    // the fascia: a beam under the deck edge, on the camera-facing sides only
+    for (let i = 0; i < 4; i++) {
+      const a = Q[i], b = Q[(i + 1) % 4];
+      if (!P.facesCamera(a[0], a[1], b[0], b[1])) continue;
+      const F = wallInv(iso, a[0], a[1], b[0], b[1], deckZ - 1.35);
+      P.wallQuad(cv, iso, a[0], a[1], b[0], b[1], deckZ - 1.35, deckZ,
+        (sx, sy) => {
+          const v = F.av * sx + F.bv * sy + F.cv;
+          const u = F.au * sx + F.bu * sy + F.cu;
+          if (v > 1.35 - 0.55 * F.q) return deckA.k;
+          const uu = u / 5.5;
+          return (uu - Math.floor(uu) < 0.22) ? deckB.r : deckA.r;
+        }, cv.t);
+    }
+  };
+
+  drawDeck(0, t0 + 0.4, hw);
+  drawDeck(t0, L, headW);
+
+  // ---- railings, lamps, benches and the people using it.
+  const railZ = deckZ + ps.range(2.3, 2.9);
+  const rail = ps.pick([C.metal, C.steel, C.white, C.slate]);
+  const railRun = (ta, tb, half, sign) => {
+    for (let t = ta; t <= tb; t += 3.3) {
+      const [x, y] = at(t, half * sign);
+      if (!vis(x - 1, y - 1, x + 1, y + 1, railZ + 2)) continue;
+      cv.t = tag();
+      box(cv, iso, x - 0.24, y - 0.24, deckZ, 0.48, 0.48, railZ - deckZ, MD(rail));
+    }
+    const a = at(ta, half * sign), b = at(tb, half * sign);
+    cv.t = tag();
+    P.wallQuad(cv, iso, a[0], a[1], b[0], b[1], railZ - 0.75, railZ, rail.l, cv.t);
+    P.wallQuad(cv, iso, a[0], a[1], b[0], b[1], railZ - 2.0, railZ - 1.75, rail.r, cv.t);
+  };
+  railRun(1.5, t0, hw, -1);
+  railRun(1.5, t0, hw, 1);
+  railRun(t0, L - 0.6, headW, -1);
+  railRun(t0, L - 0.6, headW, 1);
+
+  const pes = rng.stream('pierfolk');
+  for (let t = 5; t < L - 3; t += ps.range(5, 13)) {
+    const c = ps.range(-hw * 0.75, hw * 0.75);
+    const [x, y] = at(t, t > t0 ? c * 1.6 : c);
+    if (!vis(x - 2, y - 2, x + 2, y + 2, deckZ + 8)) continue;
+    const k = ps.int(0, 6);
+    cv.t = tag();
+    if (k === 0) S.lampPost(cv, iso, CP, ps, x, y, deckZ, ps.int(0, 1));
+    else if (k === 1) S.bench(cv, iso, CP, ps, x, y, deckZ, ps.int(0, 1));
+    else if (k === 2) S.bin(cv, iso, CP, ps, x, y, deckZ);
+    else {
+      cv.t = tagRaw();
+      drawPerson(cv, iso, CP, pes, x, y, deckZ);
+      if (ps.bool(0.5)) {
+        cv.t = tagRaw();
+        drawPerson(cv, iso, CP, pes, x + ps.range(-1.6, 1.6), y + ps.range(-1.6, 1.6), deckZ);
+      }
+    }
+  }
+
+  // ---- the pavilion at the head.
+  pavilion(stage, SH, ps, CP, {
+    at, t0, L, headL, headW, deckZ, dx, dy, acx, acy, timber,
+  });
+
+  return {
+    rx, ry, dx, dy, acx, acy, L, hw, headW, t0, deckZ,
+    /** Distance from a point to the pier's centre line — the hero's own field,
+     *  which the ambient scatter reads so the beach thins under it and the
+     *  moorings gather beside it. */
+    dist(x, y) {
+      const al = (x - rx) * dx + (y - ry) * dy;
+      const ac = (x - rx) * acx + (y - ry) * acy;
+      const t = al < 0 ? 0 : al > L ? L : al;
+      const px = rx + dx * t, py = ry + dy * t;
+      return Math.sqrt((x - px) * (x - px) + (y - py) * (y - py)) + 0 * ac;
+    },
+  };
+}
+
+/**
+ * The pavilion — the thing at the end of the pier, and the object the eye is
+ * meant to land on in the first second.
+ *
+ * Built entirely from the arbitrary-direction primitives so it stands SQUARE TO
+ * THE PIER rather than square to the world axes. That is deliberate: it is the
+ * largest single off-lattice built form this generator draws, and `docs/BAR.md`
+ * §5 records non-lattice-conforming area as the hardest number in the project —
+ * reference 9.9%, generator 0.5%. A box() here would have been half an hour
+ * cheaper and would have thrown that away.
+ */
+function pavilion(stage, SH, ps, CP, o) {
+  const { C, cv, iso, tag, tagRaw, vis } = stage;
+  const { at, t0, L, headW, deckZ } = o;
+  const cw = headW * ps.range(0.66, 0.80);
+  const cl = Math.min((L - t0) * 0.74, ps.range(15, 22));
+  const ta = t0 + (L - t0 - cl) * ps.range(0.35, 0.65);
+  const tb = ta + cl;
+  const A = at(ta, -cw), Bq = at(tb, -cw), Cq = at(tb, cw), D = at(ta, cw);
+  const Q = [A, Bq, Cq, D];
+  if (!vis(Math.min(A[0], Bq[0], Cq[0], D[0]) - 2, Math.min(A[1], Bq[1], Cq[1], D[1]) - 2,
+    Math.max(A[0], Bq[0], Cq[0], D[0]) + 2, Math.max(A[1], Bq[1], Cq[1], D[1]) + 2,
+    deckZ + 30)) return;
+
+  const wall = CP.wallTone(ps);
+  const trim = ps.bool(0.55) ? C.white : C.cream;
+  const roofC = ps.pick([C.slate, C.steel, C.terra, C.metal, CP.accentTone(ps)]);
+  const glass = ps.pick([C.glass, C.aqua, C.cyan]);
+  const wallH = ps.range(7.5, 10.5);
+  const topZ = deckZ + wallH;
+
+
+  // WHICH WALL CARRIES THE SIGN IS A LEGIBILITY DECISION, NOT A GEOMETRIC ONE.
+  // Both camera-facing walls of an off-lattice building are foreshortened, but
+  // by different amounts: the shear of type on a plane is that plane's own
+  // screen slope, and the pier's long axis runs at about -0.72 where its cross
+  // axis runs at the coast bearing, around 0.35. Lettering at 0.72 climbs so
+  // steeply it reads as a diagonal rather than a word. So the board goes on the
+  // GENTLER of the two, scored on screen width divided by shear.
+  let signEdge = -1, best = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = Q[i], b = Q[(i + 1) % 4];
+    if (!P.facesCamera(a[0], a[1], b[0], b[1])) continue;
+    const ex = b[0] - a[0], ey = b[1] - a[1];
+    const wpx = Math.abs(2 * (ex - ey));
+    const sl = Math.abs((ex + ey) / (2 * (ex - ey) || 1e-6));
+    const score = wpx / (1 + sl * 1.6);
+    if (score > best) { best = score; signEdge = i; }
+  }
+
+  cv.t = tag();
+  for (let i = 0; i < 4; i++) {
+    const a = Q[i], b = Q[(i + 1) % 4];
+    if (!P.facesCamera(a[0], a[1], b[0], b[1])) continue;
+    const F = wallInv(iso, a[0], a[1], b[0], b[1], deckZ);
+    const len = F.L;
+    // plinth, a glazed arcade, a spandrel band and a cornice — four flat
+    // fields stacked up the wall, each closed by a line in the wall's OWN
+    // contour step rather than in the shared ink.
+    const glazeV0 = wallH * 0.30, glazeV1 = wallH * 0.66;
+    const bay = len / Math.max(3, Math.round(len / ps.range(3.4, 4.6)));
+    const face = (sx, sy) => {
+      const u = F.au * sx + F.bu * sy + F.cu;
+      const v = F.av * sx + F.bv * sy + F.cv;
+      if (v < 0.55 * F.q) return wall.k;
+      if (v < 1.9) return wall.r;                      // plinth
+      if (v < 2.15) return wall.k;
+      if (v > glazeV0 && v < glazeV1) {
+        const f = u / bay;
+        const g = f - Math.floor(f);
+        if (g < 0.30) return wall.l;                   // pier between windows
+        if (g < 0.34 || g > 0.965) return wall.k;
+        return v > glazeV1 - 0.55 * F.q ? wall.k : (g < 0.62 ? glass.t : glass.l);
+      }
+      if (v > wallH - 1.15) return v > wallH - 0.5 * F.q ? wall.k : trim.l;
+      return v > glazeV1 && v < glazeV1 + 0.5 * F.q ? wall.k : wall.t;
+    };
+    P.wallQuad(cv, iso, a[0], a[1], b[0], b[1], deckZ, topZ, face, cv.t);
+  }
+
+  // roof, parapet and a lantern — three stacked flat fields with real edges
+  cv.t = tag();
+  P.polyTop(cv, iso, Q, topZ, roofC.l, cv.t);
+  for (let i = 0; i < 4; i++) {
+    const a = Q[i], b = Q[(i + 1) % 4];
+    if (!P.facesCamera(a[0], a[1], b[0], b[1])) continue;
+    P.wallQuad(cv, iso, a[0], a[1], b[0], b[1], topZ, topZ + 0.9, trim.r, cv.t);
+  }
+  cv.t = tag();
+  P.polyTop(cv, iso, Q, topZ + 0.9, roofC.t, cv.t);
+
+  // ---- THE SIGNBOARD, ON THE ROOF, WHERE IT FITS.
+  //
+  // The first version cut the lettering into a band on the wall and the band
+  // ran off the top of it: seven rows at a legible cell is four world units of
+  // face, and the spandrel between the glazing head and the cornice is two. A
+  // pier pavilion carries its name on a board above the parapet anyway, and up
+  // there the panel can be as tall as the word needs. Type on an axonometric
+  // plane shears but never scales, and this is cut in face coordinates, so it
+  // cannot foreshorten.
+  if (signEdge >= 0) {
+    const a0 = Q[signEdge], b0 = Q[(signEdge + 1) % 4];
+    const ex = b0[0] - a0[0], ey = b0[1] - a0[1];
+    // THE BOARD IS SIZED TO THE WORD, NOT THE OTHER WAY ROUND, AND THE WORD IS
+    // ONLY EVER `coinWord`.
+    //
+    // The first build slid the other way: it sliced a coinage to fit the edge
+    // and, when that still would not go, fell back to `coinTag`. `coinTag`'s
+    // first mode is one onset plus one nucleus plus one coda and it does NOT
+    // run the two real-word filters `coinWord` runs — it produced PEE on the
+    // hero sign of the frame. `coinWord` is filtered against both lists, so it
+    // is the only coiner used here; it is re-rolled for a short one, and if the
+    // word is still longer than the pavilion's edge the BOARD overhangs, which
+    // is what a pier signboard does anyway.
+    let word = coinWord(ps);
+    for (let k = 0; k < 6 && word.length > 5; k++) word = coinWord(ps);
+    const rows = textBitmap(word, 1);
+    const cell = ps.range(0.50, 0.64);
+    const need = rows[0].length * cell + 5.2;
+    const edge = Math.sqrt(ex * ex + ey * ey);
+    const grow = Math.min(1.40, Math.max(1.0, need / edge));
+    const k0 = 0.5 - grow * 0.5, k1 = 0.5 + grow * 0.5;
+    const sa = [a0[0] + ex * k0, a0[1] + ey * k0];
+    const sb = [a0[0] + ex * k1, a0[1] + ey * k1];
+    const span = edge * grow;
+    if (span < rows[0].length * cell + 1.2) return;
+    const bh = rows.length * cell + 2.2;
+    const z0 = topZ + 0.9;
+    const F = wallInv(iso, sa[0], sa[1], sb[0], sb[1], z0);
+    const dir = (sb[0] - sa[0]) - (sb[1] - sa[1]) > 0 ? 1 : -1;
+    const tw = rows[0].length * cell;
+    const u0 = (F.L - tw) * 0.5;
+    const panel = ps.weighted([[CP.accentTone(ps), 8], [C.white, 3], [C.cream, 2]]);
+    const ink2 = signInk(C, panel, ps.pick(CP.accents));
+    cv.t = tag();
+    // two standards, so the board is carried rather than floating
+    for (const t of [0.12, 0.88]) {
+      const px = sa[0] + (sb[0] - sa[0]) * t, py = sa[1] + (sb[1] - sa[1]) * t;
+      box(cv, iso, px - 0.3, py - 0.3, z0, 0.6, 0.6, bh, MD(trim));
+    }
+    P.wallQuad(cv, iso, sa[0], sa[1], sb[0], sb[1], z0, z0 + bh, (sx, sy) => {
+      const u = F.au * sx + F.bu * sy + F.cu;
+      const v = F.av * sx + F.bv * sy + F.cv;
+      const e = Math.min(u, v, F.L - u, bh - v);
+      if (e < 0.55 * F.q) return C.black;
+      if (e < 0.9) return panel.t;
+      if (e < 0.9 + 0.55 * F.q) return panel.k;
+      const iu = Math.floor(dir > 0 ? (u - u0) / cell : (u0 + tw - u) / cell);
+      const iv = Math.floor((bh - 1.1 - v) / cell);
+      if (iv >= 0 && iv < rows.length && iu >= 0 && iu < rows[0].length
+        && rows[iv].charCodeAt(iu) === 35) return ink2;
+      return panel.l;
+    }, cv.t);
+  }
+
+  const lw = cw * 0.44, ll = cl * 0.30;
+  const lm = (ta + tb) * 0.5;
+  const LQ = [at(lm - ll, -lw), at(lm + ll, -lw), at(lm + ll, lw), at(lm - ll, lw)];
+  cv.t = tag();
+  for (let i = 0; i < 4; i++) {
+    const a = LQ[i], b = LQ[(i + 1) % 4];
+    if (!P.facesCamera(a[0], a[1], b[0], b[1])) continue;
+    const F = wallInv(iso, a[0], a[1], b[0], b[1], topZ + 0.9);
+    P.wallQuad(cv, iso, a[0], a[1], b[0], b[1], topZ + 0.9, topZ + 5.2, (sx, sy) => {
+      const v = F.av * sx + F.bv * sy + F.cv;
+      const u = F.au * sx + F.bu * sy + F.cu;
+      if (v < 0.6 || v > 3.9) return trim.l;
+      const f = u / 1.9, g = f - Math.floor(f);
+      return g < 0.22 ? trim.k : glass.t;
+    }, cv.t);
+  }
+  cv.t = tag();
+  P.polyTop(cv, iso, LQ, topZ + 5.2, roofC.t, cv.t);
+  for (let i = 0; i < 4; i++) {
+    const a = LQ[i], b = LQ[(i + 1) % 4];
+    if (!P.facesCamera(a[0], a[1], b[0], b[1])) continue;
+    P.wallQuad(cv, iso, a[0], a[1], b[0], b[1], topZ + 5.2, topZ + 5.75, roofC.k, cv.t);
+  }
+  const fp = at((ta + tb) * 0.5, 0);
+  cv.t = tag();
+  P.flagPole(cv, iso, CP, ps, fp[0], fp[1], topZ + 5.75, ps.int(0, 1));
+  // a lit sign board is not enough of an anchor on its own; a couple of gulls
+  // on the parapet put the object at a size the eye can read against
+  for (let k = 0; k < 3; k++) {
+    const g = at(ta + cl * ps.range(0, 1), (ps.bool(0.5) ? -1 : 1) * cw);
+    cv.t = tagRaw();
+    P.gull(cv, iso, C, ps, g[0], g[1], topZ + 0.9, false);
+  }
 }
 
 // ---------------------------------------------------------------------------
