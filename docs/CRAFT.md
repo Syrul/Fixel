@@ -507,3 +507,66 @@ Three consequences:
 
 Measured with the lead's probe; the definition is the one used above and is worth keeping by
 hand until a shared tool carries it.
+
+---
+
+## flat5x5 is dead as a score and alive as a floor, and the difference is the discrimination ratio
+
+Round 3 retired `flat.frac5x5` with a specific argument: at its own window its discrimination
+between Fixel and the reference was **1.07x** (13.95% vs 13.08%) while at 17x17 it was 134x, so
+it "cannot see the defect it exists to protect" and must not steer the generator. That stands.
+
+**It does not follow that the number is useless**, and the biome work is where the distinction
+became load-bearing. Measured at 440x900, three seeds each, city as the live same-size control:
+
+| | flat5x5 | verdict |
+|---|---|---|
+| city | 0.147 - 0.190 | in family |
+| LA reference | 0.166 | — |
+| desert (ground + props) | 0.122 - 0.239 | in family |
+| **shore, ground stage** | **0.584 - 0.620** | **fail** |
+| **highland, ground stage** | **0.456 - 0.510** | **fail** |
+| Shift-Bild (wireframe lot plan) | 0.699 | the degenerate case |
+
+The retirement argument was about **fine discrimination inside the craft family**, where the
+ratio is 1.07x and the metric is blind. This is **coarse rejection outside it**, where the ratio
+is 3.9x and it is not remotely blind. A landscape ground made of a few enormous tonal fields
+sits between the city and a wireframe lot plan, and flat5x5 says so immediately.
+
+That is the same epistemic status `docs/BAR.md` already assigns the pixel fail count and
+`rg(pixel-weighted)`: **a floor that rejects things outside the craft family, never a score that
+ranks things inside it.** Use it that way and it is one of the cheapest checks in the repo. Use
+it to steer and it will mislead exactly as it did in round 3.
+
+### The process rule this produced
+
+**Measure flat5x5 on a biome's GROUND STAGE and accept or reject it there, before any props.**
+
+The tempting framing — "these are ground-stage numbers, the props will fix them" — is correct
+for `darkShare`, colour count and largest-region share, all of which genuinely arrive with the
+objects. It is **wrong for flat5x5**, and the mechanism is worth stating because it is not
+obvious: the city's ground is *itself* articulated (kerbs, slab seams, parcel aprons, verges,
+resurfacing patches), so props land on a surface that already has structure. A landscape ground
+of a few large tonal fields gives props nothing to integrate with, and scattering them on top
+reproduces the round-3 signature exactly — sharp objects separated by unarticulated plane, which
+a judge named *interstitial mush* and called "what assembly-from-parts leaves behind".
+
+### And check whether it is flatness or blending before prescribing anything
+
+A large-flat-region picture and a blended picture look alike in a thumbnail and need opposite
+fixes. The soft-transition rate — a mid-tone pixel between two neighbours 60+ luma apart —
+separates them:
+
+| | soft transitions |
+|---|---|
+| city | 0.0084 - 0.0094 |
+| shore ground | 0.0002 - 0.0004 |
+| highland ground | 0.0007 - 0.0008 |
+
+The landscape grounds are an order of magnitude **cleaner**-edged than the city. Nothing is
+filtering or antialiasing anywhere — the renderer has no blending path at all — so the smooth
+appearance is entirely region size. Sending a builder to hunt for a blend would have cost a
+cycle. (Absolute values depend on the definition; this one is horizontal-only with a ±12 luma
+margin. An independent implementation read the city at 0.0346 and the shore at 0.0005 — three
+to four times higher on both, same ratio. **Quote the control measured by the same script in the
+same breath**, as `docs/CRAFT.md` already requires for radius of gyration.)
