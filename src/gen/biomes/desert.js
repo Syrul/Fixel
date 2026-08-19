@@ -550,16 +550,16 @@ export function paintDesert(stage) {
     const d = ((fam._h - home + 540) % 360) - 180;
     return home + d * k;
   };
-  const SAND_H = pull(C.sandy, 40, 0.34);
-  const ROCK_H = pull(C.taupe, 26, 0.34);
-  const VARN_H = pull(C.terra, 15, 0.38);
-  const CRUST_H = pull(C.cream, 44, 0.36);
+  const SAND_H = pull(C.sandy, 40, 0.28);
+  const ROCK_H = pull(C.taupe, 26, 0.28);
+  const VARN_H = pull(C.terra, 15, 0.34);
+  const CRUST_H = pull(C.cream, 44, 0.26);
 
   const mkReg = (gi, gj) => {
     const u = (k) => (h3(gi, gj, S0 ^ k) >>> 8) / 16777216;
     // this region's sand, rock and crust — three families, three hues
     const sh = SAND_H + (u(0x11) - 0.5) * 22;
-    const ss = Math.max(0.15, C.sandy._s * (0.74 + u(0x13) * 0.92));
+    const ss = Math.max(0.19, C.sandy._s * (0.74 + u(0x13) * 0.92));
     // Capped at 0.86: above that hsl washes every hue out and the erg came back
     // as paper rather than as sand, on two seeds out of six.
     const sl = Math.min(0.86, Math.max(0.56, C.sandy._L * (0.82 + u(0x15) * 0.26)));
@@ -595,13 +595,13 @@ export function paintDesert(stage) {
     // little as 0.30x of saturation, and at the bottom of that a reg at hue 46 is
     // not warm stone, it is olive grey — three seeds of six came back reading as
     // landfill rather than as desert.
-    const ks = Math.max(0.085, C.taupe._s * (0.85 + u(0x43) * 1.55));
+    const ks = Math.max(0.115, C.taupe._s * (0.85 + u(0x43) * 1.55));
     // A LAG PAVEMENT IS DARK, and this is where a desert's ink honestly lives.
     // Measured at 4-9% of the frame under luma 50 against a 10-19% band, and the
     // project's whole record says the fix is never more black strokes. The reg
     // carries a varnish skin that is genuinely a dark material, and making it one
     // buys the ink as GROUND rather than as outline.
-    const kl = Math.max(0.28, C.taupe._L * (0.64 + u(0x45) * 0.40));
+    const kl = Math.max(0.33, C.taupe._L * (0.64 + u(0x45) * 0.40));
     const rock = [];
     for (let i = 0; i < 3; i++) {
       const q = (h3(gi, gj, S0 ^ (0x51 + i)) >>> 8);
@@ -626,8 +626,21 @@ export function paintDesert(stage) {
         C.cream._s * (0.26 + ((q >>> 4) & 15) / 15 * 0.60),
         Math.min(0.93, C.cream._L * (0.82 + ((q >>> 8) & 7) * 0.030))));
     }
+    // A STONE IS NOT THE GROUND IT LIES ON. Drawing the clasts from the same
+    // three pavement tones made a field of them read as camouflage — the eye
+    // cannot separate object from surface and the whole reg turns to mush. A lag
+    // stone has been sitting in the sun for a long time and is darker and rougher
+    // than the fines around it; three tones, off the region's own rock so they
+    // still belong to it, at two thirds to four fifths of its lightness.
+    const clast = [];
+    for (let i = 0; i < 3; i++) {
+      const q = (h3(gi, gj, S0 ^ (0xb1 + i)) >>> 8);
+      clast.push(C.mk(kh + ((q & 15) / 15 - 0.5) * 26,
+        Math.min(0.55, ks * (1.05 + ((q >>> 4) & 15) / 15 * 0.60)),
+        Math.max(0.16, kl * (0.60 + ((q >>> 8) & 7) * 0.032))));
+    }
     return {
-      sandLv, rock, varn, grit, crust,
+      sandLv, rock, clast, varn, grit, crust,
       drift: C.mk(sh + (u(0xa1) - 0.5) * 10, ss * 0.90,
         Math.min(0.89, sl * (1.03 + u(0xa3) * 0.06))),
       pw1: 20 + (u(0x91) * 13),          // varnish sheets
@@ -1202,7 +1215,7 @@ export function paintDesert(stage) {
         CC.accentTone(cps), cps.bool(0.35));
     }
     cv.t = tag();
-    P.cairn(cv, iso, CC, cps, camp[0] + 9, camp[1] - 9, cz, regOf(camp[0] + 9, camp[1] - 9).rock[0]);
+    P.cairn(cv, iso, CC, cps, camp[0] + 9, camp[1] - 9, cz, regOf(camp[0] + 9, camp[1] - 9).clast[0]);
     for (let i = 0; i < 4; i++) {
       cv.t = tagRaw();
       drawPerson(cv, iso, CC, pes, camp[0] + pes.range(-11, 11), camp[1] + pes.range(-9, 9), cz);
@@ -1259,10 +1272,10 @@ export function paintDesert(stage) {
       const k = fs.weighted([['marker', 6], ['cairn', 4], ['drum', 3], ['stones', 4], ['sign', 2]]);
       cv.t = tag();
       if (k === 'marker') P.markerPost(cv, iso, C, fs, x, y, z, C.white);
-      else if (k === 'cairn') P.cairn(cv, iso, C, fs, x, y, z, RG.rock[0]);
+      else if (k === 'cairn') P.cairn(cv, iso, C, fs, x, y, z, RG.clast[0]);
       else if (k === 'drum') P.drum(cv, iso, C, fs, x, y, z, C.accentTone(fs), fs.bool(0.4));
       else if (k === 'sign') S.signPost(cv, iso, C, fs, x, y, z, coinTag(fs));
-      else P.stone(cv, iso, C, fs, x, y, z, RG.rock[1], fs.int(4, 7));
+      else P.stone(cv, iso, C, fs, x, y, z, RG.clast[1], fs.int(4, 7));
     }
     // one wreck and one culvert, both on the track
     {
@@ -1315,14 +1328,14 @@ export function paintDesert(stage) {
       for (let i = 0; i < 9; i++) {
         const x = site[0] + vx * R, y = site[1] + vy * R;
         cv.t = tag();
-        P.cairn(cv, iso, C, rs, x, y, T.surfaceZ(x, y), regOf(x, y).rock[2]);
+        P.cairn(cv, iso, C, rs, x, y, T.surfaceZ(x, y), regOf(x, y).clast[2]);
         const nx = vx * RC2 - vy * RS2, ny = vx * RS2 + vy * RC2;
         const nn = Math.sqrt(nx * nx + ny * ny) || 1;
         vx = nx / nn; vy = ny / nn;
       }
       cv.t = tag();
       P.boulder(cv, iso, C, rs, site[0], site[1], T.surfaceZ(site[0], site[1]),
-        regOf(site[0], site[1]).rock[1], rs.int(9, 12));
+        regOf(site[0], site[1]).clast[1], rs.int(9, 12));
     }
   }
 
@@ -1408,7 +1421,7 @@ export function paintDesert(stage) {
     const hR = h3(gi, gj, S0 ^ 0x1a43) >>> 5;
     cv.t = tagRaw();
     P.stone(cv, iso, C, ns, x, y, T.surfaceZ(x, y),
-      regOf(x, y).rock[(h3(gi, gj, S0 ^ 0x1a45) >>> 3) % 3],
+      regOf(x, y).clast[(h3(gi, gj, S0 ^ 0x1a45) >>> 3) % 3],
       4 + (hR & 3) + ((hR >>> 4) & 1) * 3);
   });
 
@@ -1432,7 +1445,7 @@ export function paintDesert(stage) {
     P.driftTail(cv, iso, C, x, y, z + 0.02, wx, wy,
       5 + ((h3(gi, gj, S0 ^ 0x1b61) >>> 6) & 7), 2.2, R.drift);
     cv.t = tagRaw();
-    P.stone(cv, iso, C, ns, x, y, z, R.rock[(h3(gi, gj, S0 ^ 0x1b59) >>> 3) % 3],
+    P.stone(cv, iso, C, ns, x, y, z, R.clast[(h3(gi, gj, S0 ^ 0x1b59) >>> 3) % 3],
       4 + ((h3(gi, gj, S0 ^ 0x1b5d) >>> 5) & 3));
   });
 
@@ -1448,7 +1461,7 @@ export function paintDesert(stage) {
     cv.t = tagRaw();
     P.driftTail(cv, iso, C, x, y, z + 0.03, wx, wy, 11, 3.6, R.drift);
     cv.t = tagRaw();
-    P.boulder(cv, iso, C, ns, x, y, z, R.rock[(h3(gi, gj, S0 ^ 0x2b19) >>> 3) % 3],
+    P.boulder(cv, iso, C, ns, x, y, z, R.clast[(h3(gi, gj, S0 ^ 0x2b19) >>> 3) % 3],
       7 + ((h3(gi, gj, S0 ^ 0x2b1d) >>> 7) & 3));
   });
 
