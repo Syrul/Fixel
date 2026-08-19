@@ -62,7 +62,14 @@ function sideShade(F, o) {
       // moved -0.56 bandwidths the first time this was drawn solid. The ring
       // also gives the hub its own enclosed cell, which is the whole point.
       if (r2 < o.hubR * o.hubR) return o.hub;
-      if (r2 < o.archR * o.archR) return K;
+      // A TYRE IS RUBBER, NOT INK. It was drawn in the shared silhouette black,
+      // which is both wrong — a tyre is a material with a value, and the
+      // reference gives its dark masses their own tones — and a measurable
+      // problem: our entire frame contained exactly ONE colour below luma 16
+      // where the reference holds dozens, because every dark thing in the
+      // picture was the same single ink. Four tyres per vehicle at 250+
+      // vehicles a frame is the largest single dark mass we draw.
+      if (r2 < o.archR * o.archR) return o.tyre;
       if (r2 < (o.archR + 0.55) * (o.archR + 0.55) && v > 0.2) return o.arch;
     }
     if (v > o.waist - PX && v < o.waist + PX) return K;
@@ -181,6 +188,7 @@ export function drawVehicle(cv, iso, C, st, x, y, z, ax, kind, mkTag) {
 
   const sideOpts = {
     ink: K, L, axles, archR: wr * 0.78, hubR: wr * 0.48,
+    tyre: C.rubber === undefined ? K : C.rubber.t,
     // The hub is a fixed mid grey, not a coin-flip between white and metal:
     // half the fleet paints its bodies white, and a white hub inside a black
     // tyre on a white car is an invisible wheel. It has to differ from BOTH

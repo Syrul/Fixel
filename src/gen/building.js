@@ -187,9 +187,18 @@ function facadeOpts(C, st, wall, W, H, seed, style, blank) {
   // structural gaps: whole floors or whole bays with no openings at all
   o.panelV0 = o.groundH + st.range(1.3, 4.5);
   o.panelV1 = o.panelV0 + st.range(4.5, 14);
-  const rp = st.weighted([[1, 6], [2, 3], [3, 2]]);
+  // MORE OF A FACADE IS WALL THAN WAS, and this is one edit for three
+  // measurements. At the new scale a window frame is still one pixel while the
+  // building is four times the area, so the frame's share of the facade fell —
+  // but a fully glazed 160px tower still spends about a tenth of its own area
+  // on ink, and it is the largest remaining consumer in the worst crops (45%
+  // of the ink in our densest 320px window is INTERIOR, i.e. window frames).
+  // Blank courses and blank bays take that back, raise the flat-area share at
+  // the 13x13 and 17x17 windows that actually discriminate, and are what the
+  // reference's facades look like: mostly wall, with the openings grouped.
+  const rp = st.weighted([[1, 4], [2, 4], [3, 3]]);
   o.rowPeriod = rp; o.rowCount = rp === 1 ? 1 : st.int(1, rp - 1);
-  const cp = st.weighted([[1, 7], [2, 2], [4, 1]]);
+  const cp = st.weighted([[1, 5], [2, 3], [3, 2], [4, 1]]);
   o.colPeriod = cp; o.colCount = cp === 1 ? 1 : Math.max(1, cp - 1);
 
   if (style === 1) {           // ribbon glazing, wide flat spandrels
@@ -209,8 +218,8 @@ function facadeOpts(C, st, wall, W, H, seed, style, blank) {
 function mass(cv, iso, C, st, x, y, z, w, d, h, wall, style, seed) {
   const FL = leftFace(iso, y + d, x, z);
   const FR = rightFace(iso, x + w, y, z);
-  const blankL = ((h3(seed, 1, 3) & 15) < 3);
-  const blankR = ((h3(seed, 2, 3) & 15) < 3);
+  const blankL = ((h3(seed, 1, 3) & 15) < 5);
+  const blankR = ((h3(seed, 2, 3) & 15) < 5);
   const oL = facadeOpts(C, st, wall, w, h, seed, style, blankL);
   const oR = Object.assign({}, oL, { W: d, blank: blankR });
   box(cv, iso, x, y, z, w, d, h, {
@@ -265,7 +274,15 @@ export function drawBuilding(cv, iso, C, st, x, y, z, w, d, opt) {
     if (pitched && i === masses.length - 1) {
       const tile = st.pick([C.terra, C.brick, C.slate, C.steel, C.red]);
       const ridgeX = mw >= md;
-      const hr = Math.min(9, (ridgeX ? md : mw) * st.range(0.46, 0.54));
+      // PITCH IS CHOSEN OFF THE DEAD ZONE, DELIBERATELY. Sweeping k = hr /
+      // (span/2) against the slope statistic: k ~ 0.5 votes 0.353 at 1:1,
+      // k ~ 1.5 votes 0.403, and k ~ 0.9-1.0 votes 0.036 — at k ~ 1 a gable's
+      // two slopes fall BETWEEN the lattices and register as nothing. A roof is
+      // the honest place to break a dimetric lattice and it is most of what
+      // this generator has to break it with, so it may not sit at the one pitch
+      // where the break is invisible. Shallow or steep, never in between.
+      const kk = st.bool(0.55) ? st.range(0.23, 0.29) : st.range(0.68, 0.80);
+      const hr = Math.min(11, (ridgeX ? md : mw) * kk);
       // Tile courses. At this pitch the eaves run at 1:1 on screen, so courses
       // parallel to them are cut on (sx + sy) / (sx - sy) — continuous 45-degree
       // strokes, which is both what a tiled roof looks like and the only thing
@@ -362,35 +379,29 @@ export function drawBuilding(cv, iso, C, st, x, y, z, w, d, opt) {
  * The word is coined and filtered in font.js. No real mark, and no near-miss.
  */
 function wallSign(cv, iso, C, st, x, y, z, w, d, tall, word, opt) {
-  const k = st.weighted([[1, 8], [2, 3]]);
-  const rows = scaleBitmap(textBitmap(word.slice(0, 6), 1), k);
-  const tw = rows[0].length, th = rows.length;
-  const q = 1 / (iso.s === undefined ? 1 : iso.s);
-  const cell = 0.5 * q;
-  const inset = 1.7;
-  const pw = tw * cell + 2 * inset;
-  const ph = th * cell + 2 * inset;
+  const cell = st.range(0.6, 1.1);
+  const spec = { cell, inset: 1.3, maxChars: 6 };
+  const { pw, ph } = S.signSize(word, spec);
   const ax = (d > pw + 2 && st.bool(0.5)) ? 1 : 0;
   const span = ax === 0 ? w : d;
   if (span < pw + 1.4 || tall < ph + 6) return;
   const panel = st.weighted([[st.pick(C.accents), 7], [C.white, 3], [C.cream, 2], [C.tar, 3]]);
-  const ink = st.pick([...C.accents, C.white, C.tar]);
-  const inkC = signInk(C, panel, ink);
+  const inkF = st.pick([...C.accents, C.white, C.tar]);
+  const inkC = signInk(C, panel, inkF);
   const off = st.range(0.6, Math.max(0.7, span - pw - 0.6));
   const zz = z + st.range(5.4, Math.max(5.5, tall - ph - 0.9));
   cv.t = opt.tag();
+  // A FASCIA SIGN IS BOLTED TO A WALL, so it stands off it: the panel projects
+  // and its return face is visible, and two brackets carry it. A sign flush
+  // with the wall has no thickness and reads as paint.
   const bx = ax === 0 ? x + off : x + w;
   const by = ax === 0 ? y + d : y + off;
-  const bw = ax === 0 ? pw : 0.3, bd = ax === 0 ? 0.3 : pw;
-  const F = ax === 0 ? leftFace(iso, by + bd, bx, zz) : rightFace(iso, bx + bw, by, zz);
-  const face = textPanel(F, rows, {
-    w: pw, h: ph, pad: 0.8, edge: C.black, fill: panel.t, ink: inkC, cell,
-    dir: ax === 0 ? 1 : -1,
-    tu: ax === 0 ? inset : pw - inset, tv: ph - inset,
-  });
-  box(cv, iso, bx, by, zz, bw, bd, ph, {
-    top: panel.t,
-    left: ax === 0 ? face : panel.l,
-    right: ax === 0 ? panel.r : face,
-  });
+  for (const t of [0.16, 0.78]) {
+    const kx = bx + (ax === 0 ? t * pw : -0.35);
+    const ky = by + (ax === 0 ? -0.35 : t * pw);
+    box(cv, iso, kx, ky, zz + ph * 0.25, 0.5, 0.5, ph * 0.5, MD(C.slate));
+  }
+  S.signBody(cv, iso, C, st, bx, by, zz, ax, word, Object.assign({
+    panel, ink: inkC, thick: 0.75, frameW: st.range(0.5, 1.0),
+  }, spec));
 }

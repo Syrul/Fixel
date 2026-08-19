@@ -44,6 +44,13 @@ const FAM = [
   ['metal',   210, 0.06, 0.72],
   ['steel',   212, 0.14, 0.54],
   ['slate',   215, 0.10, 0.42],
+  // Rubber. A tyre is a MATERIAL with a value, not a hole in the picture, and
+  // it was being drawn in the shared silhouette ink. Measured whole-frame, we
+  // held exactly ONE colour below luma 16 where the reference holds around two
+  // hundred: everything dark in our city was the same black. Four tyres on each
+  // of 250+ vehicles is the largest dark mass we draw and the obvious place to
+  // start giving darks back their own hue.
+  ['rubber',  220, 0.06, 0.13],
   ['taupe',    30, 0.12, 0.58],
   ['sandy',    40, 0.38, 0.80],
   ['brick',    10, 0.52, 0.54],

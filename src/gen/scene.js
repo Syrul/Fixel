@@ -394,7 +394,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
     cv.t = tag();
     N.grassPlot(cv, iso, C, ns, x0, y0, Z, w, d);
     if (ns.bool(0.6)) { cv.t = tag(); drawSlab(cv, iso, x0, y0 + d * 0.45, Z + 0.01, w, 4.5, C.pave.t); }
-    const n = Math.max(3, Math.round(w * d * D.density / 130));
+    const n = Math.max(3, Math.round(w * d * D.density / 58));
     for (let i = 0; i < n; i++) {
       cv.t = tagRaw();
       const px = x0 + ns.range(1.0, Math.max(1.1, w - 3)), py = y0 + ns.range(1.0, Math.max(1.1, d - 3));
@@ -406,7 +406,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
       else if (k === 'bench') S.bench(cv, iso, C, ps, px, py, Z, ps.int(0, 1));
       else N.hedge(cv, iso, C, ns, px, py, Z, ns.range(6, 16), 2.0, 2.2);
     }
-    for (let i = 0; i < Math.max(2, Math.round(w * d * D.density / 260)); i++) {
+    for (let i = 0; i < Math.max(2, Math.round(w * d * D.density / 115)); i++) {
       cv.t = tagRaw();
       drawPerson(cv, iso, C, pes, x0 + pes.range(1, w - 1), y0 + pes.range(1, d - 1), Z);
     }
@@ -461,7 +461,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
       if ((u % pitch) < 0.55 * F.q || (v % pitch) < 0.55 * F.q) return C.black;
       return ((cu + cvv) & 1) ? C.pave.t : C.concrete.t;
     });
-    for (let i = 0; i < Math.max(3, Math.round(w * d * D.density / 120)); i++) {
+    for (let i = 0; i < Math.max(3, Math.round(w * d * D.density / 52)); i++) {
       cv.t = tag();
       const px = x0 + ps.range(1.2, Math.max(1.3, w - 5)), py = y0 + ps.range(1.2, Math.max(1.3, d - 5));
       const k = ps.weighted([['planter', 5], ['bench', 4], ['parasol', 3], ['stall', 3], ['bin', 3], ['lamp', 3], ['tree', 4]]);
@@ -473,7 +473,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
       else if (k === 'lamp') S.lampPost(cv, iso, C, ps, px, py, Z, 0);
       else N.tree(cv, iso, C, ps, px, py, Z, false);
     }
-    for (let i = 0; i < Math.max(3, Math.round(w * d * D.density / 130)); i++) {
+    for (let i = 0; i < Math.max(3, Math.round(w * d * D.density / 58)); i++) {
       cv.t = tagRaw();
       drawPerson(cv, iso, C, pes, x0 + pes.range(1, w - 1), y0 + pes.range(1, d - 1), Z);
     }
@@ -502,7 +502,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
         S.marketStall(cv, iso, C, ps, x0 + u, y0 + v, Z, 6.0, 5.0);
       }
     }
-    for (let i = 0; i < Math.max(4, Math.round(w * d * D.density / 100)); i++) {
+    for (let i = 0; i < Math.max(4, Math.round(w * d * D.density / 44)); i++) {
       cv.t = tagRaw();
       drawPerson(cv, iso, C, pes, x0 + pes.range(1, w - 1), y0 + pes.range(1, d - 1), Z);
     }
@@ -665,7 +665,7 @@ function sidewalkProps(cv, iso, C, st, b, tag, CW, tagRaw, D) {
         ['lamp', 7], ['tree', 8 * (0.4 + D.green)], ['bin', 5], ['hydrant', 3], ['bollard', 4],
         ['meter', 4], ['sign', 4], ['bench', 4], ['planter', 4], ['post', 2],
         ['shelter', 2], ['kiosk', 2], ['palm', 4 * (0.4 + D.green)], ['light', 3],
-        ['barrier', 3], ['pylon', 0.9 * D.heroSign], ['none', 5],
+        ['barrier', 3], ['pylon', 0.9 * D.heroSign], ['none', 2],
       ]);
       if (k === 'lamp') S.lampPost(cv, iso, C, ps, x, y, Z, dx ? 1 : 0);
       else if (k === 'tree') { cv.t = tagRaw(); N.tree(cv, iso, C, ns, x, y, Z, ns.bool(0.4)); }
@@ -683,7 +683,7 @@ function sidewalkProps(cv, iso, C, st, b, tag, CW, tagRaw, D) {
       else if (k === 'light') S.trafficLight(cv, iso, C, ps, x, y, Z);
       else if (k === 'barrier') S.barrier(cv, iso, C, ps, x, y, Z, dx ? 0 : 1);
       else if (k === 'pylon') S.pylonSign(cv, iso, C, ps, x, y, Z, coinWord(sg), dx ? 0 : 1);
-      t += ps.range(4.0, 10.5) / D.density;
+      t += ps.range(2.8, 7.0) / D.density;
     }
     let q = pes.range(0, 3);
     while (q < len) {
@@ -691,7 +691,7 @@ function sidewalkProps(cv, iso, C, st, b, tag, CW, tagRaw, D) {
       const jx = dx ? pes.range(-1.6, 1.6) : pes.range(-3.4, 3.4);
       const jy = dy ? pes.range(-1.6, 1.6) : pes.range(-3.4, 3.4);
       drawPerson(cv, iso, CW, pes, ex + dx * q + jx, ey + dy * q + jy, Z);
-      q += pes.range(1.6, 4.4) / D.density;
+      q += pes.range(2.4, 6.6) / D.density;
     }
   }
 }
@@ -727,7 +727,7 @@ function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw, D) {
           drawVehicle(cv, iso, CT, ts, lane, y, 0, 1,
             ts.weighted([['car', 8], ['van', 3], ['pickup', 3], ['taxi', 2], ['moto', 1]]), tag);
         }
-        y += ts.range(9.5, 17) / D.density;
+        y += ts.range(9.0, 15) / D.density;
       }
     }
   }
@@ -740,7 +740,7 @@ function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw, D) {
           drawVehicle(cv, iso, CT, ts, x, lane, 0, 0,
             ts.weighted([['car', 8], ['van', 3], ['pickup', 3], ['taxi', 2], ['moto', 1]]), tag);
         }
-        x += ts.range(9.5, 17) / D.density;
+        x += ts.range(9.0, 15) / D.density;
       }
     }
   }
@@ -754,7 +754,7 @@ function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw, D) {
           cv.t = tag();
           drawVehicle(cv, iso, CT, ts, lanes[li], y, 0, 1, kind, tag);
         }
-        y += ts.range(11, 26) / D.density;
+        y += ts.range(10, 21) / D.density;
       }
     }
   }
@@ -768,14 +768,14 @@ function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw, D) {
           cv.t = tag();
           drawVehicle(cv, iso, CT, ts, x, lanes[li], 0, 0, kind, tag);
         }
-        x += ts.range(11, 26) / D.density;
+        x += ts.range(10, 21) / D.density;
       }
     }
   }
   for (const [a, b] of bx.streets) {
     for (const [c, d] of by.streets) {
       if (!vis(a, c, b, d, 4)) continue;
-      const n = Math.round(pes.int(2, 9) * D.density);
+      const n = Math.round(pes.int(4, 15) * D.density);
       for (let i = 0; i < n; i++) {
         cv.t = tag();
         if (pes.bool(0.5)) drawPerson(cv, iso, C, pes, a + pes.range(1, b - a - 1), c - pes.range(1, 10), 0);

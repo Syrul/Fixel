@@ -6,7 +6,8 @@ import { box } from '../draw.js';
 import { topFace, leftFace, rightFace, blitFace, textPanel } from '../faces.js';
 import { h3 } from '../palette.js';
 import { textBitmap, scaleBitmap, signInk } from '../font.js';
-import { dep } from '../view.js';
+import * as S from './street.js';
+import { dep, projR } from '../view.js';
 
 const M = (f) => ({ top: f.t, left: f.l, right: f.r });
 const MD = (f) => ({ top: f.l, left: f.r, right: f.d });
@@ -36,9 +37,11 @@ export function waterTank(cv, iso, C, st, x, y, z) {
 }
 
 export function vent(cv, iso, C, st, x, y, z) {
-  const h = st.range(1.6, 3.6);
-  box(cv, iso, x, y, z, 0.6, 0.6, h, MD(C.metal));
-  box(cv, iso, x - 0.25, y - 0.25, z + h, 1.1, 1.1, 0.4, M(C.metal));
+  const h = st.range(2.0, 4.0);
+  box(cv, iso, x, y, z, 1.0, 1.0, h, MD(C.metal));
+  box(cv, iso, x - 0.4, y - 0.4, z + h, 1.8, 1.8, 0.55, M(C.metal));
+  box(cv, iso, x - 0.15, y - 0.15, z + h + 0.55, 1.3, 1.3, 0.4,
+    { top: C.metal.k, left: C.metal.r, right: C.metal.k });
 }
 
 export function stairHut(cv, iso, C, st, x, y, z, wall) {
@@ -50,10 +53,17 @@ export function stairHut(cv, iso, C, st, x, y, z, wall) {
 }
 
 export function dish(cv, iso, C, st, x, y, z) {
-  box(cv, iso, x, y, z, 0.4, 0.4, 1.4, MD(C.metal));
-  const p = iso.proj(x + 0.2, y + 0.2, z + 1.4);
-  const rows = ['.####.', '######', '######', '.####.', '..##..'];
-  cv.blit(p[0] - 3, p[1] - 5, rows, { '#': C.white.l, '.': -1 }, dep(iso, x, y, z, 3));
+  box(cv, iso, x, y, z, 0.7, 0.7, 2.0, MD(C.metal));
+  const p = projR(iso, x + 0.35, y + 0.35, z + 2.0);
+  // A dish with a rim, a face and an arm, ringed. At six pixels across it was
+  // a smudge; at fourteen it is a dish, and its outline is a circle, which is
+  // one of very few things in this frame that is off the lattice on purpose.
+  const rows = [
+    '..oooooo..', '.oo####oo.', 'o##....##o', 'o#......#o', 'o#......#o',
+    'o##....##o', '.oo####oo.', '..oo##oo..', '....o#....', '....o#....',
+  ];
+  cv.blit(p[0] - 5, p[1] - 9, rows,
+    { '#': C.white.l, o: C.black, '.': -1 }, dep(iso, x, y, z, 3));
 }
 
 export function solar(cv, iso, C, st, x, y, z, w, d) {
@@ -98,13 +108,13 @@ export function skylight(cv, iso, C, st, x, y, z, w, d) {
  */
 export function aerial(cv, iso, C, st, x, y, z) {
   const h = st.range(5, 13);
-  box(cv, iso, x, y, z, 0.3, 0.3, h, MD(C.metal));
+  box(cv, iso, x, y, z, 0.5, 0.5, h, MD(C.metal));
   const n = st.int(2, 4);
   for (let i = 0; i < n; i++) {
     const len = 2.6 + i * 0.9;
     const zz = z + h - 0.6 - i * 1.5;
     if (zz < z + 1) break;
-    box(cv, iso, x + 0.15 - len / 2, y + 0.1, zz, len, 0.28, 0.28,
+    box(cv, iso, x + 0.25 - len / 2, y + 0.1, zz, len, 0.42, 0.42,
       { top: C.metal.r, left: C.metal.k, right: C.metal.k });
   }
   if (st.bool(0.4)) box(cv, iso, x - 0.1, y - 0.1, z + h, 0.5, 0.5, 0.5, M(C.red));
@@ -115,12 +125,18 @@ export function railing(cv, iso, C, st, x, y, z, len, ax, h) {
   // Pitch out from 2.2 to 3.2 and the posts in the rail's own dark rather than
   // pure black. A parapet rail at this scale was contributing a solid black
   // comb along the top of every roof, and ink is over budget.
-  const pitch = st.range(3.0, 4.4);
+  // THE COMMENT ABOVE AND THE CODE DISAGREED FOR A ROUND: it said the posts
+  // were in the rail's own dark and they were still pure black. At the new
+  // scale each post presents a 2x7px black bar and there are thirty of them on
+  // every parapet in the frame — measurably the largest remaining block of ink
+  // spent on objects that are individually too small to read. A baluster is
+  // metal seen edge-on, so it takes the metal's contour step.
+  const pitch = st.range(3.2, 4.6);
   const n = Math.floor(len / pitch);
   for (let i = 0; i <= n; i++) {
     const px = ax === 0 ? x + i * pitch : x;
     const py = ax === 0 ? y : y + i * pitch;
-    box(cv, iso, px, py, z, 0.45, 0.45, h, { top: c.d, left: C.black, right: c.d });
+    box(cv, iso, px, py, z, 0.5, 0.5, h, { top: c.d, left: c.k, right: c.d });
   }
   if (ax === 0) box(cv, iso, x, y, z + h - 0.35, len, 0.4, 0.35, { top: c.t, left: c.l, right: c.r });
   else box(cv, iso, x, y, z + h - 0.35, 0.4, len, 0.35, { top: c.t, left: c.l, right: c.r });
@@ -152,42 +168,26 @@ export function crateStack(cv, iso, C, st, x, y, z) {
  * mark, no near-miss of one, ever.
  */
 export function roofSign(cv, iso, C, st, x, y, z, word, ax = 0) {
-  const k = st.weighted([[1, 5], [2, 4]]);
-  const rows = scaleBitmap(textBitmap(word.slice(0, 6), 1), k);
-  const tw = rows[0].length, th = rows.length;
-  // Panel sized off the LETTERING, in face units. The old form added (tw >> 1)
-  // to the height for a stair the letters never walked: textPanel cuts glyphs
-  // on a rectangular grid in face coordinates and the projection shears it, so
-  // the block is tw by th cells and nothing else. That phantom term is why our
-  // hero signs came out as tall blank slabs with small type in the corner — a
-  // judge called one "3,082 pixels of one unbroken yellow".
-  const q = 1 / (iso.s === undefined ? 1 : iso.s);
-  const cell = 0.5 * q;
-  const inset = 1.7;
-  const need = tw * cell + 2 * inset;
-  const h = th * cell + 2 * inset;
+  const cell = st.range(0.7, 1.25);
   const panel = st.weighted([[C.white, 3], [C.cream, 2], [C.tar, 3],
-    [st.pick(C.accents), 7]]);
-  const ink = st.pick([...C.accents, C.white, C.tar]);
-  const inkC = signInk(C, panel, ink);
-  const legH = st.range(1.2, 4.0);
-  const w = ax === 0 ? need : 0.32, d = ax === 0 ? 0.32 : need;
-  for (const t of [0, 1]) {
-    const lx = x + (ax === 0 ? t * (need - 0.6) : 0);
-    const ly = y + (ax === 0 ? 0 : t * (need - 0.6));
-    box(cv, iso, lx, ly, z, 0.6, 0.6, legH + 0.8, MD(C.metal));
+    [st.pick(C.accents), 8]]);
+  const inkF = st.pick([...C.accents, C.white, C.tar]);
+  const inkC = signInk(C, panel, inkF);
+  const legH = st.range(2.0, 5.5);
+  const spec = { cell, inset: 1.5, maxChars: 6 };
+  const pw0 = S.signSize(word, spec).pw;
+  // A rooftop frame stands on a trestle, and the trestle is braced. Two legs
+  // and nothing else is why ours read as a slab hovering over a roof.
+  for (const t of [0.06, 0.5, 0.94]) {
+    const lx = x + (ax === 0 ? t * (pw0 - 0.9) : 0);
+    const ly = y + (ax === 0 ? 0 : t * (pw0 - 0.9));
+    box(cv, iso, lx, ly, z, 0.9, 0.9, legH + 1.0, MD(C.metal));
   }
-  const F = ax === 0 ? leftFace(iso, y + d, x, z + legH) : rightFace(iso, x + w, y, z + legH);
-  const face = textPanel(F, rows, {
-    w: need, h, pad: 0.85, edge: C.black, fill: panel.t, ink: inkC, cell,
-    dir: ax === 0 ? 1 : -1,
-    tu: ax === 0 ? inset : need - inset, tv: h - inset,
-  });
-  box(cv, iso, x, y, z + legH, w, d, h, {
-    top: panel.t,
-    left: ax === 0 ? face : panel.l,
-    right: ax === 0 ? panel.r : face,
-  });
+  if (ax === 0) box(cv, iso, x, y + 0.15, z + legH * 0.45, pw0, 0.5, 0.5, MD(C.metal));
+  else box(cv, iso, x + 0.15, y, z + legH * 0.45, 0.5, pw0, 0.5, MD(C.metal));
+  S.signBody(cv, iso, C, st, x, y, z + legH, ax, word, Object.assign({
+    panel, ink: inkC, thick: 0.85, frameW: st.range(0.6, 1.2),
+  }, spec));
 }
 
 export function roofDeck(cv, iso, C, st, x, y, z, w, d, wall) {

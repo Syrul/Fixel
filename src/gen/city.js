@@ -227,9 +227,25 @@ export function pavementShade(iso, C, x0, y0, w, d, z, seedN, P, K, opt = {}) {
   // stops every block in every seed looking like every other.
   const seam = opt.seam || 0;
   const kerb = opt.kerb === undefined ? 2.0 : opt.kerb;
+  const INK = C.black;
   return (sx, sy) => {
     const u = T.ax * sx + T.bx * sy + T.cx - x0;
     const v = T.ay * sx + T.by * sy + T.cy - y0;
+    // THE KERB EDGE IS ONE PIXEL OF INK, ALL FOUR SIDES OF EVERY BLOCK.
+    //
+    // The box arris only ever draws the NEAR vertical corner, so three of a
+    // block's four kerb lines were a value step and nothing else — and a value
+    // step does not close a cell. Measured on 320px crops, ink-enclosed cells
+    // collapsed from 370 to 121-191 against the reference's 380 when the world
+    // doubled in size, and the largest single open cell reached 36% of a crop
+    // against the reference's 8.7%. Road and pavement were ONE region.
+    //
+    // A kerb is the loop around a block. Four lines of one pixel per block is
+    // the cheapest closing ink available anywhere in this generator: it splits
+    // the two largest surfaces in the frame from each other for a few hundred
+    // pixels of ink, and it is what a kerb looks like.
+    const e = 0.5 * T.q;
+    if (u < e || v < e || u > w - e || v > d - e) return INK;
     if (u < kerb || v < kerb || u > w - kerb || v > d - kerb) return P.t;
     if (seam > 0 && ((u % seam) < 0.62 * T.q || (v % seam) < 0.62 * T.q)) return P.r;
     // Large pale stains with hand-drawn contours. The boundary is a quadratic
