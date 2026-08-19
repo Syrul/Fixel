@@ -2,21 +2,32 @@
 //
 // A family is one hue at four steps. The steps are made by SCALING RGB, not by
 // dropping HSL lightness: scaling keeps the hue exactly where it was, and the
-// reference's shadow steps do not rotate hue (measured median rotation ~-3.6
-// degrees, i.e. nil). Procedural shaders almost always drift toward blue in
-// shadow; this one must not.
+// reference's shadow steps do not rotate hue on average (measured median
+// rotation ~-3.6 degrees, i.e. nil). Procedural shaders almost always drift
+// toward blue in shadow; this one must not.
 //
-// The ladder itself is measured: adjacent same-hue faces sit at a luma ratio of
-// about 0.72, giving top 1.00 / left 0.82 / right 0.66. Because a scalar
-// multiply is linear in luma, those factors ARE the luma ratios.
+// EVERY SCENE COMMITS TO ITS OWN LIGHT. The variety gate measured the whole
+// `shade.*` family FROZEN across seeds — ratios 0.018 to 0.115 where 1.000 is
+// the floor — because the ladder below used to be four module constants. One
+// lighting model, one luma ladder, one hue policy for every scene the feed will
+// ever emit. It is now drawn per scene off the palette stream, and the numbers
+// it moves are exactly `shade.lumaRatioMedian`, `shade.lumaRatioP75`,
+// `shade.hueRotMedian` and `shade.hueRotAbsMedian`.
 //
-// Families are minted on demand and cached on a quantised (h, s, l) key, so a
-// scene ends up with a few hundred distinct entries — many buildings each in
-// their own tone — while any one neighbourhood still uses very few.
+// The two properties are kept SEPARATE on purpose. The luma ratio belongs to
+// the light; the hue rotation belongs to the pigment. A shadow step therefore
+// rotates hue and deepens saturation, and is then rescaled so its luma ratio is
+// still exactly the ladder factor. Without that rescale the two are welded and
+// a scene cannot vary one without dragging the other.
+//
+// Families are minted on demand and cached on a quantised (h, s, l) key whose
+// FINENESS is also per scene: `palette.distinct` spanned 229-365 across seeds
+// where the reference's own crops span 410 of width, so how much palette a
+// scene spends is itself a thing a scene decides.
 
 import { Palette, hsl } from '../core/canvas.js';
 
-const TOP = 1.0, LEFT = 0.77, RIGHT = 0.57, DARK = 0.46;
+const rec601 = (c) => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
 
 // [key, hue, sat, light] — the value given is the TOP face. The reference is a
 // light image: its single most common colour is a warm light grey at 4.8% of

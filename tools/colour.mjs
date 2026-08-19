@@ -30,6 +30,7 @@
 import path from 'node:path';
 import { readPNG, crop } from '../src/core/png.js';
 import { Rng } from '../src/core/rng.js';
+import { treeHash } from './treehash.mjs';
 
 const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 
@@ -136,6 +137,20 @@ function measure(img) {
 
 function fmt(v, d = 2) { return Number.isFinite(v) ? v.toFixed(d) : '—'; }
 
+/**
+ * Every number this repo reports carries the digest of the generator source.
+ *
+ * Here it is weaker evidence than in verify.mjs or duel.mjs, and the banner
+ * says so: this script measures a PNG that already exists, so the digest is the
+ * tree RIGHT NOW, not necessarily the tree that rendered the file. It is still
+ * worth printing — quoting a colour number beside a digest that turns out to
+ * have moved is exactly how round 2's torn measurements were caught. Render and
+ * measure in one go if you want the digest to actually bind.
+ */
+function banner() {
+  console.log(`# tree ${treeHash().digest}   (tree AS OF NOW — binds only if the PNG was just rendered)\n`);
+}
+
 function report(label, m) {
   console.log(`${label.padEnd(30)} rg(med)=${fmt(m.medianRg)}  rg(pixel-weighted)=${fmt(m.pixelWeightedRg)}  ` +
     `inkClosure=${fmt(m.ratio)}  cells=${m.cells}  faces=${m.faces}  ink=${fmt(m.inkShare * 100, 2)}%`);
@@ -153,6 +168,8 @@ for (let i = 0; i < argv.length; i++) {
 
 const SIZE = Number(a.size ?? 320);
 const NCROPS = Number(a.crops ?? 9);
+
+banner();
 
 if (a.compare) {
   // Median over seeded interior crops, so a single lucky window cannot decide.
