@@ -97,7 +97,7 @@ const CODA = ['X', 'K', 'N', 'R', 'T', 'Z', 'L', 'M', 'SH', 'TH', 'NK', 'RT',
 // A short defensive filter. Any generated string that collides with a
 // real-world mark or a real trade word gets re-rolled; the syllabary is
 // nonsense to begin with, this only closes the accidental case.
-const FORBIDDEN = /^(SONY|NIKE|FORD|SHELL|ESSO|COKE|PEPSI|IKEA|ZARA|VISA|BOSCH|MOTEL|HOTEL|POLICE|TAXI|BANK|CAFE|SUSHI|PIZZA|BURGER|MART|SHOP|BAR|DELI|KFC|LOTTO|NASA|UPS|DHL|FEDEX)$/;
+const FORBIDDEN = /^(SONY|NIKE|FORD|SHELL|ESSO|COKE|PEPSI|IKEA|ZARA|VISA|BOSCH|MOTEL|HOTEL|POLICE|TAXI|BANK|CAFE|SUSHI|PIZZA|BURGER|MART|SHOP|BAR|DELI|KFC|LOTTO|NASA|UPS|DHL|FEDEX|TUI|OREO|AUDI|BMW|SEAT|KIA|OPEL|FIAT|SAAB|LADA|MINI|JEEP|TESLA|HONDA|MAZDA|LEXUS|VOLVO|APPLE|INTEL|AMD|ARM|DELL|IBM|SAP|ORACLE|ADOBE|CISCO|NOKIA|HTC|OPPO|VIVO|AMAZON|EBAY|ETSY|UBER|LYFT|ZOOM|SLACK|NOTION|FIGMA|CANVA|MARS|TWIX|FANTA|SPRITE|EVIAN|VOLVIC|LIPTON|NESTLE|DANONE|LEGO|BIC|ELF|DOVE|OMO|ARIEL|TIDE|PERSIL|VANISH|FAIRY|HSBC|AXA|AVIVA|ING|BBVA|UBS|CITI|AMEX|BP|TOTAL|EXXON|MOBIL|GULF|ARAL|AGIP|REPSOL|ASDA|TESCO|ALDI|LIDL|COSTA|GREGGS|BOOTS|ARGOS|NEXT|DELTA|UNITED|IBERIA|LOT|SAS|PUMA|ADIDAS|FILA|ASICS|REEBOK|VANS|CROCS|GUCCI|PRADA|CHANEL|DIOR|HERMES|ROLEX|OMEGA|SUBWAY|SONIC|BAYER|MERCK|PFIZER|ROCHE|SANOFI|GSK|SIEMENS|PHILIPS|SHARP|SANYO|CASIO|SEIKO|EPSON|CANON|NIKON|FUJI|KODAK|DISNEY|PIXAR|MARVEL|NETFLIX|HULU|SPOTIFY|TIKTOK|META|GOOGLE|YAHOO|BING|SHEIN|TEMU|BAIDU|PEE|POO|ASS|FUK|SEX)$/;
 
 // A second filter, added in round 3 after the first hero signs went up and the
 // syllabary — which is nonsense by construction — coined SLEEP and REFLEE on
@@ -108,6 +108,40 @@ const FORBIDDEN = /^(SONY|NIKE|FORD|SHELL|ESSO|COKE|PEPSI|IKEA|ZARA|VISA|BOSCH|M
 // mangles, so nothing here is a near-miss of anything.
 const REAL_WORDS = /^(SLEEP|SLEEK|SLIP|SLOT|STOP|START|STORE|SHOT|SHIP|SHOP|TRIP|TRAP|DRESS|DRINK|PRESS|PRINT|GREEN|GRASS|BLOCK|BLACK|BRASS|BREAK|FRESH|FLASH|FLAT|FROST|CLASS|CRASH|SNOW|SNACK|SPIN|SPOT|STEEL|STEAM|TRUCK|TRAIN|GLASS|PLANT|PLATE|PRIME|SMOKE|STONE|SWEET|SPEED|SPACE|SPARK|SHARP|SHINE|SKATE|SLIDE|STAR|STAND|SWIM|TREE|TRUST|WEST|WOOD|ZOOM|ROOM|MOON|NOON|SOON|SOAP|TOOL|POOL|FOOD|GOOD|LOOK|BOOK|BOOT|ROOT|MEET|FEET|SEED|NEED|DEEP|KEEP|BEEF|REED|LEAN|MEAN|BEAN|RAIN|MAIN|PAIN|GAIN|TRAIL|SNAIL|BRAIN|DRAIN|GRAIN|STAIN|TOAST|ROAST|COAST|BOAST)$/;
 
+/**
+ * THE FILTER MUST RUN ON WHAT IS DISPLAYED, NOT ON WHAT WAS COINED.
+ *
+ * `signSize` in `props/street.js` cuts the word down to fit the panel —
+ * `word.slice(0, o.disc ? 3 : (o.maxChars || 6))` — so a sign shows a PREFIX.
+ * Both filters below used to test only the full string, which means every
+ * prefix the renderer can actually draw went unchecked. That is a correctness
+ * gap rather than a coverage gap: no amount of adding entries to the lists
+ * fixes a check applied to a string the viewer never sees.
+ *
+ * Measured before the fix, 200,000 coined words against a list of ~200 real
+ * marks: exact collisions 1 in 948, and TRUNCATED-PREFIX collisions 1 in 394 —
+ * so the prefixes were the larger half of the exposure and were entirely
+ * unguarded. TUI alone accounted for 549 of the 719 hits.
+ *
+ * BOTH FIGURES ARE LOWER BOUNDS BY AN UNQUANTIFIED MARGIN. The list is a couple
+ * of hundred marks and a trademark register holds millions, so this reduces the
+ * rate; it does not make the guarantee the content law asks for. The honest
+ * statement is that a short nonsense syllabary WILL sometimes coin a real mark,
+ * and the only complete remedies are a much longer word (which stops looking
+ * like signage) or a register lookup (which this generator cannot carry).
+ * Recorded rather than papered over.
+ */
+function displayable(w) {
+  if (w.length < 3 || w.length > 8) return false;
+  // Every prefix the panel can show: 3 on a disc, up to 6 elsewhere, plus the
+  // whole word for a panel wide enough to hold it.
+  for (let k = 3; k <= w.length; k++) {
+    const p = w.slice(0, k);
+    if (FORBIDDEN.test(p) || REAL_WORDS.test(p)) return false;
+  }
+  return true;
+}
+
 export function coinWord(st) {
   for (let attempt = 0; attempt < 8; attempt++) {
     let w = st.pick(ONSET) + st.pick(NUC);
@@ -116,16 +150,32 @@ export function coinWord(st) {
       w += st.pick(ONSET).slice(0, 2) + st.pick(NUC);
       if (st.bool(0.5)) w += st.pick(CODA);
     }
-    if (w.length >= 3 && w.length <= 8 && !FORBIDDEN.test(w) && !REAL_WORDS.test(w)) return w;
+    if (displayable(w)) return w;
   }
   return 'ZOK' + st.int(2, 9);
 }
 
+/**
+ * A short tag for a signpost or a kiosk fascia.
+ *
+ * EVERY BRANCH IS FILTERED NOW. Three of the four used to assemble letters
+ * directly and never saw either list, and the shore builder recorded one
+ * producing PEE on the hero sign of its frame — it worked around that by
+ * refusing to call this function at all, which is a fix in one biome for a bug
+ * in the shared file. The lettered branches now re-roll through the same
+ * `displayable` check as `coinWord`; the numeric branches cannot collide.
+ */
 export function coinTag(st) {
   const mode = st.int(0, 3);
-  if (mode === 0) return st.pick(ONSET).slice(0, 1) + st.pick(NUC).slice(0, 1) + st.pick(CODA).slice(0, 1);
   if (mode === 1) return String(st.int(2, 99));
   if (mode === 2) return st.pick(ONSET).slice(0, 1) + '-' + st.int(1, 9);
+  if (mode === 0) {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const w = st.pick(ONSET).slice(0, 1) + st.pick(NUC).slice(0, 1) + st.pick(CODA).slice(0, 1);
+      if (displayable(w)) return w;
+    }
+    return 'ZK' + st.int(2, 9);
+  }
   return coinWord(st).slice(0, 3);
 }
 

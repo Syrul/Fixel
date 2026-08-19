@@ -570,3 +570,59 @@ cycle. (Absolute values depend on the definition; this one is horizontal-only wi
 margin. An independent implementation read the city at 0.0346 and the shore at 0.0005 — three
 to four times higher on both, same ratio. **Quote the control measured by the same script in the
 same breath**, as `docs/CRAFT.md` already requires for radius of gyration.)
+
+---
+
+## The content law had a hole, and it was in WHERE the filter ran, not in what was on the list
+
+`PROMPT.md`: *"Steal craft, never content — no brands, landmarks, real lettering. Invent every
+sign."* Every sign is coined by `coinWord`/`coinTag` in `src/gen/font.js` from a nonsense
+syllabary and screened against two regexes. Found while reviewing a desert render whose hero
+sign read **OREO**; a shore render earlier in the same session read **TUI**. Both are real
+marks.
+
+**The mechanism: signs are TRUNCATED and the filters ran on the untruncated word.**
+`signSize` in `props/street.js` cuts the string to fit the panel —
+`word.slice(0, o.disc ? 3 : (o.maxChars || 6))` — so what a viewer sees is a PREFIX, and no
+prefix was ever checked. That is a correctness gap, not a coverage gap: adding entries to the
+list cannot fix a check applied to a string nobody sees.
+
+Measured, 200,000 coined words against a list of ~200 well-known marks:
+
+| | before | after |
+|---|---|---|
+| exact collisions | 1 in 948 | 0 |
+| **truncated-prefix collisions** | **1 in 394** | 0 |
+
+TUI alone was 549 of the 719 hits. **The prefixes were the larger half of the exposure and
+were entirely unguarded.**
+
+A second branch of the same bug: three of `coinTag`'s four modes assembled letters directly
+and never saw either list. The shore builder hit it — its source records the function
+producing **PEE** on the hero sign of a frame — and worked around it by refusing to call
+`coinTag` at all, which is a fix in one biome for a bug in the shared file. All lettered
+branches now re-roll through the same check.
+
+### The honest residual, measured on a HOLDOUT
+
+Reporting "0 collisions" against the list I had just added to the filter would be a metric
+selecting for its own success — the same failure as the tempo estimator returning the centre
+of its own search window and the normaliser K-sweep. So the fix was re-measured against **147
+real marks deliberately NOT added to `FORBIDDEN`**:
+
+| | rate |
+|---|---|
+| coinWord, exact | 1 in 8,333 |
+| coinWord, truncated prefix | **1 in 2,020** |
+| coinTag | 0 in 200,000 |
+| hits | PRET x43, LEON x40, MOOG x21, GRAB x5, REWE, RODE, SKODA, RADO |
+
+So against marks the filter has never seen, the rate improved from ~1 in 394 to ~1 in 2,020 —
+about five-fold, from the mechanism fix alone rather than from the list.
+
+**It is not zero and it cannot be made zero this way.** A trademark register holds millions of
+marks and this file carries a few hundred. A short nonsense syllabary WILL sometimes coin a
+real mark, and the only complete remedies are a much longer word — which stops looking like
+signage — or a register lookup this generator cannot carry. **Stated as a bounded, measured,
+residual risk rather than as a fix.** A feed drawing tens of signs per scene should expect a
+collision every few hundred scenes.
