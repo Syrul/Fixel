@@ -321,3 +321,90 @@ down.** The brief can only pin down proxies we have already seen fail.
 
 This is the strongest argument yet that no single duel round is decisive, and
 that the verdict must rest on the *reasons* judges give, not the tally.
+
+
+---
+
+## The colour-histogram leak, and the fix
+
+### The control
+
+A judge was given **no images at all** — only quantities invariant under
+shuffling every pixel: colour multisets, distinct counts, near-duplicate counts,
+top-colour share, near-black clouds. It was asked which side of each pair was
+the program.
+
+**It recovered the partition perfectly across four pairs, with infinite margin,
+and labelled every one of them backwards.**
+
+Both halves matter. Perfect recovery proves provenance rides in the colour
+multiset alone. The inverted sign proves the signal is not something a judge can
+be *instructed* out of using — round 3's judges said they set palette evidence
+aside, several by name, and it was still sitting there for anyone who looked.
+The control's own sentence is the correct reading:
+
+> "a judge that misreads the sign still leaks; 0/8 is perfectly anti-correlated,
+> which is perfectly informative. The harness is compromised by the EXISTENCE of
+> the deterministic signal, not by any judge's skill at decoding it."
+
+### The two fingerprints, measured
+
+| | eBoy LA reference | Fixel r3 |
+|---|---|---|
+| cube-corner colours | 7, over **67,160 px** | **0** |
+| true (0,0,0) | **34,672 px** | **0** |
+| top colour | (179,173,164) at **4.84%** | (8,8,10) at **18.84%** |
+| distinct | 3021 | 2172 |
+
+Two separate giveaways. **Exact-palette cleanliness**: a generator writing
+palette indices emits an exact small palette, while a rasterised artwork
+accumulates near-duplicate ghosts as a production artefact. **Palette identity
+across crops**: the reference's four crops come from ONE file so they share
+colours exactly; ours come from four seeds with per-scene palette commitment and
+share almost nothing.
+
+Note the direction, because the control got it backwards and so would most
+people: **the side with pure black and clean cube corners is the human artwork.**
+
+### The remedy that was NOT taken
+
+Read literally, "eliminate the program's fixed-palette-reuse signature" means
+eliminating **per-scene palette commitment** — the round 3 change that unfroze
+the `shade.*` family and produced the only reference floor this project has ever
+cleared (perceptual variety 0.2045 against 0.1950). Applying the control's
+remedy as written would have destroyed the single best result in the project.
+An inverted sign matters even when the conclusion holds.
+
+### The fix
+
+`tools/normalise.mjs`, wired into `duel.mjs` and **on by default** (`--raw`
+disables). Both crops are quantised to ONE palette derived from their union by
+weighted median cut, through the same code path. Neither "has an exact clean
+palette" nor "shares colours with its siblings" can then distinguish them.
+
+Measured on pair 1 after normalisation:
+
+| | before | after |
+|---|---|---|
+| distinct (ref / fixel) | 3021 / 2172 | **142 / 135** |
+| pure black (ref / fixel) | 34,672 px / 0 | **0 / 0** |
+| cube-corner (ref / fixel) | 7 / 0 | 2 / 0 |
+| top-colour share | 0.0484 / 0.1884 | 0.0750 / **0.1658** |
+
+**Craft survives it.** Ink closure keeps its ordering and its gap
+(ref 2.45 -> 3.23, fixel 4.68 -> 5.56), and at 4x the reference's police car
+still carries its light bar, windows, wheels, panel seams and door shield, with
+figures keeping their faces.
+
+### The residual, and why it is not a leak
+
+`top1Share` still separates the sides after normalisation, 0.075 vs 0.166. That
+is **not** a file-history artefact — it is our real ink regression: we genuinely
+spend ~17% of the frame on one near-black. A judge noticing that is noticing a
+craft defect, which is what a judge is for. It should disappear when the
+`darkShare` regression is fixed, and if it does not, the leak is our drawing and
+not our encoder.
+
+**Standing rule:** a signal that survives instruction must be removed from the
+artefact, not forbidden in the brief. Cautions in a judge brief are a fallback,
+never the primary control.

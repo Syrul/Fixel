@@ -51,6 +51,7 @@ import { PNG } from 'pngjs';
 import { readPNG, crop } from '../src/core/png.js';
 import { Rng } from '../src/core/rng.js';
 import { treeHash } from './treehash.mjs';
+import { normalisePair } from './normalise.mjs';
 
 const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const REF = path.join(REPO, 'refs/EBY-LA-Hot-Dog-175k.png');
@@ -215,9 +216,22 @@ async function main() {
     // that is a real density difference and cannot be hidden without
     // re-encoding — so BRIEF.md now tells the judge that internal chunk sizes
     // are not evidence of origin.
+    // Colour-normalise the pair through ONE shared palette before encoding.
+    // A leak control that saw no images at all — only colour histograms —
+    // recovered the reference-vs-generator partition perfectly, then labelled
+    // it backwards. Perfect recovery means provenance rides in the colour
+    // multiset; the inverted sign means no instruction to a judge can suppress
+    // it. See tools/normalise.mjs for the two fingerprints this removes.
+    const NORM = args.raw ? 0 : Number(args.normalise ?? 192);
+    let dataRef = refC.data, dataOur = otherC.data;
+    if (NORM) {
+      const n = normalisePair(refC.data, otherC.data, NORM);
+      dataRef = n.a; dataOur = n.b;
+    }
+
     const SLACK = 65536;
-    let bufRef = encode(SIZE, SIZE, refC.data);
-    let bufOur = encode(SIZE, SIZE, otherC.data);
+    let bufRef = encode(SIZE, SIZE, dataRef);
+    let bufOur = encode(SIZE, SIZE, dataOur);
     const target = Math.max(bufRef.length, bufOur.length) + SLACK;
     bufRef = padTo(bufRef, target);
     bufOur = padTo(bufOur, target);
@@ -308,7 +322,8 @@ async function main() {
     'Ignore what the scenes depict. Ignore any text or signage content.',
   ].join('\n'));
 
-  console.log(JSON.stringify({ out: OUT, pairs: PAIRS, size: SIZE, control: CONTROL }, null, 2));
+  console.log(JSON.stringify({ out: OUT, pairs: PAIRS, size: SIZE, control: CONTROL,
+    normalise: args.raw ? false : Number(args.normalise ?? 192) }, null, 2));
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
