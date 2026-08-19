@@ -63,6 +63,78 @@ import { dep, projR } from '../view.js';
 import * as P from '../props/shore.js';
 import * as S from '../props/street.js';
 import { drawPerson } from '../props/people.js';
+import { triPhase } from '../../core/frame.js';
+
+// ---------------------------------------------------------------------------
+// THE TWO AMPLITUDES. Everything the sea's motion is worth is in these two
+// numbers, and they are here rather than buried in the shader so that tuning
+// them is one grep.
+//
+// THE INSTRUCTION IS "SLIGHTLY". The failure mode is not "too subtle to
+// notice", it is "obviously a cartoon" — and the cartoon has a specific shape
+// here, which is a crest that MARCHES. A marching crest, `tri(d/pitch +
+// phase(k))`, only closes the loop if it advances a whole period over it; the
+// swell pitch is 26-46 world units = 115-205 screen pixels, so closing costs
+// 14-26 px PER FRAME. That is a lattice on the move and it is exactly the
+// scrolling gradient this design refuses. The sea SURGES AND RELAXES instead:
+// the phase is a triangle on `phase(k)`, periodic by construction, with no
+// kick at the wrap and no net travel.
+//
+// THE WORLD-TO-SCREEN FACTOR, because the amplitudes are in world units and
+// the instruction is in screen pixels. The coast's bearing is a per-seed draw
+// (`m`, below), so a world unit of CROSS-SHORE displacement is 3.5-5.2 screen
+// pixels — 3.54 at m=0.24, 4.17 at 0.40, 4.75 at 0.62, 5.15 at 0.92. Every
+// screen figure quoted below carries that spread.
+// ---------------------------------------------------------------------------
+
+/**
+ * How far the swell crest travels over one loop, in units of the swell PERIOD.
+ *
+ * The crest displacement is `SWELL_AMP * R.pitch` world units, and `R.pitch` is
+ * 26-46 units, so at 0.0125 that is 0.33-0.58 world units = **1.1-3.0 screen
+ * pixels peak to peak, about 2px on a median seed**. Sampling a triangle at
+ * eight frames realises 75-100% of that depending on where the stretch's own
+ * offset lands, so the low end of the spread is a crest you cannot be sure
+ * moved — which is the target.
+ */
+export const SWELL_AMP = 0.0125;
+
+/**
+ * How far the foam band surges up and down the beach over one loop, in WORLD
+ * units of cross-shore distance.
+ *
+ * It shifts the exposure `foamAt` is evaluated at, and the swash term dominates
+ * the gradient there (0.33 per world unit against the grain field's 0.02), so
+ * the band edge moves by very nearly the shift itself: at 0.26 that is
+ * **0.9-1.3 screen pixels peak to peak**. This is the strongest single thing in
+ * the frame per pixel spent — a wave running up sand is the most legible motion
+ * available and it is confined to one thin line.
+ */
+export const FOAM_AMP = 0.26;
+
+/**
+ * WHERE A STRETCH OF SEA IS IN ITS BREATH, and this is the part that stops the
+ * whole picture pulsing.
+ *
+ * If the sea surges in phase everywhere, the entire frame throbs, which is far
+ * worse than a still sea. The offset is therefore a field: a long ramp along
+ * the coast (`SET_LEN` world units per full cycle, which is 1,100-1,660 screen
+ * pixels — longer than the frame, so a contiguous run of coastline surges as
+ * ONE region) plus the low-frequency swell channel, which is what makes swell
+ * arrive in SETS rather than uniformly.
+ *
+ * `SET_WARP` CONTRACTS THE SWELL CHANNEL'S COORDINATES BEFORE READING IT, and
+ * that is a correctness constraint rather than taste. The channel's own octaves
+ * sit at 109 and 54 world units, and 54 is barely longer than a swell period —
+ * an offset varying at the swell's own scale is not a swell at all, it is
+ * per-pixel noise wearing a swell costume, and it reads as shimmer. Contracted
+ * by 0.30 the octaves land at 360 and 180 units, four to fourteen times the
+ * swell pitch, so a whole crest is at one point in its breath and neighbouring
+ * stretches are at different ones.
+ */
+const SET_LEN = 320;
+const SET_WARP = 0.30;
+const SET_JIT = 0.80;
 
 const MD = (f) => ({ top: f.l, left: f.r, right: f.d });
 const cl01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -778,6 +850,30 @@ export function paintShore(stage) {
   const FR = stage.frame;
   const vals = new Uint16Array(K);
 
+  /**
+   * A stretch of sea's own place in the set, in phase cycles.
+   *
+   * Two low-frequency terms only — see `SET_LEN` / `SET_WARP` above for why the
+   * swell channel has to be read at contracted coordinates rather than raw.
+   * The contraction is anchored on the shoreline origin so the sample stays
+   * well inside the field's own grid.
+   */
+  const offsetAt = (u, v) => (u * cxu + v * cyu) / SET_LEN
+    + SET_JIT * MF.one(Ox + (u - Ox) * SET_WARP, Oy + (v - Oy) * SET_WARP, 1);
+
+  /**
+   * The surge, anchored so that FRAME 0 IS THE STILL PICTURE.
+   *
+   * `triPhase(k, off)` is periodic with period 1 in `phase(k)` and has no kick
+   * at the wrap, so frame FRAMES is frame 0 by construction. Subtracting its
+   * value AT FRAME 0 does not change either property — it is a constant in k —
+   * and it buys something worth having: the frame-0 render is byte-identical to
+   * the still render, so every craft number ever measured on this biome, and
+   * ink closure above all, is provably unmoved by the animation rather than
+   * merely measured to be. The excursion is unchanged; only its zero moves.
+   */
+  const surge = (k, off) => triPhase(k, off) - triPhase(0, off);
+
   const waterTop = (u, v, z, q, sx, sy) => {
     MF.at(u, v, buf);
     const h0 = buf[0], swell = buf[1], grain = buf[2];
@@ -850,7 +946,8 @@ export function paintShore(stage) {
     // already returns on its first line, but K frames computed and thrown away
     // would still be K frames computed.
     if (K < 2) return tone(0, 0);
-    for (let k = 0; k < K; k++) vals[k] = tone(0, 0);
+    const off = offsetAt(u, v);
+    for (let k = 0; k < K; k++) vals[k] = tone(0, SWELL_AMP * surge(k, off));
     stage.anim.push(sy * cv.w + sx, cv.t, vals);
     return vals[FR];
   };
