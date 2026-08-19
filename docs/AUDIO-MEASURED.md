@@ -430,3 +430,48 @@ chiptune in general.
 harmonics at +12/19/24/28/31/34/36 semitones, so a melody sitting exactly an octave or an
 octave-plus-fifth above a bass note is suppressed and undercounted in `polyphony` and chroma. Chiptune
 waveforms all carry strong fundamentals, which is what makes the approximation survivable here.
+
+---
+
+## Independent verification of the bar by the lead, before any synth existed
+
+Run against `docs/band-audio-v1.json` with `tools/audio-metrics.mjs`, by someone
+who did not build either. This is the audio twin of the pixel side's inversion
+test, and it is the check that decides whether any later synth score means
+anything.
+
+| file | gating metrics out of band (budget 5) | verdict |
+|---|---:|---|
+| `control-a-sustained-square` peak-centred | 14 | FAIL |
+| `control-a-sustained-square` rms-centred | 13 | FAIL |
+| `control-c-one-bar-loop` peak-centred | 10 | FAIL |
+| `control-c-one-bar-loop` rms-centred | 10 | FAIL |
+| `control-b-random-notes` peak-centred | 9 | FAIL |
+| `control-b-random-notes` rms-centred | 9 | FAIL |
+| `3xblast-pop-punk-1` | 4 | PASS |
+| `celestial-8bit-thing` | 4 | PASS |
+| `celestial-pulsar` | 1 | PASS |
+| `celestial-summer-sunday` | 5 | PASS |
+| `centurion-delayed-chips` | 1 | PASS |
+| `centurion-unstable-field` | 0 | PASS |
+
+**Worst genuine track 5, best fake 9 — a clean margin of 4, with no overlap.**
+Both mastering variants of every fake fail, so centring loudness does not rescue
+any of them: the gate is not measuring level.
+
+Worked example of *why* the one-bar loop fails, which is the useful part:
+`repeatStrength` 0.915 against a 0.154–0.642 band (+0.56), `noveltyPerSecond`
+0.000 against 0.194–0.350 (−1.24), `novelFraction` 0.165 against 0.503–0.929
+(−0.79), `pitchClassEntropy` 2.314 against 2.773–3.301 (−0.87). The metrics that
+catch it are the ones that measure whether the music *develops*, and they cannot
+be faked by processing — which is the whole design goal.
+
+`crestFactorDb` read 6.349 against the corpus band 9.422–17.203 and is correctly
+printed as **NON-GATING**, with the tool labelling it limiter-fakeable in its own
+output. The n=3 claim in `docs/BAR.md` that crest factor is the load-bearing
+gate does not survive n=38 and is not being relied on.
+
+**Conclusion: the audio bar has teeth and is safe to judge a synth against.**
+Unlike the 60-metric pixel band, it was built from 38 works by 16 artists rather
+than 128 crops of one artwork, which is precisely why it generalises where the
+pixel band did not.
