@@ -18,10 +18,19 @@ const seed = arg('seed', 'fixel-0');
 const out = arg('out', 'out/scene.png');
 const w = parseInt(arg('w', '1600'), 10);
 const h = parseInt(arg('h', '1100'), 10);
+// --biome OVERRIDES THE SEED'S OWN DRAW, AND IS A MEASUREMENT TOOL ONLY.
+//
+// The feed picks the biome from the seed; forcing one here renders a picture the
+// feed would never show for that seed. That is exactly what you want for
+// characterising one biome across many seeds, and exactly what you must not do
+// for a duel — see the redraw filter in `tools/duel.mjs`, which finds a seed
+// whose OWN biome is a city rather than forcing a city onto a desert's seed.
+// Left off, this file behaves as it always has.
+const biome = arg('biome', undefined);
 
 const t0 = Date.now();
-const cv = renderScene(seed, { w, h });
+const cv = renderScene(seed, biome ? { w, h, biome } : { w, h });
 const ms = Date.now() - t0;
 mkdirSync(dirname(out), { recursive: true });
 writePNG(out, cv.w, cv.h, cv.toRGBA());
-process.stderr.write(`seed=${seed} ${cv.w}x${cv.h} palette=${cv.pal.size} ${ms}ms -> ${out}\n`);
+process.stderr.write(`seed=${seed}${biome ? ` biome=${biome}` : ''} ${cv.w}x${cv.h} palette=${cv.pal.size} ${ms}ms -> ${out}\n`);
