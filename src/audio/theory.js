@@ -239,6 +239,140 @@ export const OPENINGS = [
   { name: 'stagger',  bars: 4, w: 4, plan: ['LA', 'L', 'LAB', 'LHABD'] },
 ];
 
+// MACRO FORM, drawn per post.
+//
+// It used to be one module constant, so every post in the feed was the same
+// arrangement: measured, 2 distinct form sequences across 24 seeds, and both of
+// those were one list truncated at different bars by the render window. That is
+// the other half of "they all sound kinda the same".
+//
+// A row is a sequence of MOTIF LETTERS. Repetition is built in on purpose —
+// every row returns to a letter it has already used — because a form whose
+// sections never come back is not a form, it is a list. Section LENGTHS are
+// drawn separately per section, so two posts on the same row are still
+// different shapes.
+export const FORMS = [
+  { name: 'song',    w: 14, letters: ['A', 'A', 'B', 'A', 'C', 'A'] },
+  { name: 'rondo',   w: 11, letters: ['A', 'B', 'A', 'C', 'A', 'B'] },
+  { name: 'binary',  w: 10, letters: ['A', 'B', 'A', 'B'] },
+  { name: 'arch',    w: 10, letters: ['A', 'B', 'C', 'B', 'A'] },
+  { name: 'terrace', w: 9, letters: ['A', 'A', 'B', 'B', 'C', 'A'] },
+  { name: 'verse',   w: 9, letters: ['A', 'B', 'A', 'B', 'C', 'B'] },
+  { name: 'strophe', w: 8, letters: ['A', 'A', 'A', 'B', 'A'] },
+  { name: 'pair',    w: 8, letters: ['A', 'B', 'B', 'A', 'C'] },
+  { name: 'chain',   w: 6, letters: ['A', 'B', 'C', 'A', 'B'] },
+  { name: 'ritual',  w: 6, letters: ['A', 'A', 'B', 'A', 'A', 'C'] },
+];
+
+// WHICH VOICES A POST HAS AT ALL.
+//
+// Every post used to have all five, always, because TEXTURES was a module
+// constant and no row of it ever removed a channel. Five voices is an
+// arrangement decision that was made once and applied to a whole feed.
+//
+// The lead is in every row: it carries the hook, and the hook is why a post is
+// identifiable in the four seconds most listeners give it.
+//
+// The weights are set on the DISTRIBUTION, not on the idea. The first draft of
+// this table put the median post at three voices, and combined with the biome
+// multipliers and the rest bias it pushed onsetRate to a median of 4.84/s
+// against a corpus p05 of 4.58 — 5 of 12 seeds below the floor. A feed centred
+// on the sparse edge is as wrong as one centred on the dense edge; it is just
+// wrong in the other direction. The target is a feed that SPANS the corpus, so
+// two-voice posts are the exception that makes the five-voice ones read as
+// full, and the four-voice rows carry the middle.
+export const ENSEMBLES = [
+  { name: 'full',    w: 28, voices: ['lead', 'harmony', 'arp', 'bass', 'drums'] },
+  { name: 'noArp',   w: 16, voices: ['lead', 'harmony', 'bass', 'drums'] },
+  { name: 'noHarm',  w: 15, voices: ['lead', 'arp', 'bass', 'drums'] },
+  { name: 'noDrums', w: 10, voices: ['lead', 'harmony', 'arp', 'bass'] },
+  { name: 'trio',    w: 10, voices: ['lead', 'bass', 'drums'] },
+  { name: 'chamber', w: 7, voices: ['lead', 'harmony', 'bass'] },
+  { name: 'pulse',   w: 6, voices: ['lead', 'arp', 'bass'] },
+  { name: 'duo',     w: 4, voices: ['lead', 'bass'] },
+  { name: 'boxed',   w: 3, voices: ['lead', 'arp', 'drums'] },
+  { name: 'aloft',   w: 2, voices: ['lead', 'harmony'] },
+];
+
+// WHAT A PLACE SOUNDS LIKE.
+//
+// docs/ROUNDS.md r5 open item 4: "One composer for four biomes. A beach and a
+// mountain play the same city chiptune." The picture has known which place it
+// is since biome-mix.js existed. The music never asked.
+//
+// Nothing here quotes anything. These are four sets of weights over vocabulary
+// this file already owned, chosen so the four places differ along the axes an
+// ear separates first: how fast, what mode, how many voices, how busy.
+//
+//   city      fast, minor-leaning, full ensembles, busy kit. The densest thing
+//             the generator draws, so the densest thing it plays.
+//   shore     mid, major-leaning and open, lighter kit, more pad, more space.
+//   desert    slow, phrygian and harmonic minor, the fewest voices and the most
+//             rest. A place with nothing in it does not play five parts.
+//   highland  broad and mid-slow, dorian and minor, pad-heavy, wide register.
+//
+// `restBias` scales the per-section rest probabilities. `ensemble` multiplies
+// the ENSEMBLES weights by name, so a desert post is far more likely to be two
+// or three voices and a city post far more likely to be five.
+export const BIOME_MUSIC = {
+  city: {
+    bpm: [140, 176],
+    modes: [['minor', 30], ['dorian', 22], ['major', 18], ['mixolydian', 12],
+      ['harmonicMinor', 8], ['phrygian', 6], ['lydian', 4]],
+    drums: [['light', 14], ['full', 46], ['busy', 40]],
+    arp: [['eighth', 34], ['sixteenth', 50], ['off', 16]],
+    harmony: [['pad', 22], ['stab', 52], ['counter', 26]],
+    ensemble: { full: 1.8, noArp: 1.1, noHarm: 1.2, trio: 0.9, noDrums: 0.5, chamber: 0.5, pulse: 0.8, duo: 0.4, boxed: 1.0, aloft: 0.3 },
+    restBias: 0.85,
+  },
+  shore: {
+    bpm: [114, 150],
+    modes: [['major', 28], ['mixolydian', 20], ['lydian', 16], ['dorian', 14],
+      ['minor', 14], ['harmonicMinor', 5], ['phrygian', 3]],
+    drums: [['light', 46], ['full', 40], ['busy', 14]],
+    arp: [['eighth', 44], ['sixteenth', 26], ['off', 30]],
+    harmony: [['pad', 48], ['stab', 26], ['counter', 26]],
+    ensemble: { full: 1.0, noArp: 1.2, noHarm: 0.9, trio: 1.1, noDrums: 1.3, chamber: 1.3, pulse: 1.0, duo: 1.1, boxed: 0.8, aloft: 1.2 },
+    restBias: 1.12,
+  },
+  desert: {
+    bpm: [100, 134],
+    modes: [['phrygian', 26], ['harmonicMinor', 24], ['minor', 20], ['dorian', 14],
+      ['mixolydian', 8], ['major', 6], ['lydian', 2]],
+    drums: [['light', 56], ['full', 34], ['busy', 10]],
+    arp: [['eighth', 34], ['sixteenth', 18], ['off', 48]],
+    harmony: [['pad', 44], ['stab', 30], ['counter', 26]],
+    ensemble: { full: 0.7, noArp: 1.0, noHarm: 0.9, trio: 1.3, noDrums: 1.2, chamber: 1.5, pulse: 1.1, duo: 1.6, boxed: 0.9, aloft: 1.5 },
+    restBias: 1.28,
+  },
+  highland: {
+    bpm: [108, 146],
+    modes: [['dorian', 24], ['minor', 24], ['major', 18], ['lydian', 12],
+      ['mixolydian', 10], ['harmonicMinor', 10], ['phrygian', 2]],
+    drums: [['light', 44], ['full', 42], ['busy', 14]],
+    arp: [['eighth', 40], ['sixteenth', 22], ['off', 38]],
+    harmony: [['pad', 52], ['stab', 22], ['counter', 26]],
+    ensemble: { full: 0.9, noArp: 1.3, noHarm: 0.9, trio: 1.1, noDrums: 1.3, chamber: 1.4, pulse: 0.9, duo: 1.0, boxed: 0.7, aloft: 1.3 },
+    restBias: 1.20,
+  },
+};
+
+/**
+ * Used when nothing has told the composer where it is. It is the ENGINE'S OWN
+ * former behaviour, not a fifth place: an offline render with no conditions
+ * must not quietly become a city.
+ */
+export const BIOME_MUSIC_NEUTRAL = {
+  bpm: [112, 176],
+  modes: [['minor', 30], ['major', 26], ['dorian', 14], ['mixolydian', 10],
+    ['harmonicMinor', 8], ['phrygian', 6], ['lydian', 6]],
+  drums: [['light', 34], ['full', 44], ['busy', 22]],
+  arp: [['eighth', 40], ['sixteenth', 34], ['off', 26]],
+  harmony: [['pad', 40], ['stab', 34], ['counter', 26]],
+  ensemble: {},
+  restBias: 1,
+};
+
 /** 'LBD' -> Set{'lead','bass','drums'}. */
 export const VOICE_OF_LETTER = { L: 'lead', H: 'harmony', A: 'arp', B: 'bass', D: 'drums' };
 export function voiceSet(letters) {

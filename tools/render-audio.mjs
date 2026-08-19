@@ -21,6 +21,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { Rng } from '../src/core/rng.js';
+// READ-ONLY dependencies on the generator's side of the house. src/gen/** has
+// a different owner; nothing here writes it.
+import {
+  pickConditions, resolveConditions, TIME_KEYS, WEATHER_KEYS,
+} from '../src/gen/conditions.js';
+import { pickBiome, BIOME_KEYS } from '../src/gen/biome-mix.js';
 import {
   composeSong, renderRange, renderCalibrationTone, encodeWav,
   SAMPLE_RATE, CHANNELS, MASTER,
@@ -34,6 +40,39 @@ const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const argv = process.argv.slice(2);
 const flag = f => argv.includes(f);
 const get = (f, dflt = null) => { const i = argv.indexOf(f); return i >= 0 && argv[i + 1] ? argv[i + 1] : dflt; };
+
+/**
+ * THE CONDITIONS THE MUSIC IS WRITTEN FOR, resolved exactly once.
+ *
+ * The invariant that matters is that the audio and the picture can never
+ * disagree about the weather. There is ONE resolver — src/gen/conditions.js,
+ * which this tool only ever reads — and both halves take the SAME resolved
+ * object. The default here is `pickConditions(seed)`, the same call
+ * src/app/main.js makes, so an offline render is the post the app plays and
+ * not a neutral cousin of it.
+ *
+ * --time/--weather/--biome go through resolveConditions rather than being
+ * patched onto an already-resolved object, because overriding `weather` on a
+ * resolved object keeps the old `sun`, `warmth` and `wet` and produces a state
+ * the resolver would never emit. tools/render.mjs takes the same two flags.
+ */
+function condFromFlags(seed) {
+  const t = get('--time'), w = get('--weather'), b = get('--biome');
+  if (!t && !w && !b) return pickConditions(String(seed));
+  const biome = b || pickBiome(String(seed));
+  if (!BIOME_KEYS.includes(biome)) {
+    console.error(`--biome must be one of: ${BIOME_KEYS.join(' ')}`); process.exit(2);
+  }
+  const base = pickConditions(String(seed), biome);
+  const time = t || base.time, weather = w || base.weather;
+  if (!TIME_KEYS.includes(time)) {
+    console.error(`--time must be one of: ${TIME_KEYS.join(' ')}`); process.exit(2);
+  }
+  if (!WEATHER_KEYS.includes(weather)) {
+    console.error(`--weather must be one of: ${WEATHER_KEYS.join(' ')}`); process.exit(2);
+  }
+  return resolveConditions(time, weather, biome);
+}
 
 // ---------------------------------------------------------------------------
 // duty-cycle fit: invert |c_k| = (4/(pi*k)) |sin(pi*k*d)|
@@ -104,7 +143,7 @@ function fitDuty(mags, f0, sr, filter = null) {
  * whether the bar measures music; these can only fail on structure.
  */
 function makeControlSongs(seed, seconds) {
-  const base = composeSong(seed, { seconds });
+  const base = composeSong(seed, { seconds, cond: condFromFlags(seed) });
   const out = {};
 
   // (1) one bar of the real arrangement, repeated verbatim for the duration
@@ -239,7 +278,8 @@ function cmdRender() {
   const stemDir = get('--stems');
 
   const t0 = process.hrtime.bigint();
-  const song = composeSong(seed, { seconds });
+  const cond = condFromFlags(seed);
+  const song = composeSong(seed, { seconds, cond });
   const t1 = process.hrtime.bigint();
   const total = Math.round(seconds * SAMPLE_RATE);
   const { mix, stems } = renderRange(song, 0, total, SAMPLE_RATE);
@@ -255,19 +295,29 @@ function cmdRender() {
   let peak = 0, ss = 0;
   for (let i = 0; i < mix.length; i++) { const a = Math.abs(mix[i]); if (a > peak) peak = a; ss += mix[i] * mix[i]; }
   const rms = Math.sqrt(ss / mix.length);
+  // LONGEST SILENCE, printed on every render, because it is the statistic that
+  // catches the failure mode rest introduces. A bar mask that removes every
+  // voice a post has is not a rest, it is a dropout, and it looked exactly like
+  // a rest in every other number until this line existed: 3.5 continuous
+  // seconds of digital zero sat in the middle of a post and nothing said so.
+  let quiet = 0, quietBest = 0;
+  for (let i = 0; i < mix.length; i++) {
+    if (Math.abs(mix[i]) < 1e-5) { if (++quiet > quietBest) quietBest = quiet; } else quiet = 0;
+  }
   console.error(
     `seed "${seed}"  ${seconds}s  ${song.bpm} BPM  ${song.key.tonic} ${song.key.mode}  ` +
     `${song.totalBars} bars  ${song.sections.length} sections\n` +
     `notes: ${Object.entries(song.noteCounts).map(([k, v]) => `${k}=${v}`).join(' ')}\n` +
     `compose ${(Number(t1 - t0) / 1e6).toFixed(1)} ms   render ${(Number(t2 - t1) / 1e6).toFixed(1)} ms   ` +
-    `peak ${linToDb(peak).toFixed(2)} dBFS   rms ${linToDb(rms).toFixed(2)} dBFS\n` +
+    `peak ${linToDb(peak).toFixed(2)} dBFS   rms ${linToDb(rms).toFixed(2)} dBFS   ` +
+    `longest silence ${(quietBest / SAMPLE_RATE).toFixed(2)} s\n` +
     `wrote ${out}${stemDir ? ` and ${CHANNELS.length} stems in ${stemDir}` : ''}`);
 }
 
 function cmdDumpSong() {
   const seed = get('--seed');
   if (!seed) { usage(); process.exit(2); }
-  const song = composeSong(seed, { seconds: Number(get('--seconds', '60')) });
+  const song = composeSong(seed, { seconds: Number(get('--seconds', '60')), cond: condFromFlags(seed) });
   if (flag('--json')) { console.log(JSON.stringify(song, null, 2)); return; }
   console.log(`seed ${song.seed}   ${song.bpm} BPM   key ${song.key.tonic} ${song.key.mode}   ` +
     `${song.totalBars} bars (${song.barSec.toFixed(3)} s/bar)`);
@@ -308,7 +358,7 @@ function cmdLatency() {
   console.log(`  warm median total: ${tot[tot.length >> 1].toFixed(2)} ms`);
   // full render cost for reference
   const t0 = process.hrtime.bigint();
-  const song = composeSong(seeds[0], { seconds });
+  const song = composeSong(seeds[0], { seconds, cond: condFromFlags(seeds[0]) });
   renderRange(song, 0, Math.round(seconds * SAMPLE_RATE), SAMPLE_RATE);
   const t1 = process.hrtime.bigint();
   console.log(`  full ${seconds}s offline render: ${(Number(t1 - t0) / 1e6).toFixed(0)} ms ` +
@@ -380,7 +430,7 @@ function cmdDutyCheck() {
     console.log('\n  E. the longest steady lead note in a real rendered stem');
     const seed = get('--seed', 'fixel-0001');
     const seconds = Number(get('--seconds', '60'));
-    const song = composeSong(seed, { seconds });
+    const song = composeSong(seed, { seconds, cond: condFromFlags(seed) });
     // find the longest lead note and where it sits
     let best = null;
     for (const nt of song.tracks.lead) if (!best || nt.dur > best.dur) best = nt;
@@ -509,7 +559,13 @@ function usage() {
   node tools/render-audio.mjs --latency [--seed a,b,c] [--seconds N]
   node tools/render-audio.mjs --determinism [--seed a,b,c] [--seconds N]
   node tools/render-audio.mjs --duty-check
-  node tools/render-audio.mjs --controls <dir> [--seed <string>] [--seconds N]`);
+  node tools/render-audio.mjs --controls <dir> [--seed <string>] [--seconds N]
+
+conditions — the music is written for the same resolved conditions as the
+picture. Default: pickConditions(seed), exactly what src/app/main.js uses.
+  --time     ${TIME_KEYS.join(' | ')}
+  --weather  ${WEATHER_KEYS.join(' | ')}
+  --biome    ${BIOME_KEYS.join(' | ')}`);
 }
 
 if (flag('--dump-song')) cmdDumpSong();

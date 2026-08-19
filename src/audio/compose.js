@@ -14,47 +14,38 @@ import { Rng } from '../core/rng.js';
 import {
   SCALES, QUALITIES, PROGRESSIONS, CADENCES, RHYTHM_CELLS, CONTOURS,
   DRUM_PATTERNS, BASS_FIGURES, ARP_SHAPES, PC_NAMES, OPENINGS,
+  FORMS, ENSEMBLES, BIOME_MUSIC, BIOME_MUSIC_NEUTRAL,
   chordTones, degreeStep, voiceSet,
 } from './theory.js';
 
 const TICKS_PER_BAR = 16;
 
-// Macro form. Repeated A-variants placed within ~13 s of each other so that a
-// 30 s analysis window contains at least one section-scale repeat: the
-// self-similarity lag search in the bar tops out at half a window (15 s).
-const FORM = [
-  // `bars` here is a default; the opening's real length comes from the drawn
-  // OPENINGS row, and its motif is 'A' because THE OPENING STATES THE HOOK.
-  // It used to have no motif at all and TEXTURES.intro.lead = 'none'.
-  { kind: 'intro', bars: 4, motif: 'A' },
-  { kind: 'A', bars: 8, motif: 'A' },
-  { kind: 'A2', bars: 8, motif: 'A' },
-  { kind: 'B', bars: 8, motif: 'B' },
-  { kind: 'A3', bars: 8, motif: 'A' },
-  { kind: 'C', bars: 8, motif: 'C' },
-  { kind: 'A4', bars: 8, motif: 'A' },
-  { kind: 'outro', bars: 4 },
-];
-
-const TEXTURES = {
-  // `intro` is drawn per seed in composeSong and replaces this row; the row is
-  // kept only so the shape of a texture is readable in one place.
-  intro: { drums: 'light', arp: 'eighth', lead: 'motif', harmony: 'pad', bassFig: null, leadOct: 0 },
-  A: { drums: 'full', arp: 'eighth', lead: 'motif', harmony: 'stab', bassFig: null, leadOct: 0 },
-  A2: { drums: 'full', arp: 'sixteenth', lead: 'motif', harmony: 'stab', bassFig: null, leadOct: 0 },
-  B: { drums: 'full', arp: 'off', lead: 'motif', harmony: 'counter', bassFig: null, leadOct: 0 },
-  A3: { drums: 'busy', arp: 'eighth', lead: 'motif', harmony: 'stab', bassFig: null, leadOct: 12 },
-  C: { drums: 'light', arp: 'sixteenth', lead: 'motif', harmony: 'pad', bassFig: 7, leadOct: 0 },
-  A4: { drums: 'busy', arp: 'sixteenth', lead: 'motif', harmony: 'stab', bassFig: null, leadOct: 0 },
-  outro: { drums: 'light', arp: 'eighth', lead: 'motif', harmony: 'pad', bassFig: 4, leadOct: 0 },
-};
-
 const LEAD_SHAPES = ['p:0.125', 'p:0.25', 'p:0.5'];
 const ARP_SHAPES_W = ['p:0.125', 'p:0.25'];
 
+/**
+ * Compose a post.
+ *
+ * @param seed  the post's identity; the same string that draws its pixels.
+ * @param opts.seconds   how much music to plan for.
+ * @param opts.cond      the RESOLVED conditions object from
+ *                       src/gen/conditions.js — the SAME object the picture is
+ *                       drawn from, never a second resolution of the same seed.
+ *                       Only `biome` is read here. Omitted, the composer is
+ *                       biome-neutral and behaves as it did before it could ask.
+ */
 export function composeSong(seed, opts = {}) {
   const seconds = opts.seconds ?? 60;
+  const cond = opts.cond || null;
   const rng = new Rng(seed);
+
+  // ---- where this post IS -----------------------------------------------
+  // docs/ROUNDS.md r5 open item 4. The picture has known its biome since
+  // biome-mix.js existed and the music never asked, so a beach and a mountain
+  // played the same city chiptune. `place` is a set of WEIGHTS, not a set of
+  // decisions: every draw below is still the seed's, it is just drawn from a
+  // table that knows where it is.
+  const place = (cond && BIOME_MUSIC[cond.biome]) || BIOME_MUSIC_NEUTRAL;
 
   // ---- global parameters ------------------------------------------------
   // TEMPO IS UNGATED. No metric in the suite constrains how fast this music is:
@@ -70,16 +61,13 @@ export function composeSong(seed, opts = {}) {
   // than the beat — a 160 BPM post read as ~40 BPM, and widening this range
   // from 140..172 to 112..176 flipped four of eight seeds out of band without
   // changing anything a listener would call tempo.
-  const bpm = rng.stream('audio.tempo').int(112, 176);
+  const bpm = rng.stream('audio.tempo').int(place.bpm[0], place.bpm[1]);
   const beatSec = 60 / bpm;
   const barSec = 4 * beatSec;
   const secPerTick = beatSec / 4;
 
   const tonicPc = rng.stream('audio.key.tonic').int(0, 11);
-  const mode = rng.stream('audio.key.mode').weighted([
-    ['minor', 30], ['major', 26], ['dorian', 14], ['mixolydian', 10],
-    ['harmonicMinor', 8], ['phrygian', 6], ['lydian', 6],
-  ]);
+  const mode = rng.stream('audio.key.mode').weighted(place.modes);
   const scale = SCALES[mode];
   const progFamily = PROGRESSIONS[mode] ? mode : (mode === 'harmonicMinor' ? 'minor' : 'major');
 
@@ -121,20 +109,42 @@ export function composeSong(seed, opts = {}) {
     drums: bst.range(0.40, 1.70),
   };
 
+  // ---- which voices this post HAS ---------------------------------------
+  // Not "which voices play in this bar" — which channels the post owns at all.
+  // Every post used to own all five. The biome multiplies the weights, so a
+  // desert post is far more likely to be two or three voices and a city post
+  // far more likely to be five.
+  const ens = rng.stream('audio.ensemble').weighted(
+    ENSEMBLES.map(e => [e, e.w * (place.ensemble[e.name] ?? 1)]));
+  const ensemble = new Set(ens.voices);
+
+  // A TRIO PLAYS MORE NOTES PER PART THAN A QUINTET. This is ordinary
+  // arrangement, and it is also the fix for a measured overshoot: the first
+  // version of the ensemble draw kept every part as sparse as it had been when
+  // there were five of them, and onsetRate fell to a median of 4.78/s against a
+  // corpus p05 of 4.58, with 5 of 12 seeds under the floor. Removing voices
+  // without giving the survivors more to do is not thinning an arrangement, it
+  // is deleting one. `fill` rises as the ensemble shrinks and biases the arp
+  // toward sixteenths, the kit toward busy, and the motif toward denser cells.
+  const nVoices = ens.voices.length;
+  const fill = Math.pow(1.5, 5 - nVoices);       // 1.00 1.50 2.25 3.38
+  const denser = (pairs, up, down) => pairs.map(([k, w]) =>
+    [k, k === up ? w * fill : k === down ? w / fill : w]);
+
   // ---- the opening ------------------------------------------------------
   // The most-heard bars of the post, and until now the least varied. See the
   // OPENINGS note in theory.js for the 24-seed measurement that made this a
-  // draw instead of a constant. Two streams, because the entry plan and the
-  // opening's timbre are separable quantities and law 2 means a later addition
-  // to one must not re-roll the other.
+  // draw instead of a constant. Separate streams, because the entry plan and
+  // the opening's timbre are separable quantities and law 2 means a later draw
+  // added to one must not re-roll the other.
   const opening = rng.stream('audio.opening.plan')
     .weighted(OPENINGS.map(o => [o, o.w]));
   const otx = rng.stream('audio.opening.texture');
   const introTexture = {
-    drums: otx.weighted([['light', 34], ['full', 44], ['busy', 22]]),
-    arp: otx.weighted([['eighth', 44], ['sixteenth', 36], ['off', 20]]),
+    drums: otx.weighted(denser(place.drums, 'busy', 'light')),
+    arp: otx.weighted(denser(place.arp, 'sixteenth', 'off')),
     lead: 'motif',
-    harmony: otx.weighted([['pad', 42], ['stab', 36], ['counter', 22]]),
+    harmony: otx.weighted(place.harmony),
     bassFig: null,                       // was the constant 4, in every post
     leadOct: otx.bool(0.22) ? 12 : 0,
     opening: opening.name,
@@ -146,34 +156,69 @@ export function composeSong(seed, opts = {}) {
   // Overridden after the draw rather than conditioned into it, so the number of
   // draws taken from this stream does not depend on the plan.
   if (introTexture.arp === 'off' && opening.plan.some(p => p === 'A')) introTexture.arp = 'eighth';
-  const textures = { ...TEXTURES, intro: introTexture };
 
   const totalBars = Math.max(8, Math.ceil(seconds / barSec));
 
   // ---- form -------------------------------------------------------------
+  // Drawn per post. It used to be a module constant and measured 2 distinct
+  // sequences across 24 seeds. The section KIND is the motif letter plus its
+  // occurrence number, so 'A', 'A2', 'A3' still name variations of one idea and
+  // the texture table below is still keyed by something meaningful.
+  const fst = rng.stream('audio.form.shape');
+  const lst = rng.stream('audio.form.lengths');
+  const form = fst.weighted(FORMS.map(f => [f, f.w]));
   const sections = [];
-  let bar = 0, fi = 0;
-  while (bar < totalBars) {
-    const f = FORM[fi % FORM.length];
-    const idx = sections.length;
-    const bars = f.kind === 'intro' ? opening.bars : f.bars;
+  const seen = {};
+  let bar = 0;
+  sections.push({ index: 0, kind: 'intro', motif: 'A', startBar: 0, bars: opening.bars });
+  bar = opening.bars;
+  for (let i = 0; bar < totalBars; i++) {
+    const letter = form.letters[i % form.letters.length];
+    seen[letter] = (seen[letter] || 0) + 1;
+    const kind = letter + (seen[letter] > 1 ? String(seen[letter]) : '');
+    // 4-bar sections make a post that turns over quickly, 16-bar ones make one
+    // that settles. Both, drawn, rather than 8 forever.
+    const want = lst.weighted([[4, 26], [8, 48], [16, 26]]);
     sections.push({
-      index: idx, kind: f.kind, motif: f.motif || null,
-      startBar: bar, bars: Math.min(bars, totalBars - bar),
-      pass: Math.floor(fi / FORM.length),
+      index: sections.length, kind, motif: letter,
+      startBar: bar, bars: Math.min(want, totalBars - bar),
     });
-    bar += bars; fi++;
+    bar += want;
+  }
+
+  // ---- texture, per section kind, per post -------------------------------
+  // TEXTURES was a module constant: 2 distinct texture signatures across 24
+  // seeds, which is the same arrangement in every post in the feed. Each
+  // section KIND gets its own stream so adding a section kind later cannot
+  // re-roll an earlier one.
+  const textures = { intro: introTexture };
+  for (const s of sections) {
+    if (textures[s.kind]) continue;
+    const tst = rng.stream(`audio.texture.${s.kind}`);
+    textures[s.kind] = {
+      drums: tst.weighted(denser(place.drums, 'busy', 'light')),
+      arp: tst.weighted(denser(place.arp, 'sixteenth', 'off')),
+      lead: 'motif',
+      harmony: tst.weighted(place.harmony),
+      bassFig: null,
+      leadOct: tst.bool(0.18) ? 12 : 0,
+    };
   }
 
   // ---- arrangement mask -------------------------------------------------
-  // Which voices sound in which bar. `null` means "all of them", which is
-  // still every bar of every non-opening section; stage 2 fills the rest in.
-  // Keyed by absolute bar so every voice generator can ask the same question.
+  // Which voices sound in which bar. `null` means "every voice the post has".
+  // Keyed by absolute bar so every voice generator asks the same question.
   const barVoices = new Map();
   for (const s of sections) {
     if (s.kind !== 'intro') continue;
     for (let b = 0; b < s.bars; b++) {
-      barVoices.set(s.startBar + b, voiceSet(opening.plan[Math.min(b, opening.plan.length - 1)]));
+      // Intersected with the ensemble: an entry plan naming a voice this post
+      // does not own would otherwise plan an empty bar, which is the same bug
+      // the arp-only opening had. The lead is the floor because every ENSEMBLES
+      // row contains it, so the fallback can never be empty either.
+      const want = new Set([...voiceSet(opening.plan[Math.min(b, opening.plan.length - 1)])]
+        .filter(v => ensemble.has(v)));
+      barVoices.set(s.startBar + b, want.size ? want : new Set(['lead']));
     }
   }
   // ---- rest ---------------------------------------------------------------
@@ -190,27 +235,49 @@ export function composeSong(seed, opts = {}) {
   //               This is the only one that makes real silence.
   //   THIN PATCH  two consecutive bars with one or two voices taken out.
   //   BASS REST   whole bars where the bass simply does not play.
-  const ALL_VOICES = ['lead', 'harmony', 'arp', 'bass', 'drums'];
   const barHole = new Map();       // absolute bar -> tick from which it is silent
+  // NEVER EMPTY A BAR. Measured, and it shipped for about twenty minutes: a
+  // two-voice post whose thin patch happened to name both of its voices left
+  // 3.5 CONTINUOUS SECONDS of digital silence in the middle of fixel-0020 —
+  // seven consecutive half-second blocks under -100 dBFS. Rest is a phrase
+  // ending; four bars of nothing is a dropout. The floor is one voice, and it
+  // is the lead where the bar had one.
   const dropFrom = (b, drop) => {
-    const cur = barVoices.get(b) || new Set(ALL_VOICES);
-    barVoices.set(b, new Set([...cur].filter(v => !drop.has(v))));
+    const cur = barVoices.get(b) || new Set(ens.voices);
+    const next = new Set([...cur].filter(v => !drop.has(v)));
+    if (!next.size) {
+      barVoices.set(b, new Set([cur.has('lead') ? 'lead' : [...cur][0]]));
+      return;
+    }
+    barVoices.set(b, next);
   };
+  // A quiet place rests more. `restBias` above 1 makes a breath likelier and a
+  // full texture rarer; the desert is 1.35 and the city 0.85.
+  // A duo that also rests heavily is a silence with a tune in it. Thin
+  // ensembles rest a little less, so the two mechanisms do not compound.
+  const rb = place.restBias * (0.86 + 0.028 * nVoices);
+  const bias = (p) => Math.max(0, Math.min(1, p * rb));
   for (const s of sections) {
     // The opening is the hook and is already thinned by its entry plan.
     if (s.kind === 'intro' || s.bars < 4) continue;
     const rst = rng.stream(`audio.rest.${s.index}`);
-    if (rst.bool(0.78)) {
+    if (rst.bool(bias(0.78))) {
       const at = s.startBar + (rst.bool(0.45) ? Math.min(3, s.bars - 1) : s.bars - 1);
-      barHole.set(at, [8, 10, 12][rst.int(0, 2)]);
+      // A BREATH IS MEASURED IN SECONDS, NOT IN TICKS. Eight ticks is 0.69 s at
+      // 175 BPM and 1.16 s at 103, and the slow end of that is not a phrase
+      // ending any more, it is a gap: measured, a 103 BPM post held 1.48 s of
+      // digital silence. Fast music can hold a longer rest in ticks than slow
+      // music can, so the floor moves with the tempo.
+      const earliest = TICKS_PER_BAR - Math.floor(0.75 / secPerTick);
+      barHole.set(at, Math.max(earliest, [8, 10, 12][rst.int(0, 2)]));
     }
-    const nDrop = rst.weighted([[0, 20], [1, 44], [2, 36]]);
+    const nDrop = rst.weighted([[0, 24], [1, 46 * rb], [2, 30 * rb]]);
     if (nDrop) {
       const at = s.startBar + 2 * rst.int(0, Math.floor(s.bars / 2) - 1);
-      const drop = new Set(rst.sample(ALL_VOICES, nDrop));
+      const drop = new Set(rst.sample(ens.voices, nDrop));
       for (let b = at; b < Math.min(at + 2, s.startBar + s.bars); b++) dropFrom(b, drop);
     }
-    const bassOff = rst.weighted([[0, 26], [1, 40], [2, 34]]);
+    const bassOff = rst.weighted([[0, 30], [1, 42 * rb], [2, 28 * rb]]);
     for (let k = 0; k < bassOff; k++) {
       dropFrom(s.startBar + rst.int(0, s.bars - 1), new Set(['bass']));
     }
@@ -218,6 +285,7 @@ export function composeSong(seed, opts = {}) {
 
   /** Does `track` sound in absolute bar `b`? */
   const sounds = (track, b) => {
+    if (!ensemble.has(track)) return false;
     const set = barVoices.get(b);
     return set ? set.has(track) : true;
   };
@@ -235,7 +303,9 @@ export function composeSong(seed, opts = {}) {
   const cadPool = CADENCES[progFamily];
   const progOf = new Map();
   for (const s of sections) {
-    const st = rng.stream(`audio.harmony.prog.${s.kind}.${s.pass}`);
+    // Keyed by kind alone: kinds are now unique per section ('A', 'A2', 'A3'),
+    // so the `.pass` counter the fixed FORM needed has nothing left to count.
+    const st = rng.stream(`audio.harmony.prog.${s.kind}`);
     const core = progPool[st.int(0, progPool.length - 1)];
     const cad = cadPool[st.int(0, cadPool.length - 1)];
     // sections sharing a motif letter share the harmony too, so the A-variants
@@ -277,8 +347,11 @@ export function composeSong(seed, opts = {}) {
   const motifs = {};
   for (const letter of ['A', 'B', 'C']) {
     const st = rng.stream(`audio.motif.${letter}`);
-    const cells = [RHYTHM_CELLS[st.int(0, RHYTHM_CELLS.length - 1)],
-      RHYTHM_CELLS[st.int(0, RHYTHM_CELLS.length - 1)]];
+    // Same principle as `fill`: a two-voice post's tune carries the bar, so
+    // its cells are weighted toward the ones with more notes in them. At five
+    // voices the exponent is 0 and this is a uniform pick, exactly as before.
+    const cellW = RHYTHM_CELLS.map(c => [c, Math.pow(c.length, 0.45 * (5 - nVoices))]);
+    const cells = [st.weighted(cellW), st.weighted(cellW)];
     const contour = CONTOURS[st.int(0, CONTOURS.length - 1)];
     motifs[letter] = { cells, contour, startDeg: st.int(-2, 4) };
   }
@@ -424,7 +497,14 @@ export function composeSong(seed, opts = {}) {
       dec.push([0, 1].map(() => {
         const row = [];
         for (let j = 0; j < 12; j++) {
-          row.push({ chrom: orn.bool(0.04), dir: orn.bool(0.5) ? -1 : 1, rest: orn.bool(0.12), orna: orn.bool(0.3) });
+          // The same `fill` principle reaching the tune itself: in a two-voice
+          // post the lead IS the arrangement, so it rests less and ornaments
+          // more. At five voices these are 0.12 and 0.30, unchanged.
+          row.push({
+            chrom: orn.bool(0.04), dir: orn.bool(0.5) ? -1 : 1,
+            rest: orn.bool(0.12 * (0.55 + 0.09 * nVoices)),
+            orna: orn.bool(Math.min(0.62, 0.30 * Math.pow(fill, 0.45))),
+          });
         }
         return row;
       }));
@@ -550,6 +630,9 @@ export function composeSong(seed, opts = {}) {
     ticksPerBar: TICKS_PER_BAR, totalBars,
     key: { tonicPc, tonic: PC_NAMES[tonicPc], mode },
     voicing, kit, balance,
+    biome: cond ? cond.biome : null,
+    ensemble: { name: ens.name, voices: ens.voices },
+    form: { name: form.name, letters: form.letters },
     opening: { name: opening.name, bars: opening.bars, plan: opening.plan },
     sections: sections.map(s => ({
       index: s.index, kind: s.kind, motif: s.motif, startBar: s.startBar, bars: s.bars,
