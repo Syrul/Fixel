@@ -34,6 +34,7 @@ import { paintCity } from './biomes/city.js';
 import { paintDesert } from './biomes/desert.js';
 import { paintShore } from './biomes/shore.js';
 import { paintHighland } from './biomes/highland.js';
+import { precipFront } from './props/precip.js';
 
 /**
  * The feed's mix.
@@ -72,5 +73,13 @@ export function renderScene(seed, opts = {}) {
   const stage = makeStage(seed, { ...opts, cond, backPad: B.backPad });
   stage.biome = kind;
   B.paint(stage);
-  return stage.finish({ outline: opts.outline !== false && !opts.noOut });
+  // THE FALLING LAYER IS THE ONLY THING THAT DRAWS AFTER THE SILHOUETTE SWEEP,
+  // and `front` is the only hook that can. `precipFront` returns null on a post
+  // with no weather, so `stage.finish` never enters it and a clear post is
+  // byte-identical to the same post before precipitation existed — checked as a
+  // bracketed A/B over 24 renders, not assumed.
+  return stage.finish({
+    outline: opts.outline !== false && !opts.noOut,
+    front: precipFront(stage),
+  });
 }
