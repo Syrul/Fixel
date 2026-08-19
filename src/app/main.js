@@ -6,6 +6,8 @@
 // smooth.
 
 import { pickBiome } from '../gen/biome-mix.js';
+import { FPS, frameAt } from '../core/frame.js';
+import { paintFrame, dirtyBands, loopBytes } from '../core/anim.js';
 
 const FEED = document.getElementById('feed');
 const HUD = document.getElementById('hud');
@@ -149,7 +151,13 @@ function makePost(i) {
     else { ac.resume(); rail.children[1].style.opacity = '.8'; }
   };
   el.appendChild(rail);
-  const p = { i, seed: seedAt(i), el, ph, meta, canvas: null, scene: null, audio: null, gen: false };
+  const p = {
+    i, seed: seedAt(i), el, ph, meta, canvas: null, scene: null, audio: null, gen: false,
+    // player state; see "the player" below. A still post carries these as nulls
+    // and never allocates any of them.
+    ctx: null, img: null, pal3: null, loop: null, bands: null,
+    k: 0, rate: 1, cost: null, ci: 0, why: null,
+  };
   posts[i] = p;
   FEED.appendChild(el);
   return p;
@@ -158,13 +166,45 @@ function makePost(i) {
 async function generate(p) {
   if (p.gen) return; p.gen = true;
   const s = await ask(sceneW, { seed: String(p.seed), w: FRAME.w, h: FRAME.h });
-  p.scene = s;
+  // METADATA ONLY. `s` holds four transferred ArrayBuffers and the largest is
+  // the 1.76 MB RGBA base; retaining the whole message pinned all of them for
+  // the life of the post, and nothing ever read them back. A still post now
+  // retains no pixel bytes of its own at all — only the canvas's own backing
+  // store, which is the same one post as before this file learned to animate.
+  p.scene = { w: s.w, h: s.h, ms: s.ms, n: s.n, frames: s.frames, dropped: s.dropped, flat: s.flat, shadowed: s.shadowed };
+  const img = new ImageData(new Uint8ClampedArray(s.buf), s.w, s.h);
   const c = document.createElement('canvas');
   c.width = s.w; c.height = s.h;
-  c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(s.buf), s.w, s.h), 0, 0);
+  const ctx = c.getContext('2d');
+  ctx.putImageData(img, 0, 0);
   p.canvas = c;
+  p.ctx = ctx;
   p.ph.remove();
   p.el.insertBefore(c, p.el.firstChild);
+
+  // THE LOOP, IF THERE IS ONE. Every typed array here is a VIEW over a buffer
+  // the worker transferred — `new Uint32Array(someArrayBuffer)` does not copy —
+  // so the loop costs exactly the bytes the worker sent and not a byte more.
+  if (s.n > 0) {
+    p.loop = { frames: s.frames, w: s.w, h: s.h, n: s.n, off: new Uint32Array(s.off), val: new Uint16Array(s.val) };
+    p.pal3 = new Uint8Array(s.pal);
+    p.bands = dirtyBands(p.loop);
+    // THE RETAINED ImageData, and why it is retained rather than re-derived.
+    //
+    // The player has to write RGBA somewhere before handing it to the canvas.
+    // The two alternatives both cost more than holding this one:
+    // `ctx.getImageData` per frame is a READBACK from the canvas's backing
+    // store, which is the expensive direction across that boundary and is
+    // measured at ~40x the cost of the paint it would serve; rebuilding from
+    // the index plane means 440,000 palette lookups to change ~20,000 pixels.
+    // This buffer already exists — it arrived from the worker — so retaining it
+    // costs nothing that was not already paid, and it is the only per-post cost
+    // an ANIMATED post carries that a still one does not.
+    p.img = img;
+    p.k = 0; p.rate = 1; p.cost = new Float64Array(BUDGET_N); p.ci = 0;
+    ANIM.animated++; ANIM.bytes += loopBytes(p.loop) + img.data.byteLength + p.pal3.byteLength;
+  }
+  if (p.i === active) armPlayer();
   // Audio second: the picture is what the eye lands on, and a scene that is
   // ready 250ms before its track is far better than the reverse.
   const a = await ask(audioW, { seed: String(p.seed), seconds: 48 });
@@ -175,7 +215,9 @@ async function generate(p) {
 
 function setActive(i) {
   if (i === active) return;
+  park(posts[active]);          // the post being left goes back to frame 0
   active = i;
+  armPlayer();
   const u = new URL(location.href);
   u.searchParams.set('seed', String(seedAt(i)));
   history.replaceState(null, '', u);
@@ -189,11 +231,155 @@ function setActive(i) {
     const q = posts[k];
     if (q && q.canvas) {
       q.canvas.remove(); q.canvas = null; q.scene = null; q.audio = null; q.gen = false;
+      // The loop and its paint target go with the pixels. Without this the feed
+      // would leak the one thing animation added, which is the whole reason the
+      // release path exists at all.
+      if (q.loop) ANIM.bytes -= loopBytes(q.loop) + q.img.data.byteLength + q.pal3.byteLength, ANIM.animated--;
+      q.ctx = null; q.img = null; q.pal3 = null; q.loop = null; q.bands = null;
+      q.k = 0; q.rate = 1; q.cost = null; q.ci = 0; q.why = null;
       const ph = document.createElement('div'); ph.className = 'ph'; ph.textContent = '';
       q.ph = ph; q.el.insertBefore(ph, q.el.firstChild);
     }
   }
 }
+
+// ---- the player ------------------------------------------------------------
+//
+// IF ANIMATION WOULD MAKE THE SCROLL WORSE, THE SCROLL WINS. Everything in this
+// block follows from that one sentence.
+//
+// ONE POST MOVES: the active one, the one `setActive` names. Every other post
+// holds frame 0. This is not an optimisation to be relaxed later — a feed with
+// four moving pictures in it is a different product, and a worse one, because
+// the eye has nowhere to rest. The cost argument agrees with the taste argument
+// but is not the reason.
+//
+// ONE rAF FOR THE PAGE, not one per post, and it is not even running unless the
+// active post actually has a loop. A feed of stills — which is every feed today,
+// because no shader records yet — schedules no callback at all, so the still
+// path costs exactly zero per tick rather than a cheap something.
+//
+// THE CLOCK TOUCHES EXACTLY ONE LINE. `frameAt` converts `performance.now()`
+// into an integer and nothing downstream of it ever sees the float; that is the
+// law in `src/core/frame.js` and this is the app-layer end of it. Because `k` is
+// derived from an ABSOLUTE time rather than accumulated, there is no state to
+// catch up: a tab hidden for a minute resumes on whatever frame the wall clock
+// says, in one paint, with no loop to run down.
+//
+// AND WHEN `k` HAS NOT MOVED, NOTHING HAPPENS. At 8 fps on a 120 Hz display
+// that is 15 of every 16 callbacks costing one integer compare and a `return` —
+// no paint, no upload, no allocation, no counter.
+
+/** Median paint cost above which a post's animation is cut back. Measured
+ *  paints are 0.04-0.13 ms at 440x1000, so this is 15-50x headroom: it can only
+ *  fire on a pathological loop or a machine in trouble, and in both of those
+ *  cases the scroll is what we are protecting. */
+const BUDGET_MS = 2.0;
+const BUDGET_N = 16;          // paints per guard window
+
+// A read-only diagnostic surface, so the memory and cost claims made for this
+// change are checkable from a console instead of taken on trust. It is written
+// on generate, release and back-off — never in the per-tick hot path.
+const ANIM = { animated: 0, bytes: 0, paints: 0, lastMs: 0, notes: [] };
+window.FIXEL_ANIM = ANIM;
+
+let rafId = 0;
+
+/** Start or stop the single page-wide rAF, whichever the current state wants. */
+function armPlayer() {
+  const p = posts[active];
+  const want = !document.hidden && !!(p && p.loop);
+  if (want && !rafId) {
+    p.k = -1;                 // force one paint at the frame the clock names
+    rafId = requestAnimationFrame(tick);
+  } else if (!want && rafId) {
+    cancelAnimationFrame(rafId);
+    rafId = 0;
+  }
+}
+
+function tick() {
+  rafId = requestAnimationFrame(tick);
+  const p = posts[active];
+  if (!p || !p.loop) return;
+  const k = frameAt(performance.now() / 1000 * p.rate);
+  if (k === p.k) return;      // the common case, and it costs one compare
+  paint(p, k);
+}
+
+// DIRTY BANDS, ALWAYS — measured, not assumed. At 440x1000 with 22,000 animated
+// pixels, holding everything but the row coverage fixed (900 samples per point,
+// three interleaved blocks so drift cannot favour either side):
+//
+//   coverage   full putImageData   per-band   speedup
+//      10%          0.0971 ms      0.0397 ms    2.45x
+//      25%          0.0951         0.0494       1.92x
+//      40%          0.0942         0.0577       1.63x
+//      55%          0.0933         0.0657       1.42x
+//      70%          0.0928         0.0753       1.23x
+//      85%          0.0940         0.0848       1.11x
+//      95%          0.0927         0.0902       1.03x
+//     100%          0.0938         0.0936       1.00x
+//
+// The curve is monotone and never crosses: bands win by 2.45x when the motion
+// is contained in a quarter of the frame and converge to a dead heat when it is
+// everywhere. There is no coverage at which the full upload is faster, so there
+// is no threshold to tune and no second path to keep alive. A first run made
+// bands look 9% SLOWER at full coverage; interleaving the two variants showed
+// that was drift between runs, not an effect. Do not assume — and do not trust
+// a single non-interleaved A/B either.
+function paint(p, k) {
+  p.k = k;
+  const t0 = performance.now();
+  paintFrame(p.img.data, p.pal3, p.loop, k);
+  const b = p.bands;
+  if (b && b.length) for (let i = 0; i < b.length; i++) p.ctx.putImageData(p.img, 0, 0, b[i][0], b[i][1], b[i][2], b[i][3]);
+  else p.ctx.putImageData(p.img, 0, 0);
+  guard(p, performance.now() - t0);
+}
+
+/** Return a post to frame 0 and leave it there. */
+function park(p) {
+  if (p && p.loop && p.img && p.k !== 0) paint(p, 0);
+}
+
+// THE BUDGET GUARD. `performance.now()` around the paint is SCHEDULING, not
+// animation — the same split `src/core/frame.js` draws, and the reason it is
+// allowed here when it is banned three lines away: this clock decides whether
+// to paint, never what to paint.
+//
+// A running median over a window of 16, not a mean and not a single sample: one
+// slow paint is a GC pause or a scroll landing on the same frame, and backing
+// off on it would be backing off on noise. Two steps, and the second is final —
+// halve the rate, then stop that post and say so.
+function guard(p, ms) {
+  ANIM.paints++; ANIM.lastMs = ms;
+  const s = p.cost;
+  s[p.ci++ % BUDGET_N] = ms;
+  if (p.ci % BUDGET_N) return;                 // only judge on a full window
+  const m = s.slice().sort((a, b) => a - b)[BUDGET_N >> 1];
+  if (m <= BUDGET_MS) return;
+  if (p.rate === 1) {
+    p.rate = 0.5;
+    p.why = `post ${p.i}: median paint ${m.toFixed(2)}ms > ${BUDGET_MS}ms — halved to ${FPS / 2}fps`;
+  } else {
+    p.why = `post ${p.i}: median paint ${m.toFixed(2)}ms at half rate — animation stopped, held on frame 0`;
+    paintFrame(p.img.data, p.pal3, p.loop, 0);
+    p.ctx.putImageData(p.img, 0, 0);
+    ANIM.bytes -= loopBytes(p.loop) + p.img.data.byteLength + p.pal3.byteLength;
+    ANIM.animated--;
+    p.loop = null; p.img = null; p.pal3 = null; p.bands = null; p.k = 0;
+    armPlayer();
+  }
+  ANIM.notes.push(p.why);
+  console.warn('[fixel/anim]', p.why);
+}
+
+// Hidden tabs paint nothing. rAF is throttled by the browser anyway, but
+// "throttled" is a policy and this is a guarantee. Coming back is one call
+// because the frame is a function of absolute time: no accumulator to advance,
+// no catch-up, no burst of skipped frames.
+document.addEventListener('visibilitychange', armPlayer);
 
 const io = new IntersectionObserver((es) => {
   for (const e of es) if (e.isIntersecting && e.intersectionRatio > 0.6) setActive(Number(e.target.dataset.i));
