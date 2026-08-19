@@ -432,6 +432,59 @@ round-4 prerequisite. If it brings our ink share into the reference's 0.05-0.10
 band, the separator dies at source and no normaliser is needed. Re-measure the
 leak on post-fix output first, then decide.
 
+### THE QUESTION NOBODY ASKED: does the cure destroy the patient?
+
+At the K where the leak closes, is there enough colour left to judge craft?
+Measured **inside the real median-cut normaliser**, mean pixel-mass-weighted L1
+shift per side:
+
+| K | 16 | **24** | 32 | 48 | 64 | 96 | 128 | 192 |
+|---|---|---|---|---|---|---|---|---|
+| err REF | 49.6 | **40.7** | 36.0 | 26.6 | 21.4 | 15.0 | 12.3 | 8.4 |
+| err FIX | 44.8 | **39.2** | 34.2 | 27.0 | 22.4 | 16.1 | 12.4 | 7.2 |
+| P95 REF | 149 | **123** | 113 | 81 | 70 | 49 | 42 | 28 |
+| slots REF | 16 | **24** | 32 | 47 | 61 | 87 | 107 | 146 |
+
+**At the closing threshold K<=24 the reference collapses from ~450 distinct
+colours to 24 slots**, with a mean shift near 40 L1 (about 13 per channel) and a
+P95 of 123 (about 41 per channel for the worst 5% of pixels). A judge shown
+those pairs is not judging the artworks; it is judging two heavily posterised
+derivatives. **The remedy has a fidelity floor, and on this corpus there may be
+no K that both closes the leak and leaves the craft signal intact.**
+
+That alone retires the normaliser as an approach, not merely as a tuning.
+
+### Asymmetry: reported by k-means, NOT reproduced by median cut
+
+An independent k-means run found the distortion biased against the reference at
+**all eight** K values (+5.71 to +1.49), which would hand us an unearned craft
+advantage — "a remedy for the leak that biases the judgment it was built to
+protect is worse than no remedy, because the bias is invisible in the leak
+metric it was tuned against."
+
+**Measured in this pipeline, that bias does not reproduce.** Median cut gives
++4.76, +1.52, +1.84, **-0.40, -0.99, -1.05, -0.09**, +1.20 — small and
+sign-changing. So the asymmetry claim is **pipeline-specific and is not asserted
+here.** The fidelity argument kills the normaliser on its own and does not need
+it.
+
+This is the fourth independent demonstration that quantiser behaviour does not
+travel: k-means closed at K=64, its median cut at K<=64, this median cut at
+K<=24, and now the asymmetry sign differs too. **Assert inside the real
+pipeline, never inherit a threshold.**
+
+### Two acceptance criteria, if the normaliser is ever revived
+
+Not optional, and neither is "does the leak close":
+
+1. **FIDELITY** — mean and P95 colour shift, and slots actually used, on both sides.
+2. **ASYMMETRY** — the per-side difference, measured in the pipeline being shipped.
+
+A sweep that only checks whether the leak closes will happily select a K that
+closes it by destroying the reference. **That is a metric selecting for its own
+success** — the same failure as the tempo estimator returning the centre of its
+own search window.
+
 ### THE LIMIT THIS ALL RUNS INTO: n_reference = 1
 
 All four reference crops come from one file. **So the entire leak battery
