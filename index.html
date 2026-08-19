@@ -47,11 +47,103 @@
     border-radius:2px;font:inherit;font-weight:600;letter-spacing:.1em;cursor:pointer}
   #hud{position:fixed;top:calc(8px + env(safe-area-inset-top));left:0;right:0;z-index:10;
     text-align:center;font-size:10px;color:#6a6d75;letter-spacing:.14em;pointer-events:none}
+  /* The one control outside a post. It sits in the HUD row, which is otherwise
+     pointer-events:none, so the button re-enables pointer events for itself
+     only and the feed keeps every pixel of its own scroll area. */
+  #aboutBtn{position:fixed;top:calc(6px + env(safe-area-inset-top));right:12px;z-index:11;
+    background:none;border:0;color:#6a6d75;font:inherit;font-size:10px;letter-spacing:.14em;
+    cursor:pointer;padding:4px 6px;pointer-events:auto}
+  #aboutBtn:active{color:#e8a33d}
+  #about{position:fixed;inset:0;z-index:30;background:#0c0d10;overflow-y:auto;
+    display:none;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  #about.on{display:block}
+  #about .wrap{max-width:560px;margin:0 auto;
+    padding:calc(20px + env(safe-area-inset-top)) 22px calc(48px + env(safe-area-inset-bottom))}
+  #about h1{font-size:13px;letter-spacing:.42em;font-weight:500;color:#e8a33d;margin-bottom:24px}
+  #about h2{font-size:10px;letter-spacing:.18em;color:#e8a33d;opacity:.85;
+    margin:26px 0 8px;font-weight:500}
+  #about p{font-size:12px;line-height:1.75;color:#b9b7b2;margin-bottom:9px}
+  #about a{color:#5ec269}
+  #about .note{color:#6a6d75;font-size:11px;margin-top:28px;line-height:1.7}
+  #aboutClose{position:fixed;top:calc(6px + env(safe-area-inset-top));right:12px;z-index:31;
+    background:none;border:0;color:#e8e6e1;font:inherit;font-size:16px;cursor:pointer;padding:4px 8px}
 </style>
 </head>
 <body>
   <div id="feed"></div>
   <div id="hud">FIXEL</div>
+  <button id="aboutBtn">ABOUT</button>
+  <div id="about">
+    <button id="aboutClose" title="close">&times;</button>
+    <div class="wrap">
+      <h1>A B O U T</h1>
+
+      <h2>WHAT FIXEL IS</h2>
+      <p>Fixel is an endless feed of pictures. Each picture shows a city, a shore, a desert or a
+      highland. A program draws every picture. The same program also writes the music for every
+      picture. Fixel contains no stored pictures and no stored sound.</p>
+
+      <h2>THE SEED</h2>
+      <p>Each post has one number. This number is the seed. The seed controls the picture and the
+      music together. The same seed always gives the same post. The address bar shows the seed of
+      the post on the screen. Copy the address to keep a post.</p>
+
+      <h2>WHO MADE FIXEL</h2>
+      <p>A person wrote one short instruction. The instruction asked for a feed of pixel-art scenes
+      with music. Software agents did all of the other work. The agents wrote the program, the tests
+      and the notes. The person did not write the program code.</p>
+
+      <h2>THE STANDARD</h2>
+      <p>The agents compared Fixel with a real artwork. The artwork is an isometric picture from the
+      studio eBoy. The agents measured the artwork first. The agents then measured the output of the
+      program. The two sets of numbers show where the program is different.</p>
+
+      <h2>THE TEST</h2>
+      <p>The test is a comparison of two small pictures. A judge sees one part of the artwork and one
+      part of the program output. The judge does not know which picture is which. The judge selects
+      the better picture. The agents repeat the test with the two pictures in the opposite order. A
+      new judge does each order.</p>
+
+      <h2>THE RESULT</h2>
+      <p>The program lost every test. In one round, eight judges made eight selections. All eight
+      judges selected the artwork. Each judge also identified the program correctly. This result is
+      the most useful result in the project. The judges gave their reasons, and the agents then
+      corrected the program.</p>
+
+      <h2>THE NUMBERS ARE NOT A SCORE</h2>
+      <p>The agents wrote 60 measurements for the pictures. A later test showed a problem. The
+      measurements put the program above a second real artwork. A measurement that does this
+      measures the wrong property. The agents stopped all use of the total as a score. The agents
+      keep the measurements as a check for large faults.</p>
+
+      <h2>A FAULT THAT STAYED HIDDEN</h2>
+      <p>The program draws each person and each tree as a small picture. One function put these
+      pictures on the screen. The function used a fractional number for the position. A typed array
+      ignores a fractional position. The function therefore discarded every small object, and it
+      reported success.</p>
+      <p>Three rounds of judges saw the result. The judges called the small objects bad art. The
+      agents found the true cause only after they counted the calls to the function. The agents now
+      count the calls before they accept an explanation.</p>
+
+      <h2>THE MOVEMENT</h2>
+      <p>Each post moves a little. The water moves. The trees move. The people move. Each movement
+      is one or two pixels. The program draws eight pictures for each post, and it shows the eight
+      pictures in a loop.</p>
+
+      <h2>TIME IS A NUMBER</h2>
+      <p>Most animations use a clock. A clock gives a different result at each moment. Fixel uses a
+      frame number in place of a clock. The frame number is a whole number from 0 to 7. The same
+      seed and the same frame number always give the same pixels.</p>
+
+      <h2>THE SOURCE</h2>
+      <p>The source code is public. Read it at
+      <a href="https://github.com/Syrul/Fixel" target="_blank" rel="noopener">github.com/Syrul/Fixel</a>.</p>
+
+      <p class="note">This page uses ASD-STE100 Simplified Technical English. This standard permits
+      one meaning for each word. It also limits the length of a sentence. The short sentences are
+      deliberate.</p>
+    </div>
+  </div>
   <div id="start">
     <h1>F I X E L</h1>
     <p>An endless feed of isometric scenes. Every post — the picture and its chiptune — is generated from one number.</p>

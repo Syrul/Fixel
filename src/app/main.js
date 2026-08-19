@@ -68,8 +68,27 @@ function seedAt(i) {
 // the only enlargement in the path. 1600x1100 is not baked in anywhere — the
 // generator takes w/h as parameters and round 4 kept view scale separate.
 function frameSize() {
-  const w = Math.min(Math.round(window.innerWidth), 460);
-  const h = Math.round(w * (window.innerHeight / window.innerWidth));
+  // A VIEWPORT OF ZERO MUST NOT REACH THE GENERATOR, and it used to.
+  //
+  // This runs at module evaluation. A browser that has not laid the page out
+  // yet reports `innerWidth` as 0 — a background tab, a prerender, a restored
+  // session — and the old arithmetic then produced `{ w: 0, h: NaN }`. Both are
+  // falsy, so `makeStage`'s `opts.w || 1600` fell through to the generator's
+  // DESKTOP default and every post rendered at 1600x1100.
+  //
+  // Measured when it fired: 7,040,000 bytes of RGBA per post against the
+  // 1,218,000 a phone frame costs, four materialised posts at 28 MB instead of
+  // 4.9 MB, and four times the render time — with the phone shape, which is the
+  // whole product, silently gone. Nothing failed and nothing warned.
+  //
+  // So an unmeasurable viewport falls back to a PHONE, not to a desktop canvas.
+  // The resize listener corrects `FRAME` as soon as a real size arrives; posts
+  // already built keep the fallback, which is the right shape and the right
+  // order of magnitude even when it is not the exact size.
+  const iw = Math.round(window.innerWidth) || 390;
+  const ih = Math.round(window.innerHeight) || 844;
+  const w = Math.min(iw, 460);
+  const h = Math.round(w * (ih / iw));
   return { w, h: Math.min(h, 1000) };
 }
 let FRAME = frameSize();
@@ -286,11 +305,15 @@ const ANIM = { animated: 0, bytes: 0, paints: 0, lastMs: 0, notes: [] };
 window.FIXEL_ANIM = ANIM;
 
 let rafId = 0;
+let aboutOpen = false;
 
 /** Start or stop the single page-wide rAF, whichever the current state wants. */
 function armPlayer() {
   const p = posts[active];
-  const want = !document.hidden && !!(p && p.loop);
+  // The about page stops the animation as well. It covers the whole screen, so
+  // a post that kept moving behind it would be work nobody can see — and the
+  // still-post-costs-zero property is the reason the rAF is armed at all.
+  const want = !document.hidden && !aboutOpen && !!(p && p.loop);
   if (want && !rafId) {
     p.k = -1;                 // force one paint at the frame the clock names
     rafId = requestAnimationFrame(tick);
@@ -435,3 +458,24 @@ document.getElementById('go').onclick = () => {
 };
 
 addEventListener('resize', () => { FRAME = frameSize(); }, { passive: true });
+
+// ---- about ------------------------------------------------------------------
+// A static panel, shown and hidden with one class. It schedules no rAF, reads no
+// clock and touches neither the URL nor the seed walk — `?seed=N` round-trips
+// exactly as it did before this panel existed. The feed keeps its scroll
+// position because nothing unmounts it; the panel simply covers it.
+{
+  const panel = document.getElementById('about');
+  const show = (on) => {
+    aboutOpen = on;
+    panel.classList.toggle('on', on);
+    // The feed must not scroll under the panel on a phone, where a drag that
+    // starts on the panel would otherwise chain to the list behind it.
+    document.getElementById('feed').style.visibility = on ? 'hidden' : '';
+    if (on) panel.scrollTop = 0;
+    armPlayer();
+  };
+  document.getElementById('aboutBtn').onclick = () => show(true);
+  document.getElementById('aboutClose').onclick = () => show(false);
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && aboutOpen) show(false); });
+}
