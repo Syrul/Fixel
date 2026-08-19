@@ -120,8 +120,12 @@ function organic(R, sqN, variant, shift = 0) {
  * of blades at 2*pi/n would have produced a rosette with n-fold symmetry, which
  * at 14px reads as a snowflake.
  */
-function spray(R, n, variant, sqN) {
-  const key = 100000000 + ((R * 32 + n) * 16 + sqN) * 64 + variant;
+function spray(R, n, variant, sqN, sec = 0, wid = 0) {
+  // EVERY PARAMETER THAT CHANGES A PIXEL IS IN THE KEY, in its own fixed-width
+  // slot. Slots: variant < 64, sec < 8 < 16, wid <= SCRUB_GUST_MAX = 15 < 16.
+  // The 100000000 offset keeps the range disjoint from `organic`'s keys, which
+  // top out around 1.6M; this one tops out around 187M.
+  const key = 100000000 + (((((R * 32 + n) * 16 + sqN) * 64 + variant) * 16 + sec) * 16 + wid);
   const had = MASKS.get(key);
   if (had) return had;
   const sq = sqN / 10;
@@ -133,13 +137,21 @@ function spray(R, n, variant, sqN) {
   const put = (i, j, c) => {
     const jj = j + BASE, ii = i + RX;
     if (jj < 0 || jj >= g.length || ii < 0 || ii >= g[0].length) return;
-    if (g[jj][ii] === '.' || c === 'l') g[jj][ii] = c;
+    if (g[jj][ii] === '.' || c === 'l' || c === 'L') g[jj][ii] = c;
   };
+  // The lit wedge. `SCRUB_GUST[0]` is above 1, so `wid = 0` lights nothing and
+  // this function's output is byte-for-byte what it emitted before the sector
+  // existed — which is what every caller passes at frame 0 and the only thing
+  // the still path ever passes.
+  const G = GUSTS[sec & 7], GX = G[0], GY = G[1];
+  const COS_HALF = SCRUB_GUST[wid];
   const RC = -0.7373688, RS = 0.6754904;            // ~137.5 degrees
   let vx = 1, vy = 0.18;
   for (let k = 0; k < n; k++) {
     const nn = Math.sqrt(vx * vx + vy * vy) || 1;
     let bx = vx / nn, by = vy / nn;
+    // ONE DECISION PER BLADE, taken from its own direction before it is drawn.
+    const core = bx * GX + by * GY > COS_HALF ? 'L' : 'l';
     const len = R * (0.68 + 0.44 * u(k + 3));
     // the blade arcs over: its tip falls away from the root
     const droop = 0.35 + 0.75 * u(k + 40);
@@ -150,7 +162,7 @@ function spray(R, n, variant, sqN) {
       const ix = Math.round(bx * rr);
       const iy = Math.round((by * rr - rr * 0.92 + t * t * droop * len * 0.55) * sq);
       const wdt = t > 0.72 ? 0 : 1;
-      for (let q = -wdt; q <= wdt; q++) put(ix + q, iy, q === 0 ? 'l' : 'm');
+      for (let q = -wdt; q <= wdt; q++) put(ix + q, iy, q === 0 ? core : 'm');
       px = ix; py = iy;
     }
     put(px, py, 'x');
@@ -166,10 +178,14 @@ function spray(R, n, variant, sqN) {
 
 
 // ---------------------------------------------------------------------------
-// HOW MUCH THE SCRUB MOVES, IN SCREEN PIXELS. One grep finds every amplitude in
-// this file; the unit is a whole screen pixel of displacement at the extreme of
-// the loop. Set at 0 in this commit: the plumbing lands first and is provably
-// inert, then the motion lands on top of it.
+// HOW MUCH THE SCRUB MOVES. One grep finds every amplitude in this file.
+//
+// TWO UNITS, AND THEY ARE NOT INTERCHANGEABLE. A displacement is a whole screen
+// pixel travelled at the extreme of the loop, and it is available only to a
+// form with an interior to slide — the saltbush. A tussock has no interior, so
+// its amplitudes are a TONE (whole rungs of its own colour family) and a SECTOR
+// (the wedge of blades that takes that tone), and neither is a distance. See
+// `TUSSOCK_LEAN_PX` for why the distinction is the whole finding here.
 //
 // The desert is the biome with the least headroom here. Orphan 1px islands are
 // already over on three seeds in six, and scrub is exactly the kind of small
@@ -177,16 +193,34 @@ function spray(R, n, variant, sqN) {
 // does not move.
 
 /**
- * A bunchgrass tussock, and the shrub on a nebkha: ZERO, and it is a reasoned
- * exclusion rather than an omission.
+ * A bunchgrass tussock, and the shrub on a nebkha: ZERO, and the exclusion
+ * still stands — but only for the half of it that was ever true.
  *
- * A sprite may only animate its COLOURS — see `blob` in
- * `src/gen/props/nature.js` for the measurement that establishes it. A tussock
- * is a spray of tapered blades one to three pixels wide: it has no interior to
- * displace, so every colour it could change is a loose pixel or two on a blade,
- * and loose pixels are the one thing that may not ship. The motion a tussock
- * actually has is its blades LEANING, which moves the silhouette. It waits on
- * the core change in the report.
+ * WHAT STAYS. A tussock has no interior to displace and the motion it actually
+ * has is its blades LEANING, which moves the silhouette, which `blitAnim`
+ * cannot represent. That needs the core change and is not in this round.
+ *
+ * WHAT WAS WRONG, AND IT WAS THE CONCLUSION. This comment used to read that
+ * "every colour it could change is a loose pixel or two on a blade", and take
+ * that as ruling out colour motion as well. Built and measured, it is false. A
+ * blade's core IS one pixel wide — but every blade's core RUNS INTO THE ROOT,
+ * so a wedge of blades lit together is one connected fan, not a scatter. Six
+ * desert seeds, tussocks rendering alone with `SALTBUSH_SHIFT_PX` zeroed so
+ * their coherence could not dilute the ratio: 11.8-15.4% of moving pixels in
+ * 1-2px specks against a 25% ceiling, largest island 35-50 px, which is two to
+ * four blade cores joined at the root. That is a clump. The blades were never
+ * too thin; the cores were never separate.
+ *
+ * So the tussock now animates its COLOUR, on the same sector that runs round a
+ * palm crown, and its lean stays at zero for the reason above.
+ *
+ * ONE MORE THING THIS COMMIT FOUND, AND IT WAS SILENT. `tussock` and `nebkha`
+ * called `spray(R, n, variant, sqN, m)` — a FIFTH argument to a function with
+ * four parameters. The lean was discarded on the floor and was never in the
+ * cache key. Harmless while the constant was 0, and it would have shipped as
+ * "the tussocks do not move" the moment it was not, which is the failure mode
+ * this file's staging comment claims to have ruled out. Exactly the class of
+ * bug the crown cache key was audited for; it was hiding one file over.
  */
 const TUSSOCK_LEAN_PX = 0;
 /**
@@ -195,6 +229,28 @@ const TUSSOCK_LEAN_PX = 0;
  * has something to move. Two, for the reason `CANOPY_SHIFT_PX` is two.
  */
 const SALTBUSH_SHIFT_PX = 3;
+/**
+ * HOW DIFFERENT A LIT BLADE IS FROM AN UNLIT ONE, in rungs of the plant's own
+ * colour family. One rung UP, and both directions were built and rendered.
+ *
+ * They move IDENTICAL PIXELS — six desert seeds, 942-1673 moving px, 11.8-15.4%
+ * specks, largest island 35-50, the same figures to the digit — because which
+ * blades change is not a function of what they change to. They do not look
+ * alike. One rung DOWN lands the blade core on `f.r`, which is the tone
+ * `massMap` already gives the blade's own EDGE, so a lit blade loses its own
+ * line and the tuft reads as uniform in every frame. One rung up lands on
+ * `f.t`, which is in neither, so the blade keeps all three of its tones.
+ *
+ * Same finding, same reason, on the palm in `src/gen/props/nature.js`. It is a
+ * property of the ladder rather than of either plant: the rung below a core is
+ * always the rung its edge is drawn in.
+ *
+ * The floor is structural, not tuned. A rung is one whole tone applied to one
+ * whole blade, so either the blade changes colour or nothing does — there is no
+ * amplitude between "no motion" and "one blade", and therefore no setting at
+ * which only some pixels of a blade cross a threshold.
+ */
+const SCRUB_LIT_STEPS = 1;
 /** One saltbush in this many moves at all. The rest are the still desert. */
 const SCRUB_MOVES_ONE_IN = 3;
 /**
@@ -203,6 +259,60 @@ const SCRUB_MOVES_ONE_IN = 3;
  * that decides a pixel may use a transcendental (see the file header).
  */
 const GUST_COS = 0.50;
+/**
+ * The SCRUB's lit sector, as a cosine of its half-angle, one entry per step of
+ * `wid`. A table of literals rather than a call to `Math.cos`, because nothing
+ * in this file that decides a pixel may use a transcendental (see the header).
+ *
+ * Entry 0 is deliberately ABOVE 1: no unit vector's dot product can exceed it,
+ * so `wid = 0` lights nothing at all and is the still tussock. Entry 4 is 0.50,
+ * the same wedge `GUST_COS` cuts and the same one a palm crown uses — a clump
+ * means one thing in this generator. The tail is padded to 16 so `?anim=`
+ * reaching gain 8 clamps into a full circle rather than off the end of the
+ * table or, worse, past a half turn where a cosine threshold stops widening a
+ * sector and starts cutting a hole in it.
+ */
+const SCRUB_GUST = [
+  2,          // wid 0 — nothing
+  0.9659258,  // 15 deg
+  0.8660254,  // 30
+  0.7071068,  // 45
+  0.5,        // 60 — the peak at gain 1
+  0.2588190,  // 75
+  0,          // 90
+  -0.2588190, // 105
+  -0.5,       // 120
+  -0.7071068, // 135
+  -0.8660254, // 150
+  -0.9659258, // 165
+  -1, -1, -1, -1,   // 180 and past it: the whole tussock
+];
+/**
+ * Which entry of the table the gust reaches at its PEAK, at gain 1: 4 is 60
+ * degrees. Swept at 2 / 3 / 4 / 6 — 30 / 45 / 60 / 90 degrees — on six desert
+ * seeds with the tussocks rendering alone:
+ *
+ *   30 deg   1085 px median   largest island  31-39
+ *   45 deg   1623 px median   largest island  35-50
+ *   60 deg   1623 px median   largest island  35-50   <- shipped
+ *   90 deg   2260 px median   largest island  48-58
+ *
+ * 45 AND 60 ARE THE SAME PICTURE, TO THE PIXEL, and that is a fact about this
+ * plant rather than a coincidence. A tussock's blade directions come from ONE
+ * fixed rotor near the golden angle applied to one fixed start vector, so every
+ * tussock with the same blade count has the same set of directions, and the
+ * sector is pointed along one of eight fixed `GUSTS` vectors. The dot products
+ * therefore take a small discrete set of values, and there is simply no blade
+ * lying between 30 and 45 degrees of any sector centre to be gained. Widening
+ * the wedge does not widen the effect continuously; it steps.
+ *
+ * 60 is kept anyway, because it is what `GUST_COS` means next door and what a
+ * palm crown uses, and because 90 costs a third more moving pixels for an
+ * island that is starting to be the whole tussock.
+ */
+const SCRUB_GUST_STEPS = 4;
+const SCRUB_GUST_MAX = 15;
+const SCRUB_SECTORS = 8;            // the GUSTS table's length: one per frame
 const GUSTS = [
   [1, 0], [0.7071068, 0.7071068], [0, 1], [-0.7071068, 0.7071068],
   [-1, 0], [-0.7071068, -0.7071068], [0, -1], [0.7071068, -0.7071068],
@@ -245,6 +355,14 @@ const stepPx = (v, amp) => {
   a = a < 0 ? -Math.round(-a) : Math.round(a);
   return a > DISP_MAX ? DISP_MAX : a < -DISP_MAX ? -DISP_MAX : a;
 };
+// The lit sector's WIDTH, in whole steps, off the same anchored triangle.
+// Unsigned: a sector has no direction, so a negative half-angle is not a wedge
+// pointing the other way, it is the same wedge. Still exactly zero at frame 0
+// for every instance, still periodic with period 1.
+const gustPx = (v, amp) => {
+  const a = Math.round(amp * (v < 0 ? -v : v));
+  return a > SCRUB_GUST_MAX ? SCRUB_GUST_MAX : a < 0 ? 0 : a;
+};
 
 /**
  * This instance's phase offset, or -1 when it is one of the ones that holds
@@ -273,6 +391,45 @@ function poseSet(A, off, amp, make) {
   const g = A.gain === undefined ? 1 : A.gain;
   const out = new Array(A.frames);
   for (let j = 0; j < A.frames; j++) out[j] = make(stepPx(swing(A.frame + j, off), amp * g));
+  return out;
+}
+
+/**
+ * K sprays, one per frame — `poseSet`'s sibling for a tussock, which animates a
+ * COLOUR over a fixed silhouette rather than a displacement, and so needs three
+ * numbers per pose where a saltbush needs one. Same shape as `crownPoses` in
+ * `src/gen/props/nature.js`, and deliberately so: the palm and the scrub are
+ * the same problem, a thin radiating form that cannot move its outline.
+ *
+ * The sector centre advances one `GUSTS` entry per frame — a WHOLE TURN over
+ * the loop, so the wrap step is the same size as every other step — and the
+ * width comes off `swing`, so it is zero at frame 0 for every instance and the
+ * frame-0 tussock IS the still tussock, character for character.
+ */
+function sprayPoses(A, off, make) {
+  // TUSSOCK_LEAN_PX IS ASSERTED HERE RATHER THAN MULTIPLIED, and that is the
+  // whole point of reading it in this function. `spray` has no displacement
+  // parameter, because a lean moves the silhouette and that is the excluded
+  // motion — so there is nothing for an amplitude to scale, and a constant that
+  // is passed somewhere it cannot act is decoration. The code this replaced
+  // handed it to a four-parameter function as a fifth argument and JavaScript
+  // discarded it without a word; the day someone set it to 2 the tussocks would
+  // have gone on not moving and nothing would have said so. A throw is what
+  // `drawTerrain` does with its own silent-hole guard, for the same reason.
+  if (TUSSOCK_LEAN_PX !== 0) {
+    throw new Error('TUSSOCK_LEAN_PX is not implemented: a spray cannot displace ' +
+      'its blades without moving its silhouette, which Canvas.blitAnim cannot ' +
+      'represent. See the comment on the constant.');
+  }
+  if (!A || A.frames < 2 || off < 0) return [make(0, 0)];
+  const g = A.gain === undefined ? 1 : A.gain;
+  const m = Math.round(off * FRAMES);
+  const out = new Array(A.frames);
+  for (let j = 0; j < A.frames; j++) {
+    const k = A.frame + j;
+    out[j] = make(((k + m) % SCRUB_SECTORS + SCRUB_SECTORS) % SCRUB_SECTORS,
+      gustPx(swing(k, off), SCRUB_GUST_STEPS * g));
+  }
   return out;
 }
 
@@ -306,7 +463,23 @@ function putPoses(cv, x0, y0, ps, map, d, A) {
   else cv.blit(x0, y0, ps[0], map, df);
 }
 
-const massMap = (C, f) => ({ d: C.black, a: f.t, l: f.l, m: f.r, x: f.k, '.': -1 });
+const massMap = (C, f, lit) => ({
+  d: C.black, a: f.t, l: f.l, m: f.r, x: f.k,
+  // `L` is the LIT blade core and defaults to the unlit one, so every caller
+  // without a lit tone maps it to exactly what it maps `l` to.
+  L: lit === undefined ? f.l : lit, '.': -1,
+});
+
+/**
+ * The lit tone: `steps` rungs up the plant's OWN colour family. A rung off the
+ * scene's ladder rather than a minted lighter green, so it varies with the
+ * scene's light like every other tone here and costs the palette nothing.
+ */
+function litTone(f, steps) {
+  const ramp = [f.k, f.r, f.l, f.t];       // the family's own ladder, dark to light
+  const i = 2 + steps;                     // `l`, the blade core, is rung 2
+  return ramp[i < 0 ? 0 : i > 3 ? 3 : i];
+}
 
 // ---------------------------------------------------------------------------
 // Ground-level scatter.
@@ -334,10 +507,11 @@ export function boulder(cv, iso, C, st, x, y, z, f, R) {
 export function tussock(cv, iso, C, st, x, y, z, f, R, A) {
   const n = st.int(7, 11), variant = st.int(0, 15), sqN = st.int(6, 8);
   const off = movePhase(x, y, 0x7ae413, SCRUB_MOVES_ONE_IN);
-  const ps = poseSet(A, off, TUSSOCK_LEAN_PX, (m) => spray(R, n, variant, sqN, m));
+  const lit = litTone(f, Math.round(SCRUB_LIT_STEPS * (A && A.gain !== undefined ? A.gain : 1)));
+  const ps = sprayPoses(A, off, (sec, wid) => spray(R, n, variant, sqN, sec, wid));
   const p = projR(iso, x, y, z);
   putPoses(cv, p[0] - (ps[0][0].length >> 1), p[1] - ps[0].length + 3, ps,
-    massMap(C, f), dep(iso, x, y, z, 0.9), A);
+    massMap(C, f, lit), dep(iso, x, y, z, 0.9), A);
 }
 
 /**
@@ -358,9 +532,10 @@ export function nebkha(cv, iso, C, st, x, y, z, sandF, bushF, R, A) {
     dep(iso, x, y, z, 0.5));
   const n = st.int(6, 9), variant = st.int(0, 15), sqN = st.int(7, 9);
   const off = movePhase(x, y, 0x2b90cf, SCRUB_MOVES_ONE_IN);
-  const ps = poseSet(A, off, TUSSOCK_LEAN_PX, (m) => spray(R, n, variant, sqN, m));
+  const lit = litTone(bushF, Math.round(SCRUB_LIT_STEPS * (A && A.gain !== undefined ? A.gain : 1)));
+  const ps = sprayPoses(A, off, (sec, wid) => spray(R, n, variant, sqN, sec, wid));
   putPoses(cv, p[0] - (ps[0][0].length >> 1), p[1] - ps[0].length - 1, ps,
-    massMap(C, bushF), dep(iso, x, y, z + 1.2, 1.2), A);
+    massMap(C, bushF, lit), dep(iso, x, y, z + 1.2, 1.2), A);
 }
 
 /** A low woody saltbush, on pavement and pan margin. */
