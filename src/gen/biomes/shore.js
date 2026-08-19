@@ -281,7 +281,16 @@ export function paintShore(stage) {
   // and of the 2:1 lattice at the other, and the world bearing is solved back
   // out of it. Every band, every terrace edge and the whole waterline inherit
   // that bearing.
-  const m = cs.range(0.28, 0.60) * (cs.bool(0.5) ? 1 : -1);
+  // TWO BANDS, AND THE GAP BETWEEN THEM IS THE LATTICE. A coast at screen slope
+  // exactly 0.5 is a 2:1 lattice line, and so — since the perpendicular's
+  // screen slope is -1/(4m) — is everything that runs down the beach from it:
+  // one seed came out with the waterline, the promenade, the sea wall AND every
+  // groyne all on the lattice at once, and the whole frame read as ruled paper.
+  // A shoreline is the best chance this generator has at the non-conforming
+  // area `docs/BAR.md` measures us twenty times short on; it must not land
+  // there by accident.
+  const m = (cs.bool(0.5) ? cs.range(0.24, 0.40) : cs.range(0.62, 0.92))
+    * (cs.bool(0.5) ? 1 : -1);
   const cx0 = (2 * m + 1) / 2, cy0 = (2 * m - 1) / 2;
   const cn = Math.sqrt(cx0 * cx0 + cy0 * cy0);
   const cxu = cx0 / cn, cyu = cy0 / cn;      // alongshore unit vector
@@ -721,6 +730,292 @@ export function paintShore(stage) {
   // ---------------------------------------------------------------- the hero
   const PIER = pier(stage, SH);
   SH.pier = PIER;
+
+  // ------------------------------------------------------- the organising line
+  SH.prom = promenade(stage, SH, PIER);
+}
+
+// ---------------------------------------------------------------------------
+// THE ORGANISING LINE.
+//
+// A city's line is a street grid, which is a decision. A desert's is a track,
+// which is where the ground lets a lorry go. A COAST'S LINE IS THE COAST — the
+// promenade, the sea wall, the row of huts and the groynes all run along one
+// contour of the exposure field, because that is the only direction on a shore
+// along which nothing changes. So the line is not walked by least cost here; it
+// is a CONTOUR FOLLOWER, stepping alongshore and correcting back toward its
+// target exposure, which means it bends into every bay and out around every
+// headland and is off the 2:1 lattice at every point.
+//
+// And the groynes are its opposite: the one thing on a beach that runs straight
+// down the exposure gradient, from the berm out into the surf. Between them
+// they put a cross-hatch of real structure over the flattest surface in the
+// biome, and every cell of it is closed.
+// ---------------------------------------------------------------------------
+
+function contourWalk(SH, x0, y0, targetE, sign, steps, len) {
+  const pts = [];
+  let x = x0, y = y0;
+  for (let i = 0; i < steps; i++) {
+    pts.push([x, y]);
+    x += SH.cxu * len * sign; y += SH.cyu * len * sign;
+    // The correction is proportional and clamped, so the line leans into a bay
+    // over several steps rather than snapping across it. `eAt` is already in
+    // world units of cross-shore distance, so the error IS the correction.
+    let k = (targetE - SH.eAt(x, y)) * 0.5;
+    const lim = len * 0.85;
+    if (k > lim) k = lim; else if (k < -lim) k = -lim;
+    x += SH.nx * k; y += SH.ny * k;
+  }
+  return pts;
+}
+
+function promenade(stage, SH, PIER) {
+  const { C, cv, iso, rng, X0, X1, Y0, Y1, tag, tagRaw, vis } = stage;
+  const { T, nx, ny, cxu, cyu, eAt, MF, slope, E_DRY, E_BERM } = SH;
+  const st = rng.stream('prom');
+  const fs = rng.stream('promfolk');
+  const CB = localC(C, st, 4, 3);
+
+  const ePro = eAt(PIER.rx, PIER.ry);
+  const step = st.range(7.5, 10.5);
+  const half = Math.ceil(340 / step);
+  const back = contourWalk(SH, PIER.rx, PIER.ry, ePro, -1, half, step).reverse();
+  const fwd = contourWalk(SH, PIER.rx, PIER.ry, ePro, 1, half, step);
+  const pts = back.concat(fwd.slice(1));
+
+  // vertex normals, so the strip is continuous through a bend
+  const N = pts.length;
+  const per = [];
+  for (let i = 0; i < N; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(N - 1, i + 1)];
+    let ex = b[0] - a[0], ey = b[1] - a[1];
+    const L = Math.sqrt(ex * ex + ey * ey) || 1;
+    ex /= L; ey /= L;
+    per.push([-ey, ex]);
+  }
+
+  // The deck is level, and its height is the 0.82 quantile of the ground under
+  // it rather than the maximum: one dune hummock anywhere along a six-hundred
+  // unit line would otherwise lift the whole promenade onto a viaduct.
+  const zs = pts.map((q) => T.surfaceZ(q[0], q[1])).sort((a, b) => a - b);
+  const promZ = zs[Math.floor(zs.length * 0.82)] + st.range(0.5, 1.4);
+  const wallH = st.range(2.6, 4.2);
+  const hw = st.range(4.6, 6.6);
+
+  const pave = C.mk(C.pave._h + st.range(-14, 14), C.pave._s * st.range(0.4, 1.8),
+    Math.min(0.96, C.pave._L * st.range(0.82, 1.10)));
+  const kerb = C.mk(C.concrete._h + st.range(-14, 14), C.concrete._s * st.range(0.4, 1.8),
+    Math.min(0.95, C.concrete._L * st.range(0.78, 1.06)));
+  const stoneC = C.mk(C.stone._h + st.range(-12, 12), C.stone._s * st.range(0.5, 1.6),
+    Math.min(0.92, C.stone._L * st.range(0.72, 1.02)));
+
+  // Which side is seaward: the promenade's own normal points landward, so the
+  // sea wall is on -per if per agrees with n, and on +per otherwise.
+  const sgn = (per[0][0] * nx + per[0][1] * ny) > 0 ? -1 : 1;
+
+  const G = groundInv(iso, promZ);
+  const paveShade = (sx, sy) => {
+    const wx = G.ax * sx + G.bx * sy + G.cx;
+    const wy = G.ay * sx + G.by * sy + G.cy;
+    const ac = MF.one(wx, wy, 0) / slope - ePro;      // cross-shore offset
+    const al = wx * cxu + wy * cyu;
+    if (ac * sgn > hw - 1.4) return kerb.l;           // the seaward kerb band
+    if (ac * sgn > hw - 1.65) return kerb.k;
+    if (ac * sgn < -hw + 0.9) return kerb.r;          // the landward channel
+    const f = al / 11.5;
+    if (f - Math.floor(f) < 0.9 * G.q / 11.5) return pave.k;
+    const b = h3(Math.floor(f), 0, 0x2b) & 7;
+    const bay = b === 0 ? kerb : pave;
+    return (ac * sgn > 0) ? bay.t : bay.l;
+  };
+
+  for (let i = 0; i + 1 < N; i++) {
+    const a = pts[i], b = pts[i + 1], pa = per[i], pb = per[i + 1];
+    const q0 = [a[0] - pa[0] * hw, a[1] - pa[1] * hw];
+    const q1 = [b[0] - pb[0] * hw, b[1] - pb[1] * hw];
+    const q2 = [b[0] + pb[0] * hw, b[1] + pb[1] * hw];
+    const q3 = [a[0] + pa[0] * hw, a[1] + pa[1] * hw];
+    if (!vis(Math.min(q0[0], q1[0], q2[0], q3[0]) - 2, Math.min(q0[1], q1[1], q2[1], q3[1]) - 2,
+      Math.max(q0[0], q1[0], q2[0], q3[0]) + 2, Math.max(q0[1], q1[1], q2[1], q3[1]) + 2,
+      promZ + 12)) continue;
+    cv.t = tag();
+    P.polyTop(cv, iso, [q0, q1, q2, q3], promZ, paveShade, cv.t);
+    // THE SEA WALL. Coursed masonry with a batter of colour rather than of
+    // geometry, a coping in its own lit step and a contact shadow at the foot
+    // — four flat fields up a three-metre face, each closed by a line in the
+    // stone's own contour step and not in the shared ink.
+    const sa = sgn < 0 ? q0 : q3, sb = sgn < 0 ? q1 : q2;
+    const A = sgn < 0 ? sa : sb, Bq = sgn < 0 ? sb : sa;
+    if (P.facesCamera(A[0], A[1], Bq[0], Bq[1])) {
+      const F = wallInv(iso, A[0], A[1], Bq[0], Bq[1], promZ - wallH);
+      P.wallQuad(cv, iso, A[0], A[1], Bq[0], Bq[1], promZ - wallH, promZ, (sx, sy) => {
+        const u = F.au * sx + F.bu * sy + F.cu;
+        const v = F.av * sx + F.bv * sy + F.cv;
+        if (v > wallH - 0.8) return v > wallH - 0.5 * F.q ? stoneC.k : kerb.t;
+        if (v < 0.7) return stoneC.k;
+        const course = 1.05;
+        const g = v / course;
+        if (g - Math.floor(g) < 0.5 * F.q / course) return stoneC.k;
+        const row = Math.floor(g);
+        const bw = 2.4;
+        const uu = (u + row * 1.2) / bw;
+        if (uu - Math.floor(uu) < 0.55 * F.q / bw) return stoneC.k;
+        return (h3(Math.floor(uu), row, 0x71) & 3) === 0 ? stoneC.r : stoneC.l;
+      }, cv.t);
+    }
+  }
+
+  // ---- the balustrade, and the furniture that makes it a promenade.
+  const rail = st.pick([C.metal, C.steel, C.white, C.concrete]);
+  for (let i = 0; i + 1 < N; i += 1) {
+    const a = pts[i], b = pts[i + 1];
+    const ax = a[0] + per[i][0] * hw * sgn, ay = a[1] + per[i][1] * hw * sgn;
+    const bx = b[0] + per[i + 1][0] * hw * sgn, by = b[1] + per[i + 1][1] * hw * sgn;
+    if (!vis(Math.min(ax, bx) - 2, Math.min(ay, by) - 2,
+      Math.max(ax, bx) + 2, Math.max(ay, by) + 2, promZ + 8)) continue;
+    cv.t = tag();
+    P.wallQuad(cv, iso, ax, ay, bx, by, promZ + 2.05, promZ + 2.55, rail.l, cv.t);
+    P.wallQuad(cv, iso, ax, ay, bx, by, promZ + 0.9, promZ + 1.15, rail.r, cv.t);
+    for (let k = 0; k < 3; k++) {
+      const t = k / 3;
+      const px = ax + (bx - ax) * t, py = ay + (by - ay) * t;
+      box(cv, iso, px - 0.22, py - 0.22, promZ, 0.44, 0.44, 2.55, MD(rail));
+    }
+  }
+
+  // ---- steps down to the sand, wherever the wall is worth breaking
+  for (let i = 6; i < N - 6; i += st.int(7, 13)) {
+    const a = pts[i];
+    const ox2 = per[i][0] * sgn, oy2 = per[i][1] * sgn;
+    const sx = a[0] + ox2 * hw, sy = a[1] + oy2 * hw;
+    if (!vis(sx - 6, sy - 6, sx + 6, sy + 6, promZ + 4)) continue;
+    cv.t = tag();
+    const nsteps = Math.max(2, Math.round(wallH / 0.6));
+    for (let k = 0; k < nsteps; k++) {
+      const t = k / nsteps;
+      box(cv, iso, sx + ox2 * t * 3.4 - 2.0, sy + oy2 * t * 3.4 - 2.0,
+        promZ - wallH * t - 0.6, 4.0, 4.0, 0.7, { top: kerb.t, left: kerb.l, right: kerb.r });
+    }
+  }
+
+  // ---- the row of huts. NOT SCATTERED: a settlement whose line is the
+  // coastline rather than a grid is the whole structural argument of the shore,
+  // and a row of forty identical cabins in forty different paints is the
+  // clearest way this biome can say so. The row commits to a short list of
+  // paints, exactly as a city block commits to a wall tone.
+  const paints = [];
+  for (let i = 0; i < st.int(4, 7); i++) paints.push(CB.accentTone(st));
+  paints.push(C.white); paints.push(C.cream);
+  const hutOff = hw + st.range(3.5, 7.0);
+  const hutGap = st.range(7.2, 9.4);
+  const runs = [];
+  {
+    let i = st.int(3, 9);
+    while (i < N - 4) {
+      const len = st.int(4, 11);
+      runs.push([i, Math.min(N - 3, i + len)]);
+      i += len + st.int(4, 14);
+    }
+  }
+  for (const [i0, i1] of runs) {
+    if (!st.bool(0.86)) continue;
+    let acc = 0;
+    for (let i = i0; i < i1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const seg = Math.sqrt((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2);
+      for (let d = acc; d < seg; d += hutGap) {
+        const t = d / seg;
+        const px = a[0] + (b[0] - a[0]) * t - per[i][0] * hutOff * sgn;
+        const py = a[1] + (b[1] - a[1]) * t - per[i][1] * hutOff * sgn;
+        if (!vis(px - 4, py - 4, px + 8, py + 8, 18)) continue;
+        if (eAt(px, py) < E_BERM - 2) continue;        // never below the berm
+        cv.t = tag();
+        P.beachHut(cv, iso, C, st, px, py,
+          Math.max(T.surfaceZ(px, py) + 0.9, promZ - 0.4),
+          st.int(0, 1), st.pick(paints));
+      }
+      acc = (acc - seg) % hutGap;
+      if (acc < 0) acc += hutGap;
+    }
+  }
+
+  // ---- the furniture and the crowd.
+  for (let i = 2; i < N - 2; i++) {
+    const a = pts[i];
+    const nrep = st.int(1, 3);
+    for (let k = 0; k < nrep; k++) {
+      const ac = st.range(-hw + 1.0, hw - 1.6) * sgn;
+      const px = a[0] + per[i][0] * ac + cxu * st.range(-3, 3);
+      const py = a[1] + per[i][1] * ac + cyu * st.range(-3, 3);
+      if (!vis(px - 3, py - 3, px + 3, py + 3, promZ + 12)) continue;
+      const w = st.weighted([['person', 34], ['lamp', 8], ['bench', 8], ['bin', 5],
+        ['post', 5], ['parasol', 4], ['kiosk', 2], ['rock', 2]]);
+      cv.t = w === 'person' ? tagRaw() : tag();
+      if (w === 'person') drawPerson(cv, iso, CB, fs, px, py, promZ);
+      else if (w === 'lamp') S.lampPost(cv, iso, CB, st, px, py, promZ, st.int(0, 1));
+      else if (w === 'bench') S.bench(cv, iso, CB, st, px, py, promZ, st.int(0, 1));
+      else if (w === 'bin') S.bin(cv, iso, CB, st, px, py, promZ);
+      else if (w === 'post') P.shorePost(cv, iso, CB, st, px, py, promZ, st.int(0, 2));
+      else if (w === 'parasol') S.parasol(cv, iso, CB, st, px, py, promZ);
+      else if (w === 'kiosk') S.kiosk(cv, iso, CB, st, px, py, promZ, 5.5, 4.5, coinWord(st));
+      else P.rock(cv, iso, C, st, px, py, promZ, false);
+    }
+  }
+
+  // ---- THE GROYNES. The one thing on a beach that runs straight down the
+  // gradient, and therefore the one line in this biome that crosses all the
+  // others. Each is a run of piles from the berm out into the surf, with a
+  // plank wall between them and sand banked higher on the updrift side — which
+  // is why they exist and, incidentally, three more closed cells per bay.
+  const gs = rng.stream('groyne');
+  for (let i = 4; i < N - 4; i += gs.int(5, 11)) {
+    const a = pts[i];
+    if (!gs.bool(0.78)) continue;
+    const tim = gs.pick([C.wood, C.taupe, C.slate, C.stone]);
+    const hTop = gs.range(1.8, 3.0);
+    const eEnd = gs.range(-16, -6);
+    let x = a[0] - nx * 2, y = a[1] - ny * 2;
+    let prev = null;
+    for (let k = 0; k < 90; k++) {
+      const e = eAt(x, y);
+      if (e < eEnd) break;
+      if (vis(x - 2, y - 2, x + 2, y + 2, 8)) {
+        const g = T.surfaceZ(x, y);
+        const hh = hTop * sm((e - eEnd) / 26) + 0.55;
+        cv.t = tag();
+        P.pile(cv, iso, C, gs, x - 0.4, y - 0.4, g - 1.2, g + hh, 0.85);
+        if (prev) {
+          const F = wallInv(iso, prev[0], prev[1], x, y, prev[2]);
+          cv.t = tag();
+          P.wallQuad(cv, iso, prev[0], prev[1], x, y, g - 0.4, g + hh * 0.82, (sx, sy) => {
+            const v = F.av * sx + F.bv * sy + F.cv;
+            const g2 = v / 0.62;
+            return (g2 - Math.floor(g2) < 0.5 * F.q / 0.62) ? tim.k : (v > hh * 0.5 ? tim.l : tim.r);
+          }, cv.t);
+        }
+        prev = [x, y, g];
+      } else prev = null;
+      x -= nx * 3.1; y -= ny * 3.1;
+      if (x < X0 + 2 || x > X1 - 2 || y < Y0 + 2 || y > Y1 - 2) break;
+    }
+  }
+
+  return { pts, per, hw, promZ, sgn, ePro,
+    dist(px, py) {
+      let best = 1e9;
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i];
+        const ex = b[0] - a[0], ey = b[1] - a[1];
+        const L2 = ex * ex + ey * ey;
+        let t = L2 > 0 ? ((px - a[0]) * ex + (py - a[1]) * ey) / L2 : 0;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const cx2 = a[0] + ex * t - px, cy2 = a[1] + ey * t - py;
+        const d = cx2 * cx2 + cy2 * cy2;
+        if (d < best) best = d;
+      }
+      return Math.sqrt(best);
+    } };
 }
 
 // ---------------------------------------------------------------------------
