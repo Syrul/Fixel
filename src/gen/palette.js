@@ -112,17 +112,54 @@ function pullHue(h, target, k) {
  * zero is the counterintuitive property `docs/BAR.md` says procedural shaders
  * always get wrong and this one gets right, and a night that tinted the shadow
  * step would lose it while looking, at a glance, correct.
+ *
+ * `emissive` MARKS A SOURCE RATHER THAN A SURFACE, and it is an opt-out from
+ * exactly one of the three blocks below — see the note at the branch.
  */
-function condLight(h, s, l, cond, neutral) {
+function condLight(h, s, l, cond, neutral, emissive) {
   if (cond.reference) return [h, s, l];      // day + clear: exactly as drawn
 
+  // ---- THE SKY'S LIGHT, WHICH ONLY A SURFACE RECEIVES ---------------------
+  //
+  // These two blocks are the ones that model light ARRIVING somewhere: a night
+  // sky and a low sun. A lamp, a screen, a fire and a lit sign are SOURCES —
+  // the scene's ambient does not determine their colour, they are part of what
+  // the ambient IS. So `emissive` opts out of both, together, as one branch.
+  //
+  // WHY BOTH AND NOT JUST NIGHT. They are the same physical claim twice: the
+  // night pull carries a pigment toward the sky's colour, the golden pull
+  // carries it toward the sun's. Neither is true of a filament. Opting out of
+  // only the night half would leave a golden-hour emitter tinted by a sun that
+  // is not lighting it, which is the same category error with a warmer number
+  // on it — and it would be a trap for the next caller, because the two are
+  // mutually exclusive by construction in `conditions.js` (`warmth` is nonzero
+  // only at `golden`) and so read as one choice, not two.
+  //
+  // WHY THE VEIL BELOW IS *NOT* BYPASSED, and this is the interesting half.
+  // Fog, haze, dust and overcast do not light the lamp — they sit BETWEEN the
+  // lamp and the camera and scatter its own photons out of the line of sight.
+  // That is Koschmieder's law and it applies to a source exactly as it applies
+  // to a surface: what reaches the eye is the emitter attenuated toward the
+  // medium's own radiance, which is why a streetlamp in fog is a dim halo and
+  // not a bright point. Keeping it is the physically right answer AND the
+  // conservative one — it is the block carrying the measured veil strengths
+  // that stop two scenes converging on the colour of the weather, and an
+  // emitter exempt from it would be the one thing in the frame that fog cannot
+  // touch.
+  //
   // NIGHT. Everything approaches a cool ambient floor rather than scaling to
   // zero: a flat multiply crushes the darks into the ink and the picture loses
   // its darkest material to the silhouette, which is the failure `rubber` was
   // added to fix. Neutrals are carried further toward the night hue than
   // accents are, because a painted red awning is still red after dark and a
   // grey wall is not still grey — it is whatever colour the sky is.
-  if (cond.night) {
+  if (emissive) {
+    // A source keeps its own hue, its own saturation and its own value. There
+    // is NO pre-compensation here and there must never be one: the warm band
+    // is unreachable at night because hue 38 is the antipode of 218, where
+    // `pullHue`'s shortest arc changes sign, and an inverse function across a
+    // sign flip is a bug generator. The fix is to not apply the pull at all.
+  } else if (cond.night) {
     // THE NUMBERS HERE ARE SET BY A MEASUREMENT, NOT BY HOW DARK NIGHT LOOKS.
     //
     // The first version compressed lightness to 0.44 of its range and pulled
@@ -309,7 +346,7 @@ export function buildPalette(rng, cond = { reference: true, overcast: 0, wet: 0,
   // scene is a poster; a fine one is a crowded market street.
   const QH = r.range(3.4, 8.5), QS = r.range(9, 21), QL = r.range(18, 36);
 
-  function mk(h, s, l) {
+  function mk(h, s, l, emissive) {
     // THE LIGHT APPLIES HERE, AT THE ONE CHOKE POINT EVERY TONE PASSES THROUGH.
     //
     // It was first applied in the FAM loop, and the first contact sheet showed
@@ -324,7 +361,32 @@ export function buildPalette(rng, cond = { reference: true, overcast: 0, wet: 0,
     // onto one tone share a palette entry rather than minting two identical
     // colours. That is also why `palette.distinct` falls at night: the ramp is
     // genuinely shorter after dark, not accidentally duplicated.
-    [h, s, l] = condLight(h, s, l, cond, s < 0.25);
+    //
+    // AND THE KEY IS DELIBERATELY NOT NAMESPACED BY `emissive`. An emissive
+    // tone can land on the same quantised key as a conditioned pigment, so ask
+    // whether that sharing is a bug. It is not, and the reason is structural
+    // rather than lucky: `emissive` selects which transforms run BEFORE the
+    // key and changes nothing after it. Every field of the family below — the
+    // base RGB, all four rungs, the drift sign `q`, the metadata — is a pure
+    // function of the post-condition (h, s, l) and the scene's own ladder. Two
+    // callers that arrive at one key therefore want a byte-identical family,
+    // and sharing it is the behaviour the paragraph above already describes
+    // for two pigments the light collapses together. Namespacing would mint a
+    // second entry holding the same colour, inflating `palette.distinct` — a
+    // measured quantity — to describe a distinction that does not exist in the
+    // pixels.
+    //
+    // MEASURED, because "it cannot happen" and "it is harmless when it happens"
+    // are different claims and only the second one is true. Over 48 seeds, with
+    // the pigment population minted first (the families, skin, hair, and 400
+    // `wallTone`/`accentTone` draws each), an emissive tone shares an entry with
+    // a conditioned pigment on 0 of 144 mints at night and 3 of 144 at golden.
+    // On all three golden hits the entry handed back was the colour the emitter
+    // asked for to within 0.14-0.70 degrees of hue and 0.000-0.031 of lightness
+    // — inside this scene's own quantisation (QH 3.4-8.5 degrees, QL 18-36
+    // buckets), which is the definition of "the same tone" everywhere else in
+    // this file. Sharing it is the cache working, not the cache leaking.
+    [h, s, l] = condLight(h, s, l, cond, s < 0.25, emissive);
     h = ((h % 360) + 360) % 360;
     s = Math.max(0, Math.min(1, s));
     l = Math.max(0.05, Math.min(0.99, l));

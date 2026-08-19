@@ -55,31 +55,79 @@ const MD = (f) => ({ top: f.l, left: f.r, right: f.d });
 // decides what is behind every other window, so there is nothing to open.
 // ---------------------------------------------------------------------------
 
+/** How bright an emitter is minted. Set by a measurement; see `lampSet`. */
+const EMIT_L = 0.74;
+
 /**
  * THE SCENE'S LAMPS. THREE TONES, shared by every window in the frame.
  *
  * A lamp is an EMITTER, not a pigment: it is not lit by the scene's ambient, it
- * IS a light in the scene. `mk` applies the night ambient to every tone that
- * passes through it, so a lamp is minted at the very top of the pigment range
- * and lands at the top of the night ramp — the brightest thing the picture
- * contains, which is exactly what a lit window is after dark.
+ * IS a light in the scene. THESE ARE THE ONLY `emissive` MINTS IN THE FILE, and
+ * `src/gen/palette.js` carries what the flag does and does not switch off.
  *
- * The warm one stays BELOW hue 38 deliberately. `pullHue` takes the shortest
- * arc to the night hue, and 38 is the antipode of 218 where that arc changes
- * sign: a filament at 37 comes out a warm red, at 39 a yellow-green. Straddling
- * that boundary would make the scene's warmest light depend on a rounding.
+ * THE WARM LAMP USED TO COME OUT SALMON-RED AND THE COMMENT BELOW USED TO SAY
+ * WHY IT HAD TO. `mk` routed every tone through the night ambient, which pulls
+ * hue 16% of the shortest arc toward 218. Hue 38 is the ANTIPODE of 218, so the
+ * whole warm band from 2 to 74 is on the far side of the sign flip: a filament
+ * minted at 30 travelled -27.5 degrees and arrived at 2.5, a red. Measured off
+ * the built palette over six seeds, the three lamps read hue 0.0-7.4 — the
+ * scene's warmest light was the one colour it could not be.
+ *
+ * The old note here said the warm one "stays BELOW hue 38 deliberately", to keep
+ * the set off that boundary rather than straddling it. That was a correct
+ * reading of the mechanism and the wrong conclusion to draw from it: staying on
+ * one side of a discontinuity does not stop you falling down it. Pre-compensating
+ * across it would have been worse — an inverse function across a sign flip is a
+ * bug generator. A lamp is simply not a surface, so the ambient does not apply.
+ *
+ * BUT THE OLD NOTE'S DISCIPLINE IS STILL RIGHT, AND IT NOW POINTS AT A DIFFERENT
+ * NUMBER. With the night pull skipped, hue 38 is no longer a boundary a lamp can
+ * reach — but the weather veil in `condLight` is deliberately NOT skipped, and it
+ * pulls toward 214 under overcast, rain, snow and fog. Its antipode is 34, and
+ * the old range 27-37.4 STRADDLED it. Measured on the built palette at
+ * night+fog, that split the six seeds into hue 340.8-344.7 and hue 82.7 — two
+ * lamps whose mints differ by a fifth of a degree rendering 262 degrees apart.
+ * Exactly the coin-flip the old note refused to allow, relocated by this fix
+ * from the night pull to the veil. So the top of the range is 33.0: still a
+ * filament, and clear of 34 with a degree of margin. This is a BOUND, not a
+ * pre-compensation — nothing here inverts the veil, it just declines to sit on
+ * the one hue where the veil's own arithmetic is discontinuous.
+ *
+ * The other two lamps do not need it. 146-172 and 196-216 are nowhere near 34,
+ * and straddling the veil's TARGET (214) is harmless — a target is an attractor
+ * approached continuously from both sides. Only the antipode is a cliff.
+ *
+ * WHY THE LIGHTNESS IS NO LONGER 0.99. That was pre-compensation for the very
+ * compression the flag now skips: `l = 0.07 + (l - 0.07) * 0.58` put a 0.99
+ * pigment at 0.604, so the lamp was minted off the top of the range to land at
+ * the top of the night ramp. With the compression gone, 0.99 is not "bright", it
+ * is WHITE — HSL chroma is `(1 - |2l - 1|) * s`, which goes to zero as l goes to
+ * 1, so a 0.99 emitter rasterises to rgb(254,253,251) and the amber this whole
+ * function exists to produce is thrown away at the last step. A stale
+ * pre-compensation left in place is how a fix reports success and changes
+ * nothing. So the value is set against a MEASUREMENT instead: the night ambient
+ * ramp's brightest palette entry over six seeds is hslL 0.533-0.598, capped by
+ * construction at 0.6036. `EMIT_L` clears that ceiling by about a seventh while
+ * keeping half the available chroma, so a lamp is both the brightest thing in
+ * the frame and still a colour.
  *
  * Keyed off the scene's OWN light commitment, so two night cities have
  * different lamps without a single new random draw and without the set growing.
+ *
+ * EXPORTED so the lamps can be READ BACK OUT OF THE BUILT PALETTE rather than
+ * asserted, on the same grounds as `nightStructure` below: `.t` is an index into
+ * `pal`, so a script can print the literal RGB a lit window is painted with. A
+ * hue computed from the pre-`mk` input is not evidence about a bug that lives
+ * inside `mk`. It changes no pixel by being reachable.
  */
-function lampSet(C) {
+export function lampSet(C) {
   const sk = h3(Math.round(C.light.HUE0 * 1e5), Math.round(C.light.LEFT * 1e5),
     Math.round(C.paintRate * 1e5));
   const j = (n, lo, hi) => lo + ((h3(sk, n, 17) & 1023) / 1024) * (hi - lo);
   return [
-    C.mk(j(1, 27, 37.4), j(2, 0.56, 0.80), 0.99),   // filament, a warm room
-    C.mk(j(3, 146, 172), j(4, 0.26, 0.46), 0.99),   // a fluorescent tube
-    C.mk(j(5, 196, 216), j(6, 0.03, 0.11), 0.99),   // a cold screen or a landing
+    C.mk(j(1, 27, 33.0), j(2, 0.56, 0.80), EMIT_L, true),  // filament, a warm room
+    C.mk(j(3, 146, 172), j(4, 0.26, 0.46), EMIT_L, true),  // a fluorescent tube
+    C.mk(j(5, 196, 216), j(6, 0.03, 0.11), EMIT_L, true),  // a cold screen or landing
   ];
 }
 
