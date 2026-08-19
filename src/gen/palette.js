@@ -163,9 +163,12 @@ export function buildPalette(rng) {
   // it runs, and how pale. These used to be ±8 degrees and ±9% of saturation,
   // which is why `hue.meanSat` and `palette.top1Share` barely moved seed to
   // seed. A desert noon and an overcast harbour are different pictures.
-  const drift = r.range(-26, 26);
+  // The accent drift is stratified for the same reason the neutral hue is: a
+  // continuous draw lets two of eight seeds land on the same city.
+  const DZONE = [-27, -16, -6, 5, 16, 27];
+  const drift = DZONE[r.int(0, DZONE.length - 1)] + r.range(-5, 5);
   const satMul = r.range(0.60, 1.14);
-  const LZONE = [0.85, 0.96, 1.10];
+  const LZONE = [0.84, 0.93, 1.02, 1.12];
   const litMul = LZONE[r.int(0, LZONE.length - 1)] * r.range(0.97, 1.03);
   // THE NEUTRALS CARRY THE SCENE AND THEY WERE THE PART THAT DID NOT MOVE.
   // 59% of the frame is near-neutral, and the neutral families used to take
@@ -181,7 +184,7 @@ export function buildPalette(rng) {
   // gate reads the commonest colours first, which are these. Drawing a zone
   // and then jittering inside it spreads the eight seeds instead of sampling
   // them, so the CLOSEST pair of cities is still a different pair of cities.
-  const HZONE = [-36, -22, -8, 6, 20, 34];
+  const HZONE = [-38, -27, -16, -6, 5, 15, 25, 36];
   const neutralHue = HZONE[r.int(0, HZONE.length - 1)] + r.range(-5, 5);
   const SZONE = [0.35, 0.75, 1.2, 1.75];
   const neutralSat = SZONE[r.int(0, SZONE.length - 1)] * r.range(0.85, 1.18);
