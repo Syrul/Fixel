@@ -153,8 +153,12 @@ for (let k = 1; k < K; k++) {
     }
     sizes.push(n);
   }
+  // Sorted DESCENDING, so a quantile has to be read from the far end. Written
+  // the obvious way it printed p50 4 and p90 2, which is not a distribution at
+  // all — a p90 below the median is the reader's own indexing bug wearing a
+  // finding's clothes, and it would have been quoted.
   sizes.sort((a, b2) => b2 - a);
-  const q = (p) => sizes.length ? sizes[Math.min(sizes.length - 1, Math.floor(p * sizes.length))] : 0;
+  const q = (f) => sizes.length ? sizes[Math.min(sizes.length - 1, Math.floor((1 - f) * sizes.length))] : 0;
   console.log(`seed=${seed} ${W}x${H} frames=${K}${o.biome ? ` biome=${o.biome}` : ''}`);
   console.log(`  ever moves      ${ever} px = ${(100 * ever / (W * H)).toFixed(2)}% of frame`);
   console.log(`  loop union      ${loop.n} px   dropped ${loop.dropped}   flat ${loop.flat}   shadowed ${loop.shadowed ?? 0}`);
