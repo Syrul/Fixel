@@ -967,3 +967,80 @@ The lead read that source comment and restated it as a causal finding without me
 is standing rule 7 — **plausibility is not evidence** — failing in the cheapest possible way: a
 comment in the code is a claim about the code, not a measurement of its output. Do not chase
 sevenths. The record says so instead of quietly correcting itself.
+
+---
+
+# Standing rule 13: delete what a compensation was compensating FOR — and check your assertion still means anything
+
+Two catches from one task, both made by the builder against its own work, and the
+second is the more valuable.
+
+## The fix that would have passed its own test
+
+The emissive opt-out lets a lamp skip the night lightness compression. But the
+lamps were minted at lightness **0.99**, and that 0.99 was itself
+**pre-compensation for exactly the compression the new flag now skips**. Left in
+place, an emissive lamp renders **rgb(254, 253, 251)** — white — because HSL
+chroma vanishes as lightness approaches 1.
+
+The builder's own sentence, and it is the rule:
+
+> **"That would have passed a hue check while throwing the amber away."**
+
+The planned gate was "assert the lamp's hue lands in the warm band". White has no
+meaningful hue. The assertion would have evaluated on an ill-conditioned quantity,
+returned a number, and gone green while the defect it existed to catch shipped
+underneath it. **An assertion is only as good as the conditioning of the quantity
+it asserts on**, and a test can pass while the thing it tests has quietly become
+meaningless.
+
+This repo already knew that, in the same file, from the other end of the range —
+`palette.js` on its hue jitter: *"Jitter only bites on pigments that HAVE a hue.
+On a near-neutral the hue angle is ill-conditioned and rotating it is noise in the
+measurement rather than a decision in the picture."* Hue is ill-conditioned at low
+chroma. It is equally ill-conditioned at high lightness, and that second case was
+the trap.
+
+The general form, which is cheap to apply and would have caught this:
+
+> **When you remove a compensation, find what it was compensating for and remove
+> that too.** A pre-compensation and its correction are a matched pair. Delete one
+> and the other becomes a bug pointing the opposite way — and it will look like a
+> fix, because the numbers it was tuned against still move in the right direction.
+
+## The probe that measured nothing and said so
+
+The same builder's palette-collision probe returned zero collisions. Zero is the
+answer it wanted. It rejected it: the probe patched `mk` **after the pigments were
+already minted**, so it was observing a run in which nothing it cared about could
+still happen. It rewrote the probe rather than believing it.
+
+**Two instruments checked in one task**, neither of them the one it was asked to
+check. That is the habit this project values above any number, and it is why the
+standing-rule list keeps growing rather than the metric list.
+
+## The defect this uncovered, which was wider than the task
+
+While fixing lamps the builder found and refused to paper over a defect it
+correctly judged out of scope: **hue ROTATION is the wrong operator near an
+antipode.** The veil target is 214 with its antipode at 34, and the warm families
+sit on it. Rendered, under night+fog, a city ships **a magenta roof, magenta
+facades where terra and wood should be, and pink signage** — amber reads 310-326,
+orange 301-317, terra 297-314, wood 304-320, and `sandy` straddles the antipode at
+night+clear, reading **66 on one seed and 347 on another**.
+
+> **Rotation passes through magenta, which lies nowhere between amber and
+> blue-grey.**
+
+The fix is to change the operator, not the parameters. Fog does not rotate a
+surface's hue toward the fog's hue; it **mixes its own colour in front of it**
+(Koschmieder — the same law that justifies keeping the veil on emitters). A warm
+tone washed by cool fog travels toward the fog's colour **through grey**, because
+that is what desaturation is. A blend in a linear space has no antipode, no
+discontinuity and no branch — and it retires the hue cap that existed only to dodge
+the sign flip. Moonlight is the same argument: a light source has a colour, and a
+surface moves toward that colour rather than around a wheel toward it.
+
+**Reporting a defect you were not asked to fix, in a file you own, without fixing
+it in the same commit, is correct behaviour** — and it is what let this be scoped,
+measured and gated instead of arriving as an untested side effect of a lamp fix.
