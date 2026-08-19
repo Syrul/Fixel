@@ -65,6 +65,80 @@ const BUSH_SHIFT_PX = 2;
  * report. Until then the palms are part of the still world.
  */
 const FROND_SWING_PX = 0;
+
+// WHAT A PALM DOES INSTEAD, AND WHY IT IS NOT A CONSOLATION PRIZE.
+//
+// The exclusion above is about DISPLACEMENT, and it is correct. It is not about
+// motion. `Canvas.blitAnim`'s contract reads
+//
+//     A SPRITE MAY ANIMATE ITS COLOURS, at pixels whose tag, depth and
+//     SILHOUETTE ARE IDENTICAL IN EVERY POSE.
+//
+// and a palm at 30-45px across does not read as a translating crown anyway. It
+// reads as fronds TURNING AND CATCHING THE LIGHT. That is colour over a fixed
+// silhouette: entirely inside the contract, no core change, and it is what the
+// thing actually looks like.
+//
+// THE TWO AMPLITUDES BELOW ARE THE TONE AND THE SECTOR, and neither is a
+// displacement. Every displacement amplitude in this file has a measured floor
+// in screen pixels; these have a floor of a different kind, stated on each.
+
+/**
+ * HOW DIFFERENT THE LIT FROND IS FROM THE UNLIT ONE, in steps of the frond's
+ * OWN colour family: +1 is one rung up the same ladder every other tone in the
+ * crown is drawn from, i.e. exactly the tone `blob` gives a canopy's lit side.
+ *
+ * THE FLOOR HERE IS STRUCTURAL RATHER THAN TUNED, and that is the point of
+ * spending a ladder rung instead of minting a lighter green. The failure this
+ * round keeps finding is a step so small that only SOME pixels of a moving
+ * thing cross a threshold — a scatter of independent pixels, i.e. a twinkle.
+ * A ladder rung cannot do that: it is one whole tone, applied to one whole
+ * frond, so either the frond changes colour or nothing does. There is no
+ * amplitude between "no motion" and "one frond", by construction.
+ *
+ * IT SATURATES AT ONE RUNG AND THAT IS HONEST. `stage.gain` multiplies it like
+ * every other amplitude here, but the ladder has exactly one rung above the
+ * frond core, so gain 1.8 and gain 3 buy the same tone. Above gain 1 the knob's
+ * remaining travel goes into the sector width below.
+ */
+const FROND_LIT_STEPS = 1;
+/**
+ * HOW WIDE THE LIT SECTOR IS at the peak of the gust: the half-angle, in
+ * degrees, at gain 1. Sixty is the same wedge `GUST_COS` cuts out of a canopy
+ * rim — a third of the crown — and it is the width at which the sector holds
+ * two or three of a palm's seven-to-nine fronds, so the thing that lights up is
+ * a CLUMP rather than a frond doing something on its own.
+ *
+ * SET AT 0 IN THIS COMMIT, exactly as every other amplitude in this file was:
+ * the plumbing lands first and is provably inert — no `L` is ever emitted, so
+ * every crown table is byte-for-byte the one it was before — and the motion
+ * lands on top of it once it has been swept.
+ */
+const FROND_GUST_DEG = 0;
+/**
+ * The sector's quantisation, and its slot in the crown cache key. The half
+ * angle is `FROND_GUST_DEG * wid / GUST_STEPS`, so `wid` is a whole number of
+ * steps for the same reason `stepPx` is a whole number of pixels: a sector
+ * whose edge sat between two steps would light a frond on one frame and not the
+ * next for no reason a viewer could name.
+ *
+ * `GUST_MAX` clamps it, and the clamp is not cosmetic — it is the same one
+ * `DISP_MAX` makes below. `?anim=` reaches gain 8, and a `wid` that overflowed
+ * its four-bit slot would collide with a NEIGHBOURING CROWN'S key and hand back
+ * a crown of a different shape. That exact bug was caught by the oracle at gain
+ * 3 on desert last round; it does not get to happen twice.
+ */
+const GUST_STEPS = 4;
+const GUST_MAX = 15;
+/**
+ * Sector centre positions around a crown: one per frame, so the gust travels a
+ * WHOLE TURN over the loop and the wrap step is the same size as every other
+ * step. The alternative — sweeping back and forth on `triPhase` — closes just
+ * as exactly; a whole turn was chosen because it is the only one of the two
+ * whose every frame-to-frame transition is identical, so `strip.mjs`'s wrap
+ * panel has nothing to be denser than.
+ */
+const CROWN_SECTORS = FRAMES;
 /**
  * How wide the gust sector is, as the cosine of its half-angle: 0.50 is +/-60
  * degrees, a third of the rim. Not an amplitude — it is what makes the moving
@@ -122,6 +196,16 @@ const stepPx = (v, amp) => {
   a = a < 0 ? -Math.round(-a) : Math.round(a);
   return a > DISP_MAX ? DISP_MAX : a < -DISP_MAX ? -DISP_MAX : a;
 };
+// The gust's WIDTH, in whole steps, off the same anchored triangle. Unsigned,
+// because a sector has no direction: a negative half-angle is not a wedge
+// pointing the other way, it is the same wedge. Dropping the sign leaves a
+// quantity that is still exactly zero at frame 0 for every instance — which is
+// what keeps an animated frame 0 byte-identical to the still render — and still
+// periodic with period 1, so the loop closes.
+const gustPx = (v, amp) => {
+  const a = Math.round(amp * (v < 0 ? -v : v));
+  return a > GUST_MAX ? GUST_MAX : a < 0 ? 0 : a;
+};
 
 /**
  * This instance's phase offset, or -1 when it is one of the ones that holds
@@ -150,6 +234,57 @@ function poseSet(A, off, amp, make) {
   const g = A.gain === undefined ? 1 : A.gain;
   const out = new Array(A.frames);
   for (let j = 0; j < A.frames; j++) out[j] = make(stepPx(swing(A.frame + j, off), amp * g));
+  return out;
+}
+
+/**
+ * K crowns, one per frame — `poseSet`'s sibling for the palm, which animates a
+ * COLOUR rather than a displacement and therefore needs three numbers per pose
+ * where a canopy needs one.
+ *
+ * It is a separate function and not a wider `poseSet` because the two say
+ * different things. `poseSet` hands its maker ONE quantity, a signed count of
+ * screen pixels, and that unit is the whole reason the canopy's motion is
+ * legible as a translation. A crown's pose is (displacement, sector centre,
+ * sector width), and only the first of those is a distance.
+ *
+ * THE THREE QUANTITIES, AND WHY EACH ONE CLOSES.
+ *
+ *   displacement  `FROND_SWING_PX`, which is 0 and stays 0 — see its comment.
+ *                 Threaded per pose anyway, so the day it stops being zero
+ *                 there is no second code path to remember.
+ *   sector centre `(k + m) mod CROWN_SECTORS`, an integer that advances one
+ *                 position per frame and wraps. A WHOLE TURN over the loop, so
+ *                 frame FRAMES is frame 0 by construction and every
+ *                 frame-to-frame step is the same size — including the wrap,
+ *                 which is the step `tools/strip.mjs`'s first diff panel shows
+ *                 and the one a gate at frame 0 cannot see. `m` is this crown's
+ *                 own offset, so two palms in one street are not in step.
+ *   sector width  `gustPx(swing(k, off), ...)`, zero at frame 0 for every
+ *                 instance, periodic with period 1. The gust ARRIVES, sweeps
+ *                 round the crown and dies, rather than being permanently on.
+ *
+ * The width being zero at frame 0 is what makes this whole design free: with no
+ * sector there are no lit fronds, so the frame-0 crown IS the still crown,
+ * character for character, and every number in `docs/` still describes it.
+ *
+ * NO Rng DRAW HAPPENS HERE, for the reason stated above `swing`: `off` is a
+ * hash of the palm's own world position, and the frame index reaches nothing
+ * but arithmetic.
+ */
+function crownPoses(A, off, make) {
+  if (!A || A.frames < 2 || off < 0) return [make(0, 0, 0)];
+  const g = A.gain === undefined ? 1 : A.gain;
+  // Whole sectors, so the rotation is an integer walk rather than an angle that
+  // has to be re-quantised. `off` is already a multiple of 1 / FRAMES.
+  const m = Math.round(off * FRAMES);
+  const out = new Array(A.frames);
+  for (let j = 0; j < A.frames; j++) {
+    const k = A.frame + j;
+    out[j] = make(stepPx(swing(k, off), FROND_SWING_PX * g),
+      ((k + m) % CROWN_SECTORS + CROWN_SECTORS) % CROWN_SECTORS,
+      gustPx(swing(k, off), GUST_STEPS * g));
+  }
   return out;
 }
 
@@ -311,9 +446,39 @@ const BLOB_CACHE = new Map();
  * Nothing in it is axis-aligned and nothing in it is 2:1; a palm is the single
  * most off-lattice object a street can legitimately contain, and the reference
  * uses them for exactly that.
+ *
+ * THE GUST SECTOR, AND WHY IT IS A COLOUR AND NOT A DISPLACEMENT.
+ *
+ * `sec` is a sector centre, one of `CROWN_SECTORS` positions round the crown;
+ * `wid` is its half-angle in whole steps. Every frond whose BASE ANGLE falls
+ * inside that wedge has its core drawn in `L` instead of `l` — one whole frond
+ * at a time, all the fronds in the wedge together, which is the same "a clump
+ * moved, not a scatter of pixels" property `blob`'s gust has and the reason
+ * neither of them twinkles.
+ *
+ * THE UNIT IS A WHOLE FROND AND THE CODE MAKES THAT STRUCTURAL. The lit/unlit
+ * decision is taken ONCE per frond, before its arc is swept, from `a0` alone.
+ * Nothing inside a frond can disagree with the rest of it, so the smallest
+ * island this design can produce is one frond's core — a connected arc of some
+ * 20-60 px — and not a pixel.
+ *
+ * `wid === 0` LIGHTS NOTHING AND THAT IS THE STILL CROWN. It is the value every
+ * caller passes at frame 0 and the only value the still path ever passes, so
+ * this function's output at `wid = 0` is byte-for-byte what it emitted before
+ * the sector existed. Gain 0 reaches the same place by arithmetic rather than
+ * by a branch: it drives `wid` to 0 and `FROND_LIT_STEPS * gain` to 0 rungs.
  */
-function frondCrown(R, variant, swingPx = 0) {
-  const key = 100000 + (R * 16 + variant) * 64 + (swingPx + 32);
+function frondCrown(R, variant, swingPx = 0, sec = 0, wid = 0) {
+  // EVERY PARAMETER THAT CHANGES A PIXEL IS IN THE KEY, in its own fixed-width
+  // slot. A memo keyed on less than it depends on serves one crown's poses for
+  // another crown, and this project has now found that class of bug twice —
+  // most recently as a displacement overflowing its slot at gain 3 and handing
+  // back a mask of a different shape.
+  //
+  // Slots: variant < 16, swingPx + 32 < 64 (clamped by DISP_MAX), sec <
+  // CROWN_SECTORS = 8 < 16, wid <= GUST_MAX = 15 < 16. The 100000 offset keeps
+  // the whole range disjoint from `blob`'s keys, which top out at 22015.
+  const key = 100000 + ((((R * 16 + variant) * 64 + (swingPx + 32)) * 16 + sec) * 16 + wid);
   const had = BLOB_CACHE.get(key);
   if (had) return had;
   const rnd = (a) => (h3(a, variant, 0x77c1) >>> 0) / 4294967296;
@@ -328,13 +493,30 @@ function frondCrown(R, variant, swingPx = 0) {
   const RX = R + 3 + FROND_MARGIN, RY = Math.ceil(R * SQ) + 4;
   const g = [];
   for (let j = 0; j < 2 * RY + 1; j++) g.push(new Array(2 * RX + 1).fill('.'));
+  // `L` CARRIES EXACTLY `l`'S WRITE PRIORITY, and that is what makes the whole
+  // scheme legal rather than merely plausible. Fronds overwrite each other as
+  // they are swept, so if the lit core lost a race the still core wins, the two
+  // tables would disagree about which CELL is filled and not merely about its
+  // colour — a silhouette change, which `blitAnim` cannot represent. With equal
+  // priority the write sequence is identical in both, so the lit table differs
+  // from the still one at a subset of `l` cells and nowhere else: same
+  // silhouette, same tags, same depth, one contract satisfied structurally.
   const put = (i, j, c) => {
     const jj = j + RY, ii = i + RX;
     if (jj < 0 || jj >= g.length || ii < 0 || ii >= g[0].length) return;
-    if (g[jj][ii] === '.' || c === 'l') g[jj][ii] = c;
+    if (g[jj][ii] === '.' || c === 'l' || c === 'L') g[jj][ii] = c;
   };
+  // The wedge. Clamped at a half-turn because past 180 degrees a cosine
+  // threshold stops widening the sector and starts cutting a hole in it, and
+  // `?anim=` can ask for gain 8.
+  const SA = (sec / CROWN_SECTORS) * 6.283185307;
+  const SX = Math.cos(SA), SY = Math.sin(SA);
+  const COS_HALF = Math.cos(Math.min(Math.PI,
+    (FROND_GUST_DEG * Math.PI / 180) * (wid / GUST_STEPS)));
   for (let f = 0; f < n; f++) {
     const a0 = (f / n) * 6.283 + rnd(f + 2) * 0.5;
+    // ONE DECISION PER FROND, taken here and read by every pixel of its arc.
+    const core = wid && (Math.cos(a0) * SX + Math.sin(a0) * SY) > COS_HALF ? 'L' : 'l';
     const droop = 0.5 + rnd(f + 30) * 0.7;
     const len = R * (0.72 + rnd(f + 60) * 0.42);
     for (let t = 0; t <= 1.0001; t += 0.045) {
@@ -348,7 +530,11 @@ function frondCrown(R, variant, swingPx = 0) {
       const py = Math.round((Math.sin(a) * rr + t * t * droop * R * 0.45) * SQ);
       const wdt = Math.max(0, Math.round(2.2 * (1 - t * 0.85)));
       for (let q = -wdt; q <= wdt; q++) {
-        put(px, py + q, Math.abs(q) === wdt && wdt > 0 ? 'm' : 'l');
+        // The blade EDGES stay `m` whether the frond is lit or not. Only the
+        // core turns: a frond catching the light is a bright line inside its
+        // own edge, not a wider frond, and leaving the edge alone is also what
+        // keeps the lit island the shape of a frond rather than of a blob.
+        put(px, py + q, Math.abs(q) === wdt && wdt > 0 ? 'm' : core);
       }
     }
   }
@@ -398,7 +584,35 @@ function grow(rows, k) {
 
 const SMALL = CANOPY.map((r) => grow(r, 1));
 
-const leafMap = (C, g) => ({ d: C.black, x: g.k, m: g.r, l: g.l, a: g.t, '.': -1 });
+/**
+ * `L` is the LIT frond core and it defaults to the unlit one, so every caller
+ * that has no lit tone — every canopy, every bush, the pot plant — maps it to
+ * exactly what it maps `l` to and could not tell the difference if a table
+ * contained one.
+ */
+const leafMap = (C, g, lit) => ({
+  d: C.black, x: g.k, m: g.r, l: g.l, L: lit === undefined ? g.l : lit, a: g.t, '.': -1,
+});
+
+/**
+ * The lit tone: `steps` rungs up the frond's OWN colour family.
+ *
+ * A rung rather than a lightened mint, for two reasons. The ladder belongs to
+ * the scene's light — `src/gen/palette.js` draws LEFT/RIGHT/DARK per seed —
+ * so a tone taken off it varies with the scene exactly as every other tone in
+ * the crown does, instead of being a fifth constant sitting outside the
+ * lighting model. And it adds no colour to the palette: `g.t` is already in
+ * this crown's map (it is what a canopy's lit side is drawn in), so a lit palm
+ * spends nothing on `palette.distinct` and cannot manufacture a near-duplicate.
+ *
+ * Clamped at both ends, so `FROND_LIT_STEPS * gain` can be any number the knob
+ * produces and the worst it can do is ask for a rung that does not exist.
+ */
+function litTone(g, steps) {
+  const ramp = [g.k, g.r, g.l, g.t];       // the family's own ladder, dark to light
+  const i = 2 + steps;                     // `l`, the frond core, is rung 2
+  return ramp[i < 0 ? 0 : i > 3 ? 3 : i];
+}
 
 export function tree(cv, iso, C, st, x, y, z, big, A) {
   const g = st.pick([C.leaf, C.grass, C.grass, C.green]);
@@ -438,9 +652,13 @@ export function palm(cv, iso, C, st, x, y, z, A) {
   const p = projR(iso, x + 0.5 + lean * seg * 1.2, y + 0.5 + lean * seg * 0.5, z + h);
   const cR = st.int(15, 21), cV = st.int(0, 7);
   const off = movePhase(x, y, 0x2c81d7, PALM_MOVES_ONE_IN);
-  const ps = poseSet(A, off, FROND_SWING_PX, (m) => frondCrown(cR, cV, m));
+  // The lit tone is a property of the CROWN, not of a pose: it lives in the
+  // map, which `blitAnim` reads once for every pose. What changes per frame is
+  // only which fronds are drawn in it.
+  const lit = litTone(g, Math.round(FROND_LIT_STEPS * (A && A.gain !== undefined ? A.gain : 1)));
+  const ps = crownPoses(A, off, (m, sec, wid) => frondCrown(cR, cV, m, sec, wid));
   putPoses(cv, p[0] - (ps[0][0].length >> 1), p[1] - ps[0].length + 4, ps,
-    leafMap(C, g), dep(iso, x, y, z + h, 2), A);
+    leafMap(C, g, lit), dep(iso, x, y, z + h, 2), A);
   if (st.bool(0.35)) {
     const c = st.pick([C.amber, C.orange, C.lime]);
     cv.blit(p[0] - 2, p[1] - 3, ['.##.', '####', '####', '.##.'],
