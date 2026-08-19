@@ -50,9 +50,14 @@
   /* The one control outside a post. It sits in the HUD row, which is otherwise
      pointer-events:none, so the button re-enables pointer events for itself
      only and the feed keeps every pixel of its own scroll area. */
+  /* The button sits over generated artwork, so it cannot rely on the post
+     behind it. A post may be a dark city or bright desert sand. It carries
+     its own dark backdrop so it stays legible over either. */
   #aboutBtn{position:fixed;top:calc(6px + env(safe-area-inset-top));right:12px;z-index:11;
-    background:none;border:0;color:#6a6d75;font:inherit;font-size:10px;letter-spacing:.14em;
-    cursor:pointer;padding:4px 6px;pointer-events:auto}
+    background:rgba(12,13,16,.62);border:0;border-radius:3px;color:#e8e6e1;font:inherit;
+    font-size:10px;letter-spacing:.14em;cursor:pointer;padding:5px 8px;pointer-events:auto;
+    -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);
+    text-shadow:0 1px 2px rgba(0,0,0,.9)}
   #aboutBtn:active{color:#e8a33d}
   #about{position:fixed;inset:0;z-index:30;background:#0c0d10;overflow-y:auto;
     display:none;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
@@ -60,11 +65,11 @@
   #about .wrap{max-width:560px;margin:0 auto;
     padding:calc(20px + env(safe-area-inset-top)) 22px calc(48px + env(safe-area-inset-bottom))}
   #about h1{font-size:13px;letter-spacing:.42em;font-weight:500;color:#e8a33d;margin-bottom:24px}
-  #about h2{font-size:10px;letter-spacing:.18em;color:#e8a33d;opacity:.85;
+  #about h2{font-size:10px;letter-spacing:.18em;color:#e8a33d;opacity:1;
     margin:26px 0 8px;font-weight:500}
   #about p{font-size:12px;line-height:1.75;color:#b9b7b2;margin-bottom:9px}
   #about a{color:#5ec269}
-  #about .note{color:#6a6d75;font-size:11px;margin-top:28px;line-height:1.7}
+  #about .note{color:#9a9da4;font-size:11px;margin-top:28px;line-height:1.7}
   #aboutClose{position:fixed;top:calc(6px + env(safe-area-inset-top));right:12px;z-index:31;
     background:none;border:0;color:#e8e6e1;font:inherit;font-size:16px;cursor:pointer;padding:4px 8px}
 </style>
