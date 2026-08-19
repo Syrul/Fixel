@@ -6,6 +6,7 @@
 // smooth.
 
 import { pickBiome } from '../gen/biome-mix.js';
+import { pickConditions, conditionLabel } from '../gen/conditions.js';
 import { FPS, frameAt } from '../core/frame.js';
 import { paintFrame, dirtyBands, loopBytes } from '../core/anim.js';
 
@@ -229,8 +230,13 @@ async function generate(p) {
   // ready 250ms before its track is far better than the reverse.
   const a = await ask(audioW, { seed: String(p.seed), seconds: 48 });
   p.audio = a;
+  // The condition is captioned only when it is not the reference one, so a
+  // plain clear day reads exactly as it did before conditions existed and the
+  // label means "something is going on here" rather than being furniture.
+  const cnd = pickConditions(String(p.seed));
   p.meta.querySelector('.sub').textContent =
-    `${pickBiome(String(p.seed))} · ${a.bpm} BPM · ${a.key} · ${s.w}×${s.h}`;
+    `${cnd.biome}${cnd.reference ? '' : ' · ' + conditionLabel(cnd)}` +
+    ` · ${a.bpm} BPM · ${a.key} · ${s.w}×${s.h}`;
   if (active === p.i && ac) playBuffer(new Float32Array(a.mix), a.sampleRate);
 }
 

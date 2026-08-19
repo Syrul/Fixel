@@ -29,6 +29,7 @@
 
 import { makeStage } from './stage.js';
 import { BIOME_WEIGHTS, BIOME_KEYS, pickBiome } from './biome-mix.js';
+import { pickConditions } from './conditions.js';
 import { paintCity } from './biomes/city.js';
 import { paintDesert } from './biomes/desert.js';
 import { paintShore } from './biomes/shore.js';
@@ -58,11 +59,17 @@ const BIOMES = {
 };
 
 export { BIOME_KEYS, BIOME_WEIGHTS, pickBiome };
+export { pickConditions };
 
 export function renderScene(seed, opts = {}) {
   const kind = BIOMES[opts.biome] ? opts.biome : pickBiome(seed);
   const B = BIOMES[kind];
-  const stage = makeStage(seed, { ...opts, backPad: B.backPad });
+  // --cond OVERRIDES THE SEED'S OWN DRAW, and is a measurement tool only, for
+  // the same reason --biome is: it renders a picture the feed would never show
+  // for that seed. Sweeping one condition across many seeds is exactly what it
+  // is for; a duel input is exactly what it is not.
+  const cond = opts.cond || pickConditions(seed, kind);
+  const stage = makeStage(seed, { ...opts, cond, backPad: B.backPad });
   stage.biome = kind;
   B.paint(stage);
   return stage.finish({ outline: opts.outline !== false && !opts.noOut });

@@ -81,7 +81,158 @@ export const WALL_KEYS = ['concrete', 'pave', 'cream', 'white', 'stone', 'taupe'
   'sandy', 'metal', 'steel', 'slate', 'brick', 'terra', 'wood', 'concrete',
   'stone', 'cream', 'white', 'glass', 'teal'];
 
-export function buildPalette(rng) {
+/**
+ * Shortest-arc hue pull toward a target, by a fraction `k`.
+ *
+ * MUST take the signed difference modulo 360, and this generator has already
+ * shipped the bug where it did not: pulling hue 350 toward 10 the naive way
+ * travels 340 degrees the wrong way round the wheel and lands nowhere near the
+ * target. A pull is how conditions tint a pigment WITHOUT flattening it — every
+ * family keeps its own hue and its own separation from its neighbours, it is
+ * just carried some of the way toward the light's colour.
+ */
+function pullHue(h, target, k) {
+  let d = ((target - h) % 360 + 540) % 360 - 180;
+  return h + d * k;
+}
+
+/**
+ * What the conditions do to ONE family, before it is minted.
+ *
+ * THIS IS THE WHOLE REASON NIGHT IS NOT A FILTER. A multiply applied to the
+ * finished canvas would throw away the shading ladder, the palette commitment
+ * and the ink model in one line, and every craft number would move at once.
+ * Here the family is DIFFERENT BEFORE IT IS MINTED: the pigment arrives cool
+ * and dim, and `mk` then builds its ladder from that pigment exactly as it
+ * always did — same rescale, same contour step, same law that the shadow step
+ * does not rotate hue.
+ *
+ * `HUE0` is deliberately untouched anywhere in this file. Night's coolness
+ * belongs to the PIGMENT, not to the shadow step. `shade.hueRotMedian` near
+ * zero is the counterintuitive property `docs/BAR.md` says procedural shaders
+ * always get wrong and this one gets right, and a night that tinted the shadow
+ * step would lose it while looking, at a glance, correct.
+ */
+function condLight(h, s, l, cond, neutral) {
+  if (cond.reference) return [h, s, l];      // day + clear: exactly as drawn
+
+  // NIGHT. Everything approaches a cool ambient floor rather than scaling to
+  // zero: a flat multiply crushes the darks into the ink and the picture loses
+  // its darkest material to the silhouette, which is the failure `rubber` was
+  // added to fix. Neutrals are carried further toward the night hue than
+  // accents are, because a painted red awning is still red after dark and a
+  // grey wall is not still grey — it is whatever colour the sky is.
+  if (cond.night) {
+    // THE NUMBERS HERE ARE SET BY A MEASUREMENT, NOT BY HOW DARK NIGHT LOOKS.
+    //
+    // The first version compressed lightness to 0.44 of its range and pulled
+    // neutral hues 42% toward the night blue. It looked like night. It also
+    // destroyed the palette: two different highland seeds, one clear and one in
+    // rain, came out 0.0035 apart on the cross-seed histogram distance, against
+    // 0.1926 for the closest pair of the same eight seeds rendered clear. Two
+    // unrelated scenes had converged on the colour of the dark.
+    //
+    // That is "night must not become a filter" arriving as a number rather than
+    // as a warning. A condition that compresses the ramp far enough stops being
+    // a light and starts being a lossy channel — and the variety gate binds on
+    // the CLOSEST pair, so the worst case is the case that counts.
+    //
+    // Read the collapse with one caveat stated: the distance is a 4x4x4 RGB
+    // histogram, two bits a channel, so its resolution in the dark quadrant is
+    // genuinely poor and it OVERSTATES how far two night scenes have converged.
+    // The direction is real, the magnitude is partly the instrument.
+    const AMB = 0.07;
+    h = pullHue(h, 218, neutral ? 0.30 : 0.16);
+    s = neutral ? s * 1.15 + 0.03 : s * 0.84;
+    l = AMB + (l - AMB) * 0.58;
+  } else if (cond.warmth > 0) {
+    // GOLDEN. A low sun is warm and it lifts the lit faces rather than the
+    // whole ramp — which is why it is a ladder change and not a tint.
+    const w = cond.warmth;
+    h = pullHue(h, 34, (neutral ? 0.30 : 0.14) * w);
+    s = Math.min(1, s * (1 + 0.34 * w) + (neutral ? 0.045 * w : 0));
+    l = l * (1 + 0.08 * w);
+  }
+
+  // OVERCAST, FOG, HAZE, DUST. These do not darken so much as FLATTEN and
+  // drain. The sky becomes the light source, so saturation falls and everything
+  // is carried toward one another — which is what losing the horizon looks
+  // like. Fog is BRIGHT, not dark, and that is the part procedural weather
+  // usually gets backwards.
+  if (cond.overcast > 0) {
+    const o = cond.overcast;
+    const tgt = cond.weather === 'dust' ? 34 : cond.weather === 'haze' ? 40 : 214;
+    h = pullHue(h, tgt, 0.30 * o);
+    s = s * (1 - 0.42 * o) + (cond.weather === 'dust' ? 0.05 * o : 0);
+    // Toward the fog's own value rather than simply up: a fog lightens a dark
+    // material and slightly darkens a white one, because both approach the
+    // scattering medium.
+    // Fog is not overcast with a bigger number on it. Overcast removes the
+    // sun; fog removes the DISTANCE, so it carries everything much further
+    // toward one value. Without a separate strength the two read as the same
+    // weather twice, which is what the first contact sheet showed.
+    // THE VEIL IS DELIBERATELY WEAKER THAN IT WANTS TO BE, and the reason is
+    // measured. At the first strength — fog 0.62 with saturation at 0.72 — the
+    // MEDIAN cross-seed spread widened handsomely and the CLOSEST PAIR
+    // collapsed: two different highland seeds under two different heavy
+    // conditions landed 0.0035 apart on the histogram, against 0.1926 for the
+    // same eight seeds all rendered clear. A veil that strong overwrites the
+    // per-neighbourhood colour commitment the whole palette exists to produce,
+    // so two unrelated scenes converge on the colour of the weather.
+    //
+    // That is the same failure as "night must not become a filter", found in a
+    // different condition — and it matters more here, because the variety gate
+    // binds on the MINIMUM pairwise distance, not the median. A feature that
+    // improves the average and wrecks the worst case makes the feed worse.
+    const veil = cond.night ? 0.16 : 0.82;
+    const veilK = cond.weather === 'fog' ? 0.38 : cond.weather === 'haze' ? 0.26 : 0.18;
+    l = l + (veil - l) * veilK * o;
+    if (cond.weather === 'fog') s *= 0.86;
+  }
+
+  return [h, s, l];
+}
+
+/**
+ * What the conditions do to a NAMED MATERIAL, before the light touches it.
+ *
+ * Split from `condLight` because the two answer different questions and apply
+ * in different places. The light applies to EVERY tone this palette ever mints
+ * and therefore lives inside `mk`; wet tarmac and settled snow apply to the
+ * families a road or a field is made of, which only the table knows, so they
+ * apply here and the light is applied on top by `mk` afterwards. Material
+ * first, then light, which is also the physical order.
+ */
+function condMaterial(h, s, l, cond, key) {
+  if (cond.reference) return [h, s, l];
+
+  // WET. The sign inverts after dark, which is the interaction `conditions.js`
+  // exists to resolve: a wet road at noon reflects the sky AWAY from the camera
+  // and reads darker, and at night it reflects the lamps BACK and its
+  // highlights read brighter. Applied only to the families a road, a pavement
+  // or a stone is actually made of — a wet awning is not a thing.
+  if (cond.wet > 0 && WETTABLE.has(key)) {
+    const w = cond.wet;
+    l = cond.night ? l * (1 + 0.30 * w) : l * (1 - 0.26 * w);
+    s = Math.min(1, s * (1 + 0.30 * w));
+  }
+
+  // SETTLED SNOW. A cover, not a tint: the ground families become snow and keep
+  // only a trace of what they were, while walls and metal are untouched.
+  if (cond.settled > 0 && GROUND.has(key)) {
+    h = pullHue(h, 212, 0.55);
+    s = s * 0.30;
+    l = l + (0.93 - l) * 0.72;
+  }
+  return [h, s, l];
+}
+
+/** Families a road, a pavement or a stone is made of — the ones rain wets. */
+const WETTABLE = new Set(['road', 'roadD', 'pave', 'concrete', 'stone', 'taupe', 'sandy', 'tar', 'slate']);
+/** Families that snow settles on. */
+const GROUND = new Set(['road', 'roadD', 'pave', 'concrete', 'stone', 'taupe', 'sandy', 'grass', 'leaf', 'green', 'lime']);
+
+export function buildPalette(rng, cond = { reference: true, overcast: 0, wet: 0, settled: 0, warmth: 0, night: false, sun: 1, weather: 'clear' }) {
   const r = rng.stream('palette');
   const pal = new Palette();
   const cache = new Map();
@@ -105,9 +256,26 @@ export function buildPalette(rng) {
   // constants (0.77 / 0.57 / 0.46) so a typical scene sits where the measured
   // band already accepted it, and wide enough that two seeds are lit
   // differently rather than identically.
-  const LEFT = r.range(0.665, 0.865);
-  const RIGHT = LEFT * r.range(0.62, 0.86);
-  const DARK = RIGHT * r.range(0.66, 0.90);
+  let LEFT = r.range(0.665, 0.865);
+  let RIGHT = LEFT * r.range(0.62, 0.86);
+  let DARK = RIGHT * r.range(0.66, 0.90);
+  // THE LADDER IS THE SUN, so the sky flattens it. Under cloud there is less
+  // difference between a face pointing at the light and one pointing away,
+  // because there is no direction the light comes from any more. The steps are
+  // compressed TOWARD 1 rather than scaled, so a flat scene keeps its facets at
+  // reduced contrast instead of losing them.
+  //
+  // Night is NOT flattened by this: a night city has strong local light from
+  // windows and lamps, so its contrast is high and merely differently
+  // distributed. Night's change is to the pigment, in `condTone`. Conflating
+  // the two would produce a flat dark grey picture, which is what a filter
+  // looks like.
+  if (cond.overcast > 0) {
+    const keep = 1 - 0.40 * cond.overcast;
+    LEFT = 1 - (1 - LEFT) * keep;
+    RIGHT = 1 - (1 - RIGHT) * keep;
+    DARK = 1 - (1 - DARK) * keep;
+  }
 
   // ---- this scene's hue policy -------------------------------------------
   // TWO SEPARATE KNOBS, and the separation is the whole point.
@@ -142,6 +310,21 @@ export function buildPalette(rng) {
   const QH = r.range(3.4, 8.5), QS = r.range(9, 21), QL = r.range(18, 36);
 
   function mk(h, s, l) {
+    // THE LIGHT APPLIES HERE, AT THE ONE CHOKE POINT EVERY TONE PASSES THROUGH.
+    //
+    // It was first applied in the FAM loop, and the first contact sheet showed
+    // exactly what that misses: a night city whose ground and walls were dark
+    // and whose SIGNS, awnings, shirts and the shore's own minted sand were
+    // still at full daylight. Most of the colour in this generator is minted
+    // per object through `mk` — `wallTone`, `accentTone`, every biome's own
+    // materials — and never appears in the family table at all. Conditioning
+    // the table conditions the minority of the frame.
+    //
+    // Applied BEFORE the cache key, so two pigments that the light collapses
+    // onto one tone share a palette entry rather than minting two identical
+    // colours. That is also why `palette.distinct` falls at night: the ramp is
+    // genuinely shorter after dark, not accidentally duplicated.
+    [h, s, l] = condLight(h, s, l, cond, s < 0.25);
     h = ((h % 360) + 360) % 360;
     s = Math.max(0, Math.min(1, s));
     l = Math.max(0.05, Math.min(0.99, l));
@@ -249,11 +432,19 @@ export function buildPalette(rng) {
   const neutralSat = SZONE[r.int(0, SZONE.length - 1)] * r.range(0.85, 1.18);
   for (const [k, h, s, l] of FAM) {
     const neutral = s < 0.25;
-    C[k] = mk(h + (neutral ? neutralHue : drift),
+    // The scene's own decisions first — its drift, its saturation, its
+    // lightness zone — and the conditions on top of the result. That order
+    // matters: conditions modify THIS scene's palette, not the table's, so two
+    // night cities are still two different cities rather than one night.
+    const [ch, cs, cl] = condMaterial(
+      h + (neutral ? neutralHue : drift),
       s * (neutral ? neutralSat : satMul),
-      Math.min(0.98, l * (neutral ? litMul : 1 + (litMul - 1) * 0.4)));
+      Math.min(0.98, l * (neutral ? litMul : 1 + (litMul - 1) * 0.4)),
+      cond, k);
+    C[k] = mk(ch, cs, cl);
   }
   C.light = { LEFT, RIGHT, DARK, HUE0, HUEJ, SATK };
+  C.cond = cond;
   C.tar = C.slate;
 
   C.skin = [

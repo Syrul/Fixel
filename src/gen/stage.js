@@ -22,6 +22,7 @@ import { AnimRec } from '../core/anim.js';
 import { View, SCALE } from './view.js';
 import { setInk } from './draw.js';
 import { buildPalette } from './palette.js';
+import { pickConditions } from './conditions.js';
 
 /**
  * Canvas that stamps the current object tag on everything it draws.
@@ -139,7 +140,13 @@ export function outlinePass(cv, black, skip, nTags) {
 export function makeStage(seed, opts = {}) {
   const W = opts.w || 1600, H = opts.h || 1100;
   const rng = new Rng(seed);
-  const { pal, C } = buildPalette(rng);
+  // CONDITIONS ARE RESOLVED BEFORE THE PALETTE AND THEREFORE BEFORE EVERYTHING.
+  // They belong here, beside the biome and the palette commitment, because they
+  // change what the scene is MADE OF. Anything applied after the scene is drawn
+  // would be a filter over a finished picture, and would take the shading
+  // ladder, the local colour and the ink model with it.
+  const cond = opts.cond || pickConditions(seed);
+  const { pal, C } = buildPalette(rng, cond);
   const cv = new TaggedCanvas(W, H, pal);
   setInk(C.black);
 
@@ -207,11 +214,21 @@ export function makeStage(seed, opts = {}) {
 
   return {
     W, H, S, rng, pal, C, cv, iso, ox, oy, X0, X1, Y0, Y1, seedN,
-    tag, tagRaw, vis,
+    tag, tagRaw, vis, cond,
     frame, frames, anim,
     get tagN() { return tagN; },
     finish(o = {}) {
       if (o.outline !== false) outlinePass(cv, C.black, noOutline, tagN);
+      // ANYTHING THAT IS IN FRONT OF THE INK DRAWS HERE, after the sweep and
+      // before the recorder is closed. Falling rain and snow are the only
+      // things that qualify: they are between the camera and every object in
+      // the frame, including its outline, so a drop drawn before the sweep
+      // would have the sweep drawn over it.
+      //
+      // It is the one place in this generator where a pass may cover ink, and
+      // it is therefore the one place that can move `outline.darkShare` and the
+      // ink-closure ratio. Measured, not assumed — see docs/ROUNDS.md.
+      if (o.front) o.front(cv);
       // AFTER the sweep, deliberately. The sweep is the last thing that writes
       // a pixel, and a pixel it blackened is a pixel that must not animate: ink
       // that moved would be ink redistributed, and ink closure is the one

@@ -4,6 +4,8 @@
 // Deterministic: the same seed produces a byte-identical PNG across processes.
 
 import { renderScene } from '../src/gen/scene.js';
+import { pickConditions, resolveConditions } from '../src/gen/conditions.js';
+import { pickBiome } from '../src/gen/biome-mix.js';
 import { writePNG } from '../src/core/png.js';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -27,6 +29,13 @@ const h = parseInt(arg('h', '1100'), 10);
 // whose OWN biome is a city rather than forcing a city onto a desert's seed.
 // Left off, this file behaves as it always has.
 const biome = arg('biome', undefined);
+// --time / --weather OVERRIDE THE SEED'S OWN DRAW, and are measurement tools
+// only, for the same reason --biome is. Sweeping one condition across many
+// seeds is what they are for. `--time day --weather clear` renders the
+// REFERENCE condition, which is how the byte-identity check against the
+// pre-conditions tree is done.
+const time = arg('time', undefined);
+const weather = arg('weather', undefined);
 
 // --frame / --frames: WHICH picture of the loop, and how many there are.
 //
@@ -40,13 +49,25 @@ const frames = parseInt(arg('frames', '1'), 10);
 const frame = parseInt(arg('frame', '0'), 10);
 
 const t0 = Date.now();
+// Re-derived through the same resolver the feed uses, so the INTERACTIONS stay
+// consistent: overriding the two names on an already-resolved object would keep
+// the old `sun`, `warmth` and `wet` and produce a state the resolver would
+// never emit — a golden night, a dry rain.
+let cond;
+if (time || weather) {
+  const kind = biome || pickBiome(seed);
+  const base = pickConditions(seed, kind);
+  cond = resolveConditions(time || base.time, weather || base.weather, kind);
+}
+
 const cv = renderScene(seed, {
   w, h, frames, frame,
   ...(biome ? { biome } : {}),
+  ...(cond ? { cond } : {}),
 });
 const ms = Date.now() - t0;
 mkdirSync(dirname(out), { recursive: true });
 writePNG(out, cv.w, cv.h, cv.toRGBA());
 process.stderr.write(
-  `seed=${seed}${biome ? ` biome=${biome}` : ''} ${cv.w}x${cv.h} palette=${cv.pal.size}` +
+  `seed=${seed}${biome ? ` biome=${biome}` : ''}${cond ? ` ${cond.time}/${cond.weather}` : ''} ${cv.w}x${cv.h} palette=${cv.pal.size}` +
   `${frames > 1 ? ` frame=${frame}/${frames} anim=${cv.anim ? cv.anim.n : 0}px` : ''} ${ms}ms -> ${out}\n`);
