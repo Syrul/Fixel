@@ -51,7 +51,7 @@
 //    the bar makes, by moored craft, buoys, weed rafts, skerries, the pier's
 //    piles and their reflections.
 
-import { heightField, fbm, tri } from '../world.js';
+import { heightField, fbm, tri, vnoise } from '../world.js';
 import { makeTerrain, drawTerrain, walkTrack } from '../terrain.js';
 import { drawSlab } from '../../core/iso.js';
 import { box, gable } from '../draw.js';
@@ -198,6 +198,27 @@ function makeFields(X0, Y0, X1, Y1, cell, fn) {
       if (j < 0) j = 0; else if (j > gy - 1) j = gy - 1;
       return g[j * gx + i];
     },
+  };
+}
+
+/** One channel, one grid, bilinear. The cheap half of the field layer. */
+function makeField1(X0, Y0, X1, Y1, cell, fn) {
+  const gx = Math.ceil((X1 - X0) / cell) + 4;
+  const gy = Math.ceil((Y1 - Y0) / cell) + 4;
+  const a = new Float32Array(gx * gy);
+  for (let j = 0; j < gy; j++) {
+    const wy = Y0 + (j - 1) * cell;
+    for (let i = 0; i < gx; i++) a[j * gx + i] = fn(X0 + (i - 1) * cell, wy);
+  }
+  return (x, y) => {
+    const fx = (x - X0) / cell + 1, fy = (y - Y0) / cell + 1;
+    let i = Math.floor(fx), j = Math.floor(fy);
+    if (i < 0) i = 0; else if (i > gx - 2) i = gx - 2;
+    if (j < 0) j = 0; else if (j > gy - 2) j = gy - 2;
+    const tx = fx - i, ty = fy - j;
+    const k = j * gx + i, k2 = k + gx;
+    const lo = a[k] + (a[k + 1] - a[k]) * tx;
+    return lo + ((a[k2] + (a[k2 + 1] - a[k2]) * tx) - lo) * ty;
   };
 }
 
@@ -353,8 +374,20 @@ export function paintShore(stage) {
   const cell = cs.range(2.8, 3.3);
   const step = cs.range(1.55, 2.05);
 
+  // A ROUGH SEABED, AND IT IS NOT DECORATION. With the bathymetry perfectly
+  // smooth the four depth zones come out as four parallel ribbons; with a
+  // mid-frequency reef term under them the same four zones become patchy
+  // shoals, banks and holes whose boundaries wander at every angle. It is the
+  // cheapest structural break the water has, it costs one fbm, and it is what
+  // the sea floor is actually like.
+  const reefAmp = cs.range(0.45, 0.95);
   const MF = makeFields(X0, Y0, X1, Y1, cell, (x, y, out) => {
-    const h0 = F0(x - Ox, y - Oy);
+    let h0 = F0(x - Ox, y - Oy);
+    const e0 = h0 / slope;
+    if (e0 < -6) {
+      h0 += reefAmp * (fbm(x * 0.031, y * 0.031, S0 + 1277, 2) - 0.5) * 2
+        * sm((-6 - e0) / 14);
+    }
     const e = h0 / slope;
     out[0] = h0;
     out[1] = nrm(fbm(x * 0.0092, y * 0.0092, S0 + 431, 2));
@@ -367,6 +400,19 @@ export function paintShore(stage) {
       + farAmp * (fbm(x * 0.0068, y * 0.0068, S0 + 337, 2) - 0.5) * 2 * g2
       + skerry(x, y, h0);
   });
+
+  // A FINE FIELD, ON ITS OWN GRID.
+  //
+  // The four-channel field above is sampled at the terrain cell, about three
+  // world units, so nothing on it resolves below about thirty screen pixels —
+  // which is why the first ground stage measured flat5x5 at 0.55-0.62 against
+  // the city's 0.18. That is the sparse-generator failure `docs/BAR.md` names:
+  // faces too big, not detail too small. This one is sampled at 1.5 units and
+  // carries a single octave at a seven-unit wavelength, so it resolves to about
+  // fifteen screen pixels and can cut ripple sets, scour patches and vegetation
+  // clumps at the scale a 5x5 window actually reads.
+  const FF = makeField1(X0, Y0, X1, Y1, 1.5,
+    (x, y) => nrm(vnoise(x * 0.138, y * 0.138, S0 + 911)));
 
   const T = makeTerrain({
     X0, Y0, X1, Y1, cell, step, seaH: 0,
@@ -420,8 +466,25 @@ export function paintShore(stage) {
     shell: C.mk(sandH + ts.range(2, 16), sandS * ts.range(0.20, 0.45), Math.min(0.95, sandL * 1.10)),
   };
 
+  // EACH REGION COMMITS TO ITS OWN HUE, AND THE PATCHES INSIDE IT VARY BY
+  // VALUE. That split is the whole difference between local colour and
+  // camouflage. The first version gave every patch its own hue wobble off one
+  // shared base, so a single stretch of machair carried a dozen greens twelve
+  // degrees apart at a fifteen-pixel scale and read as disruptive pattern. A
+  // bay now differs from the next bay by hue; within one bay, sand is one sand
+  // at several values.
   const REG = [];
-  for (let i = 0; i < NR; i++) REG.push(mintRegion(C, ts, B));
+  for (let i = 0; i < NR; i++) {
+    const dh = ts.range(-11, 11), dt = ts.range(-16, 16);
+    const dsat = ts.range(0.80, 1.24), dl = ts.range(0.92, 1.08);
+    const RB = {};
+    for (const k of Object.keys(B)) {
+      const f = B[k];
+      const warm = k === 'turf' || k === 'wrack' ? dt : dh;
+      RB[k] = C.mk(f._h + warm, f._s * dsat, clampL(f._L * dl));
+    }
+    REG.push(mintRegion(C, ts, RB));
+  }
 
   // The sea's HUE is minted once for the whole water body rather than per
   // region: one bay is not a different ocean, and a hue break running out to
@@ -466,6 +529,7 @@ export function paintShore(stage) {
   const groundTop = (u, v, z) => {
     MF.at(u, v, buf);
     const h0 = buf[0], swell = buf[1], grain = buf[2];
+    const fine = FF(u, v);
     const e = h0 / slope;
     const R = regionAt(u, v, swell);
     const li = lvIdx(z);
@@ -485,25 +549,44 @@ export function paintShore(stage) {
       return h0 > -0.55 ? F.k : (grain > 0.62 ? F.l : F.t);
     }
 
-    // ---- wet sand: the last tide's ground. Runnels and a sheen, drawn as
-    // contoured bands of the same sand at two values — a beach at low water is
-    // banded, and it is banded ALONG the shore.
+    // ---- wet sand: the last tide's ground.
+    //
+    // A RIPPLE SET, PER PATCH, NEVER PER PIXEL. Which patch a pixel is in comes
+    // off the grain field, so the patch boundaries are level sets — curves at
+    // every angle — and each patch carries its own pitch and phase, so the sets
+    // break against each other the way ripples reorganise across a beach. One
+    // ripple field over the whole frame would be a lattice with a ten-pixel
+    // period, and 2D autocorrelation is the measurement that names
+    // "machine-made at a glance".
     if (e < E_WET) {
       const F = R.wet[li][p];
-      // A runnel set at a 13-unit period — 60 screen pixels, two values — not
-      // the 6px ladder the first version drew.
-      const t = tri(e * 0.077 + swell * 2.4 + grain * 0.45);
       if (e < 1.4 && grain > 0.48) return R.foam[p % 5].t;
-      return t < 0.12 ? F.r : t < 0.58 ? F.l : F.t;
+      const rp = h3(p, 3, S0 + 61);
+      const pitch = 1.7 + (rp & 7) * 0.26;
+      const t = tri(e / pitch + ((rp >>> 8) & 255) / 256 + fine * 0.85);
+      // and the runnels: a longer wave the ripple sets sit inside
+      const run = tri(e * 0.077 + swell * 2.4);
+      const G = run < 0.22 ? R.wet[li][(p + 6) % 12] : F;
+      return t < 0.18 ? G.r : t < 0.56 ? G.l : G.t;
     }
 
     // ---- the dry beach. Large contoured patches of the region's own sand,
-    // cut by the grain field, plus scour tails and a shell-drift in the pale
-    // pool. Never a per-pixel speckle.
+    // cut by the grain field, with wind ripples on some of them, scour tails
+    // and a shell drift. Never a per-pixel speckle.
     if (e < E_DRY) {
       const F = R.dry[li][p];
       if (grain > 0.775) return R.shell[p % 5].t;
-      if (grain < 0.155) return R.dry[li][(p + 5) % 12].l;
+      const rp = h3(p, 7, S0 + 61);
+      if ((rp & 3) !== 0) {
+        // a wind ripple set: a longer pitch than the swash's, and only on some
+        // patches, so the beach is part combed and part smooth sheet
+        const pitch = 3.1 + (rp & 7) * 0.42;
+        const t = tri(e / pitch + ((rp >>> 9) & 255) / 256 + fine * 1.15 + swell * 1.4);
+        if (t < 0.16) return F.r;
+        if (t < 0.52) return F.l;
+      }
+      if (fine > 0.70) return R.dry[li][(p + 5) % 12].l;
+      if (fine < 0.26) return R.scrape[p % 5].l;
       return grain > 0.52 ? F.l : F.t;
     }
 
@@ -516,7 +599,11 @@ export function paintShore(stage) {
         const G = R.wrack[p % 5];
         return (w > -0.028 && w < 0.028) ? G.k : G.t;
       }
+      // shingle: three values at the fine field's scale, so the berm reads as
+      // graded stone rather than as a flat band
       const F = R.berm[li][p];
+      if (fine > 0.68) return R.berm[li][(p + 7) % 12].t;
+      if (fine < 0.30) return F.r;
       return grain > 0.50 ? F.l : F.t;
     }
 
@@ -524,15 +611,22 @@ export function paintShore(stage) {
     // is still sand, so the two materials interleave as patches rather than
     // meeting at a line.
     if (e < E_DUNE) {
-      const cover = sm((e - E_BERM) / (E_DUNE - E_BERM)) * 0.72 + grain * 0.5 - 0.11;
+      // COVER CLUMPS AT TWO SCALES. Marram does not advance as a front; it
+      // takes a dune in patches, and the patches have patches. One threshold on
+      // one field gave a smooth boundary with a hundred-pixel radius, which is
+      // most of why this band measured as the weakest in the frame.
+      const cover = sm((e - E_BERM) / (E_DUNE - E_BERM)) * 0.66
+        + grain * 0.42 + fine * 0.34 - 0.21;
       const F = cover > 0.5 ? R.marram[li][p] : R.dry[li][p];
-      return grain > 0.54 ? F.l : F.t;
+      if (cover > 0.46 && cover < 0.54) return R.marram[li][p].k;
+      return fine > 0.52 ? F.l : F.t;
     }
 
     // ---- firm ground. Turf, with the sand blowing through it at the seaward
     // edge and bare scrapes where the ground is high.
     const F = R.firm[li][p];
     if (grain > 0.72 && swell < 0.46) return R.scrape[p % 5].t;
+    if (fine > 0.70) return F.r;
     return grain > 0.48 ? F.l : F.t;
   };
 
@@ -564,6 +658,10 @@ export function paintShore(stage) {
 
     const zi = e > -6 ? 3 : e > -21 ? 2 : e > -48 ? 1 : 0;
     const F = R.sea[zi][idxN(grain, 4) + 4 * idxN(swell, 2)];
+    // NO CAT'S PAWS. Three values of open water cut at the fine field's fifteen
+    // pixels turned the sea into leopard print — camouflage, which is exactly
+    // what the measurement script warns the colour floor can be bought with.
+    // The sea's structure is the reef under it and the objects on it.
 
     // The swell runs on the LINEAR cross-shore ordinate, not on the exposure
     // field: the exposure field carries the bar, and over the bar's outer face
@@ -1096,20 +1194,20 @@ function mintRegion(C, st, B) {
   // enough on hue and saturation to be five colours rather than five roundings
   // of one, and narrow enough that all of them are still sand.
   R.dry = table(C, st, B.sand, 5, 12,
-    { h: 7, hw: 11, s0: 0.66, s1: 1.30, lw: 0.11, lvWalk: 0.13, l0: 0.90, l1: 1.06 });
+    { h: 3, hw: 5, s0: 0.80, s1: 1.16, lw: 0.13, lvWalk: 0.13, l0: 0.90, l1: 1.07 });
   R.wet = table(C, st, B.wet, 5, 12,
-    { h: 8, hw: 12, s0: 0.62, s1: 1.34, lw: 0.15, lvWalk: 0.11, l0: 0.86, l1: 1.12 });
+    { h: 4, hw: 6, s0: 0.78, s1: 1.20, lw: 0.16, lvWalk: 0.11, l0: 0.87, l1: 1.12 });
   R.berm = table(C, st, B.berm, 5, 12,
-    { h: 10, hw: 16, s0: 0.50, s1: 1.44, lw: 0.15, lvWalk: 0.13, l0: 0.86, l1: 1.10 });
+    { h: 5, hw: 8, s0: 0.70, s1: 1.28, lw: 0.17, lvWalk: 0.13, l0: 0.86, l1: 1.11 });
   R.marram = table(C, st, B.turf, 5, 12,
-    { h: 12, hw: 20, s0: 0.55, s1: 1.18, lw: 0.15, lvWalk: 0.14, l0: 0.90, l1: 1.14 });
+    { h: 5, hw: 9, s0: 0.74, s1: 1.14, lw: 0.17, lvWalk: 0.14, l0: 0.90, l1: 1.15 });
   // Machair — the rough grazing behind a dune — is not a lawn. Sand is still
   // half of what it is made of, so the turf runs desaturated and pale and the
   // scrape pool cuts bare sand back through it.
   R.firm = table(C, st, B.turf, 5, 12,
-    { h: 14, hw: 24, s0: 0.42, s1: 1.10, lw: 0.15, lvWalk: 0.14, l0: 0.88, l1: 1.16 });
+    { h: 6, hw: 10, s0: 0.66, s1: 1.16, lw: 0.19, lvWalk: 0.15, l0: 0.88, l1: 1.18 });
   R.rock = table(C, st, B.rock, 3, 12,
-    { h: 12, hw: 22, s0: 0.40, s1: 1.60, lw: 0.20, lvWalk: 0.14, l0: 0.86, l1: 1.30 });
+    { h: 6, hw: 11, s0: 0.55, s1: 1.40, lw: 0.22, lvWalk: 0.14, l0: 0.86, l1: 1.28 });
   // Accents on the ground: shell drift, wrack, bare scrapes, foam.
   R.shell = pool(C, st, B.shell, 5, { h: 8, hw: 13, s0: 0.5, s1: 1.3, lw: 0.09, l0: 0.94, l1: 1.03 });
   R.wrack = pool(C, st, B.wrack, 5, { h: 12, hw: 22, s0: 0.6, s1: 1.4, lw: 0.24, l0: 0.80, l1: 1.16 });
@@ -1133,7 +1231,7 @@ function mintSea(C, st, R, h0, s0, l0) {
     const row = [];
     for (let i = 0; i < 8; i++) {
       row.push(C.mk(
-        h0 - 30 * t + st.range(-8, 8),
+        h0 - 30 * t + st.range(-4, 4),
         Math.min(1, s0 * (1 - 0.28 * t) * st.range(0.80, 1.20)),
         clampL(l0 * (1 + 1.05 * t * t) * st.range(0.90, 1.12))));
     }
