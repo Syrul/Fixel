@@ -54,9 +54,12 @@ function sideShade(F, o) {
     for (let i = 0; i < o.axles.length; i++) {
       const du = u - o.axles[i];
       const r2 = du * du + v * v;
-      if (r2 < o.hubR * o.hubR) return o.hub;         // lit hub — an enclosed cell
-      if (r2 < o.archR * o.archR) return K;           // tyre
-      if (r2 < (o.archR + PX2) * (o.archR + PX2)) return K;  // arch line
+      // A tyre is a RING, not a disc. A filled disc at this scale is a dark
+      // blob, and `outline.run12Share` reads dark blobs as fat outlines — it
+      // moved -0.56 bandwidths the first time this was drawn solid. The ring
+      // also gives the hub its own enclosed cell, which is the whole point.
+      if (r2 < o.hubR * o.hubR) return o.hub;
+      if (r2 < o.archR * o.archR) return K;
     }
     if (v > o.waist - PX && v < o.waist + PX) return K;
     for (let i = 0; i < o.seams.length; i++) {
@@ -151,16 +154,16 @@ export function drawVehicle(cv, iso, C, st, x, y, z, ax, kind, mkTag) {
   const grow = st.range(0.92, 1.12);
   L *= grow; W *= st.range(0.96, 1.06); cf *= grow; cl *= grow;
 
-  const zBody = z + wr * 0.62;      // body sits on the axle line
+  const zBody = z + 0.42;           // body sits just clear of the road
   const zTop = zBody + H;
   const axles = [wr + 0.55, L - wr - 0.55];
   const seams = [];
   for (let i = 1; i <= nSeam; i++) seams.push(L * (i / (nSeam + 1)));
 
   const sideOpts = {
-    ink: K, L, axles, archR: wr, hubR: Math.max(0.42, wr - 0.62),
+    ink: K, L, axles, archR: wr, hubR: wr * 0.56,
     hub: st.bool(0.5) ? C.white.t : C.metal.t,
-    waist: H * 0.55, seams,
+    waist: H * 0.58, seams,
     upper: null, lower: null,
   };
   const endOpts = {
@@ -170,12 +173,19 @@ export function drawVehicle(cv, iso, C, st, x, y, z, ax, kind, mkTag) {
   };
 
   // ------------------------------------------------------------------ wheels
-  // A black band under the body, tucked in so the arches on the side faces sit
-  // over it. It is the contact shadow AND the tyre, in one flat mass — the
-  // erosion measurement said we trace outlines and never fill a dark mass.
+  // Only the contact shadow lives below the body: one thin black strip, plus
+  // the two axle blocks that carry the tyre down to the road. The tyres proper
+  // are cut into the side faces above, so this stays under a pixel of ink per
+  // scanline instead of being a slab.
   sub();
-  box(cv, iso, ax, x + 0.5, y + 0.28, z, L - 1.0, W - 0.56, wr * 0.95,
+  box(cv, iso, ax, x + 0.7, y + 0.30, z, L - 1.4, W - 0.60, 0.42,
     { top: null, left: K, right: K });
+  for (const a of axles) {
+    const bx = ax === 0 ? x + a - wr * 0.62 : x + 0.30;
+    const by = ax === 0 ? y + 0.30 : y + a - wr * 0.62;
+    box3(cv, iso, bx, by, z, ax === 0 ? wr * 1.24 : W - 0.60, ax === 0 ? W - 0.60 : wr * 1.24, 0.5,
+      { top: null, left: K, right: K });
+  }
 
   // -------------------------------------------------------------------- body
   cv.t = own;
