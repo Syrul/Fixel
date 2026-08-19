@@ -13,8 +13,8 @@
 import { Rng } from '../core/rng.js';
 import {
   SCALES, QUALITIES, PROGRESSIONS, CADENCES, RHYTHM_CELLS, CONTOURS,
-  DRUM_PATTERNS, BASS_FIGURES, ARP_SHAPES, PC_NAMES,
-  chordTones, degreeStep,
+  DRUM_PATTERNS, BASS_FIGURES, ARP_SHAPES, PC_NAMES, OPENINGS,
+  chordTones, degreeStep, voiceSet,
 } from './theory.js';
 
 const TICKS_PER_BAR = 16;
@@ -23,7 +23,10 @@ const TICKS_PER_BAR = 16;
 // 30 s analysis window contains at least one section-scale repeat: the
 // self-similarity lag search in the bar tops out at half a window (15 s).
 const FORM = [
-  { kind: 'intro', bars: 4 },
+  // `bars` here is a default; the opening's real length comes from the drawn
+  // OPENINGS row, and its motif is 'A' because THE OPENING STATES THE HOOK.
+  // It used to have no motif at all and TEXTURES.intro.lead = 'none'.
+  { kind: 'intro', bars: 4, motif: 'A' },
   { kind: 'A', bars: 8, motif: 'A' },
   { kind: 'A2', bars: 8, motif: 'A' },
   { kind: 'B', bars: 8, motif: 'B' },
@@ -34,7 +37,9 @@ const FORM = [
 ];
 
 const TEXTURES = {
-  intro: { drums: 'light', arp: 'eighth', lead: 'none', harmony: 'pad', bassFig: 4, leadOct: 0 },
+  // `intro` is drawn per seed in composeSong and replaces this row; the row is
+  // kept only so the shape of a texture is readable in one place.
+  intro: { drums: 'light', arp: 'eighth', lead: 'motif', harmony: 'pad', bassFig: null, leadOct: 0 },
   A: { drums: 'full', arp: 'eighth', lead: 'motif', harmony: 'stab', bassFig: null, leadOct: 0 },
   A2: { drums: 'full', arp: 'sixteenth', lead: 'motif', harmony: 'stab', bassFig: null, leadOct: 0 },
   B: { drums: 'full', arp: 'off', lead: 'motif', harmony: 'counter', bassFig: null, leadOct: 0 },
@@ -116,6 +121,33 @@ export function composeSong(seed, opts = {}) {
     drums: bst.range(0.40, 1.70),
   };
 
+  // ---- the opening ------------------------------------------------------
+  // The most-heard bars of the post, and until now the least varied. See the
+  // OPENINGS note in theory.js for the 24-seed measurement that made this a
+  // draw instead of a constant. Two streams, because the entry plan and the
+  // opening's timbre are separable quantities and law 2 means a later addition
+  // to one must not re-roll the other.
+  const opening = rng.stream('audio.opening.plan')
+    .weighted(OPENINGS.map(o => [o, o.w]));
+  const otx = rng.stream('audio.opening.texture');
+  const introTexture = {
+    drums: otx.weighted([['light', 34], ['full', 44], ['busy', 22]]),
+    arp: otx.weighted([['eighth', 44], ['sixteenth', 36], ['off', 20]]),
+    lead: 'motif',
+    harmony: otx.weighted([['pad', 42], ['stab', 36], ['counter', 22]]),
+    bassFig: null,                       // was the constant 4, in every post
+    leadOct: otx.bool(0.22) ? 12 : 0,
+    opening: opening.name,
+  };
+  // The arp is the one voice a texture can switch off, so an arp-only plan bar
+  // plus `arp: 'off'` is a bar with nothing in it. Caught by measurement, not
+  // by reading: "voices sounding in bar 0" came back with a minimum of 0 across
+  // 24 seeds, and a post that opens with an empty bar has no opening at all.
+  // Overridden after the draw rather than conditioned into it, so the number of
+  // draws taken from this stream does not depend on the plan.
+  if (introTexture.arp === 'off' && opening.plan.some(p => p === 'A')) introTexture.arp = 'eighth';
+  const textures = { ...TEXTURES, intro: introTexture };
+
   const totalBars = Math.max(8, Math.ceil(seconds / barSec));
 
   // ---- form -------------------------------------------------------------
@@ -124,13 +156,31 @@ export function composeSong(seed, opts = {}) {
   while (bar < totalBars) {
     const f = FORM[fi % FORM.length];
     const idx = sections.length;
+    const bars = f.kind === 'intro' ? opening.bars : f.bars;
     sections.push({
       index: idx, kind: f.kind, motif: f.motif || null,
-      startBar: bar, bars: Math.min(f.bars, totalBars - bar),
+      startBar: bar, bars: Math.min(bars, totalBars - bar),
       pass: Math.floor(fi / FORM.length),
     });
-    bar += f.bars; fi++;
+    bar += bars; fi++;
   }
+
+  // ---- arrangement mask -------------------------------------------------
+  // Which voices sound in which bar. `null` means "all of them", which is
+  // still every bar of every non-opening section; stage 2 fills the rest in.
+  // Keyed by absolute bar so every voice generator can ask the same question.
+  const barVoices = new Map();
+  for (const s of sections) {
+    if (s.kind !== 'intro') continue;
+    for (let b = 0; b < s.bars; b++) {
+      barVoices.set(s.startBar + b, voiceSet(opening.plan[Math.min(b, opening.plan.length - 1)]));
+    }
+  }
+  /** Does `track` sound in absolute bar `b`? */
+  const sounds = (track, b) => {
+    const set = barVoices.get(b);
+    return set ? set.has(track) : true;
+  };
 
   // ---- harmony ----------------------------------------------------------
   // One chord per bar. Chord-per-bar is the harmonic rhythm the novelty
@@ -196,8 +246,9 @@ export function composeSong(seed, opts = {}) {
   const BASS_LO = 33, BASS_HI = 50;
   for (const s of sections) {
     const st = rng.stream(`audio.bass.${s.index}`);
-    const figIdx = TEXTURES[s.kind].bassFig ?? st.int(0, BASS_FIGURES.length - 1);
+    const figIdx = textures[s.kind].bassFig ?? st.int(0, BASS_FIGURES.length - 1);
     for (let b = 0; b < s.bars; b++) {
+      if (!sounds('bass', s.startBar + b)) continue;
       const ch = chordAt(s.startBar + b);
       const fig = (b % 4 === 3 && st.bool(0.35))
         ? BASS_FIGURES[st.int(0, BASS_FIGURES.length - 1)]
@@ -217,7 +268,7 @@ export function composeSong(seed, opts = {}) {
   // ---- arpeggio ---------------------------------------------------------
   const ARP_LO = voicing.arpLo, ARP_HI = ARP_LO + 16;
   for (const s of sections) {
-    const mode_ = TEXTURES[s.kind].arp;
+    const mode_ = textures[s.kind].arp;
     if (mode_ === 'off') continue;
     const st = rng.stream(`audio.arp.${s.index}`);
     const shape = ARP_SHAPES[st.int(0, ARP_SHAPES.length - 1)];
@@ -235,6 +286,7 @@ export function composeSong(seed, opts = {}) {
       maskB.push(i % 4 === 3 ? !st.bool(0.5) : !hole);
     }
     for (let b = 0; b < s.bars; b++) {
+      if (!sounds('arp', s.startBar + b)) continue;
       const ch = chordAt(s.startBar + b);
       const msk = (b % 4 === 3) ? maskB : mask;
       for (let t = 0, i = 0; t < TICKS_PER_BAR; t += step, i++) {
@@ -255,9 +307,10 @@ export function composeSong(seed, opts = {}) {
   // ---- harmony / counter-line -------------------------------------------
   const HARM_LO = 57, HARM_HI = 72;
   for (const s of sections) {
-    const kind = TEXTURES[s.kind].harmony;
+    const kind = textures[s.kind].harmony;
     const st = rng.stream(`audio.harm.${s.index}`);
     for (let b = 0; b < s.bars; b++) {
+      if (!sounds('harmony', s.startBar + b)) continue;
       const ch = chordAt(s.startBar + b);
       const base = HARM_LO + (((ch.rootPc - HARM_LO) % 12) + 12) % 12;
       // third and fifth (or seventh) — never the octave, which the salience
@@ -300,12 +353,12 @@ export function composeSong(seed, opts = {}) {
   const PHRASE_PLAN = [0, 0, 0, 1];   // 0 = motif cells, 1 = cadence cells
 
   for (const s of sections) {
-    if (TEXTURES[s.kind].lead === 'none') continue;
+    if (textures[s.kind].lead === 'none') continue;
     const letter = s.motif || 'B';
     const mot = motifs[letter];
     const st = rng.stream(`audio.melody.${s.index}`);
     const orn = rng.stream(`audio.melody.orn.${s.index}`);
-    const oct = TEXTURES[s.kind].leadOct;
+    const oct = textures[s.kind].leadOct;
     const cadCells = [RHYTHM_CELLS[st.int(0, RHYTHM_CELLS.length - 1)],
       RHYTHM_CELLS[st.int(0, RHYTHM_CELLS.length - 1)]];
 
@@ -345,6 +398,7 @@ export function composeSong(seed, opts = {}) {
       for (let bg = 0; bg < 2; bg++) {
         const globalBar = gBar0 + bg;
         if (globalBar >= s.startBar + s.bars) break;
+        const leadSounds = sounds('lead', globalBar);
         const ch = chordAt(globalBar);
         const cell = cells[bg];
         const n = cell.length;
@@ -378,7 +432,9 @@ export function composeSong(seed, opts = {}) {
           }
           if (next > LEAD_HI) next = degreeStep(LEAD_HI, -1, tonicPc, scale);
           if (next < LEAD_LO) next = degreeStep(LEAD_LO, 1, tonicPc, scale);
-          if (!(d0.rest && t !== 0)) {
+          // `cur` still advances through a silent bar, so the line picks up
+          // where it would have been rather than restarting on the anchor.
+          if (leadSounds && !(d0.rest && t !== 0)) {
             tracks.lead.push({
               tick: globalBar * TICKS_PER_BAR + t,
               dur: Math.max(1, dur - (dur >= 4 ? 1 : 0)),
@@ -400,12 +456,13 @@ export function composeSong(seed, opts = {}) {
 
   // ---- drums ------------------------------------------------------------
   for (const s of sections) {
-    const dens = TEXTURES[s.kind].drums;
+    const dens = textures[s.kind].drums;
     const st = rng.stream(`audio.drums.${s.index}`);
     const kick = DRUM_PATTERNS.kick[st.int(0, DRUM_PATTERNS.kick.length - 1)];
     const snare = DRUM_PATTERNS.snare[st.int(0, DRUM_PATTERNS.snare.length - 1)];
     const hat = DRUM_PATTERNS.hat[st.int(0, DRUM_PATTERNS.hat.length - 1)];
     for (let b = 0; b < s.bars; b++) {
+      if (!sounds('drums', s.startBar + b)) continue;
       const t0 = (s.startBar + b) * TICKS_PER_BAR;
       const fill = b % 4 === 3 && dens !== 'light' && st.bool(0.6);
       for (let t = 0; t < TICKS_PER_BAR; t++) {
@@ -418,7 +475,12 @@ export function composeSong(seed, opts = {}) {
         }
         if (fill && t >= 12) tracks.drums.push({ tick: t0 + t, dur: 1, kind: 'snare', vel: 0.55 + 0.12 * (t - 12) });
       }
-      if (b === 0 && s.kind !== 'intro') tracks.drums.push({ tick: t0, dur: 8, kind: 'crash', vel: 0.9 });
+      // A crash marks the top of every section, and also bar 0 when the
+      // opening plan starts with the kit — an `inMedias` or `hitDrop` post
+      // begins ON the hit rather than walking up to one.
+      if (b === 0 && (s.kind !== 'intro' || opening.plan[0].includes('D'))) {
+        tracks.drums.push({ tick: t0, dur: 8, kind: 'crash', vel: 0.9 });
+      }
     }
   }
 
@@ -429,10 +491,11 @@ export function composeSong(seed, opts = {}) {
     ticksPerBar: TICKS_PER_BAR, totalBars,
     key: { tonicPc, tonic: PC_NAMES[tonicPc], mode },
     voicing, kit, balance,
+    opening: { name: opening.name, bars: opening.bars, plan: opening.plan },
     sections: sections.map(s => ({
       index: s.index, kind: s.kind, motif: s.motif, startBar: s.startBar, bars: s.bars,
       leadShape: leadShape[s.index], arpShape: arpShape[s.index],
-      texture: TEXTURES[s.kind],
+      texture: textures[s.kind],
     })),
     chords: chords.map(c => ({
       bar: c.bar, root: PC_NAMES[c.rootPc], quality: c.quality, pcs: c.pcs,

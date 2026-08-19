@@ -190,6 +190,50 @@ export const ARP_SHAPES = [
   [0, 2, 1, 3, 2, 0, 1, 2, 0, 1, 3, 2, 1, 0, 2, 1],
 ];
 
+// HOW A POST BEGINS — which is the only part of it most listeners ever hear.
+//
+// Measured before this table existed, over 24 seeds: the first 5.45-8.42 s of
+// EVERY post was rhythmically identical across all four tonal voices in 24 of
+// 24 — the same bass figure (BASS_FIGURES[4], onsets 0,8,11,12 in every bar,
+// one distinct pattern in 24 seeds), the same eighth-note arp (one distinct
+// tick step in 24), the same pad struck at tick 0 and nothing else (one
+// distinct onset list in 24), and NO LEAD AT ALL, because TEXTURES.intro.lead
+// was the string 'none'. The first lead note of a post arrived at 5.58-8.35 s.
+//
+// A feed is scrolled. A post that saves its melody for the sixth second is a
+// post with no melody, for most of the people who hear it. The corpus makes
+// the same point from the other side: a reference track's first four seconds
+// identify its own remainder 70.7% of the time and Fixel's managed 12.5%
+// against a 6.3% chance floor, and Fixel was the only population measured
+// whose opening carried LESS identity than its body (0.95 vs the corpus 1.82).
+//
+// So: the opening states the hook. Each row is a per-bar ENTRY PLAN over the
+// opening section — 'L' lead, 'H' harmony, 'A' arp, 'B' bass, 'D' drums, one
+// string per bar, listing the voices that sound in that bar. The lead is in
+// bar 0 or bar 1 of every plan, and no plan is longer than four bars.
+//
+// `w` is the draw weight. Two-bar openings are weighted above four-bar ones
+// because the length of the opening IS the delay before the tune arrives.
+export const OPENINGS = [
+  { name: 'call',     bars: 2, w: 14, plan: ['L', 'LB'] },
+  { name: 'callKit',  bars: 2, w: 12, plan: ['LB', 'LBD'] },
+  { name: 'inMedias', bars: 2, w: 11, plan: ['LHABD', 'LHABD'] },
+  { name: 'arpCall',  bars: 2, w: 10, plan: ['A', 'LA'] },
+  { name: 'hitDrop',  bars: 2, w: 10, plan: ['LBD', 'L'] },
+  { name: 'duo',      bars: 2, w: 9, plan: ['LH', 'LHB'] },
+  { name: 'build',    bars: 4, w: 9, plan: ['L', 'LB', 'LBA', 'LHABD'] },
+  { name: 'padLift',  bars: 4, w: 8, plan: ['H', 'HL', 'HLA', 'HLABD'] },
+  { name: 'groove',   bars: 4, w: 7, plan: ['BD', 'BDA', 'LBDA', 'LHABD'] },
+  { name: 'bassCall', bars: 4, w: 6, plan: ['B', 'BL', 'BLH', 'LHABD'] },
+  { name: 'stagger',  bars: 4, w: 4, plan: ['LA', 'L', 'LAB', 'LHABD'] },
+];
+
+/** 'LBD' -> Set{'lead','bass','drums'}. */
+export const VOICE_OF_LETTER = { L: 'lead', H: 'harmony', A: 'arp', B: 'bass', D: 'drums' };
+export function voiceSet(letters) {
+  return new Set([...letters].map(c => VOICE_OF_LETTER[c]).filter(Boolean));
+}
+
 export const MODE_NAMES = Object.keys(SCALES);
 export const PC_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
