@@ -343,9 +343,13 @@ identified us, on craft.
   Lufthansa 4.95. **The generator is now in the same regime as genuine work
   rather than a different one.** It is *not* level with a genuine Pixorama —
   two seeds in six beat Lufthansa, the typical seed does not.
-- **The first reference floor ever cleared in this project.** Perceptual variety,
-  minimum pairwise distance across seeds: 0.1754 -> **0.2045** against a
-  reference floor of **0.1950**, and all four windows clear it
+- **RETRACTED — this was inside noise.** Originally reported as "the first
+  reference floor ever cleared in this project". The margin was **+0.0095 at
+  n=4 windows**, and standing rule 10 puts anything under ~0.02 at n=4 at no
+  result in either direction. It was a thin verdict dressed as a fact and it was
+  repeated as a milestone in three places. Perceptual variety, minimum pairwise
+  distance across seeds: 0.1754 -> **0.2045** against a floor of **0.1950**, all
+  four windows nominally clearing it
   (0.2045 / 0.2189 / 0.2325 / 0.2526). The variety gate still returns FAIL on
   its ratio half (0.963 vs 1.000), and both halves must be reported — "variety
   FAIL" alone would misrepresent it. The one FROZEN metric, `runLen.median`, is

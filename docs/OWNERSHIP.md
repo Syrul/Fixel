@@ -146,7 +146,23 @@ a genuine artwork on it.
    different regions of one picture, not a generator emitting from a stable
    palette. A stable-palette generator would show *flat* intersections.
 
-10. **Never report a PASS count as progress.** Leave-one-out shows an all-pass
+10. **BINARY VERDICTS AT SMALL n ARE NOT FINDINGS.** Record the MARGIN with the
+    sample count attached. **A margin under ~0.02 at n=4 is no result in either
+    direction** — including when it favours us.
+
+    "SEP vs closed", "PASS 4/4", "FAIL 4/4", "separates 4/4" all discard the
+    margin, and on four samples a bare verdict carries almost no information.
+    A control retracted its own "K=128 still separates 4/4, CLEANLY": true for
+    one implementation at a margin of +0.065, false for another where the same
+    4/4 verdict rested on +0.0077, and a third on **+0.0028** — three
+    thousandths, in a quantity ranging over tenths, one sample from closing.
+
+    Some of this project's binary summaries ARE categorical and stay: the
+    un-normalised cube-corner leak is 4/4 present vs 4/4 absent with infinite
+    margin; the round-3 duel is 8 confident judges agreeing. Others were thin
+    verdicts dressed as facts — see the round-3 variety retraction below.
+
+11. **Never report a PASS count as progress.** Leave-one-out shows an all-pass
    gate rejects 84% of the reference's own crops, and seven of the sixty metrics
    correlate at r=1.0000. 36 vs 35 PASS is noise; the direction of a specific
    hard fail is the signal.
