@@ -37,12 +37,12 @@ const PATCHES = {
     vib: { rate: 5.5, depth: 0.18, delay: 0.16 },
   },
   harmony: {
-    gain: 0.115,
+    gain: 0.185,
     env: { a: 0.004, d: 0.09, s: 0.58, r: 0.035 },
     shape: 'p:0.5',
   },
   arp: {
-    gain: 0.135,
+    gain: 0.215,
     env: { a: 0.0012, d: 0.030, s: 0.46, r: 0.012 },
   },
   bass: {
@@ -86,16 +86,30 @@ export function renderRange(song, fromSample, toSample, sr = SAMPLE_RATE) {
   const tickSec = song.secPerTick;
   const toSamp = tick => Math.round(tick * tickSec * sr);
 
+  const vo = song.voicing || {};
   const shapeFor = (track, tick) => {
     const bar = Math.floor(tick / TICKS_PER_BAR);
     const si = secOfBar[Math.min(bar, secOfBar.length - 1)];
     if (track === 'lead') return song.shapes.lead[si] || 'p:0.25';
     if (track === 'arp') return song.shapes.arp[si] || 'p:0.125';
+    if (track === 'harmony') return vo.harmony || PATCHES.harmony.shape;
+    if (track === 'bass') return vo.bass || PATCHES.bass.shape;
     return PATCHES[track].shape;
   };
+  // per-post drum kit: the noise channel's clock rate and lowpass are what make
+  // one machine sound like a different machine
+  const k = song.kit || {};
+  const DRUMS = {
+    kick: { ...DRUM_PATCHES.kick, f0: k.kickF0 ?? DRUM_PATCHES.kick.f0, f1: k.kickF1 ?? DRUM_PATCHES.kick.f1 },
+    snare: { ...DRUM_PATCHES.snare, period: k.snarePeriod ?? DRUM_PATCHES.snare.period, lp: k.snareLp ?? DRUM_PATCHES.snare.lp },
+    hat: { ...DRUM_PATCHES.hat, period: k.hatPeriod ?? DRUM_PATCHES.hat.period, lp: k.hatLp ?? DRUM_PATCHES.hat.lp, short: k.hatShort ?? DRUM_PATCHES.hat.short, gain: k.hatGain ?? DRUM_PATCHES.hat.gain },
+    crash: DRUM_PATCHES.crash,
+  };
 
+  const bal = song.balance || {};
   for (const track of ['lead', 'harmony', 'arp', 'bass']) {
     const p = PATCHES[track];
+    const bg = bal[track] ?? 1;
     const out = stems[track];
     for (const nt of song.tracks[track]) {
       const start = toSamp(nt.tick);
@@ -103,7 +117,7 @@ export function renderRange(song, fromSample, toSample, sr = SAMPLE_RATE) {
       if (start >= toSample || start + len <= fromSample) continue;
       const shape = shapeFor(track, nt.tick);
       const patch = {
-        shape, gain: p.gain, env: p.env,
+        shape, gain: p.gain * bg, env: p.env,
         vib: (track === 'lead' && len > 0.28 * sr) ? p.vib : null,
       };
       renderTone(out, fromSample, toSample, sr, { start, len, midi: nt.midi, vel: nt.vel }, patch);
@@ -113,12 +127,12 @@ export function renderRange(song, fromSample, toSample, sr = SAMPLE_RATE) {
   {
     const out = stems.drums;
     for (const nt of song.tracks.drums) {
-      const dp = DRUM_PATCHES[nt.kind];
+      const dp = DRUMS[nt.kind];
       if (!dp) continue;
       const start = toSamp(nt.tick);
       const len = Math.max(8, Math.round(dp.lenSec * sr));
       if (start >= toSample || start + len <= fromSample) continue;
-      const note = { start, len, midi: 0, vel: nt.vel };
+      const note = { start, len, midi: 0, vel: nt.vel * (bal.drums ?? 1) };
       if (dp.type === 'thump') {
         renderThump(out, fromSample, toSample, sr, note,
           { f0: dp.f0, f1: dp.f1, gain: dp.gain, env: dp.env });

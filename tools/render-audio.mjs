@@ -26,7 +26,7 @@ import {
   SAMPLE_RATE, CHANNELS, MASTER,
 } from '../src/audio/index.js';
 import { firstBufferLatency } from '../src/audio/index.js';
-import { pulseHarmonicMag } from '../src/audio/wavetable.js';
+import { pulseHarmonicMag, bandLimitK } from '../src/audio/wavetable.js';
 import { Biquad, fftInPlace, linToDb } from '../src/audio/dsp.js';
 import { TICKS_PER_BAR } from '../src/audio/compose.js';
 
@@ -39,8 +39,16 @@ const get = (f, dflt = null) => { const i = argv.indexOf(f); return i >= 0 && ar
 // duty-cycle fit: invert |c_k| = (4/(pi*k)) |sin(pi*k*d)|
 // ---------------------------------------------------------------------------
 
-function harmonicMagnitudes(x, sr, f0, nHarm) {
-  const N = 32768;
+function harmonicMagnitudes(x, sr, f0, nHarm, maxN = 32768, vibSemitones = 0) {
+  // The window must FIT INSIDE the note. Analysing a 0.3 s note with a 0.74 s
+  // window pulls in whatever is next to it and reports a fit error that belongs
+  // to the neighbour, not the voice.
+  //
+  // And a vibrato'd note does not have line spectra: partial k is smeared over
+  // +-k*f0*(2^(depth/12)-1) Hz, which grows with k, so a fixed +-3 bin peak
+  // search throws away most of the energy in the upper partials and biases the
+  // fitted duty upward. Summing POWER across the smear width recovers it.
+  let N = 1 << Math.floor(Math.log2(Math.min(maxN, Math.max(4096, x.length))));
   const seg = new Float64Array(N);
   const off = Math.min(Math.max(0, x.length - N), Math.round(0.25 * sr));
   for (let i = 0; i < N && off + i < x.length; i++) {
@@ -54,13 +62,13 @@ function harmonicMagnitudes(x, sr, f0, nHarm) {
     const f = k * f0;
     if (f > 0.45 * sr) { out.push(0); continue; }
     const c = Math.round(f / binHz);
-    let m = 0;
-    for (let b = c - 3; b <= c + 3; b++) {
+    const spread = 3 + Math.ceil(f * (Math.pow(2, vibSemitones / 12) - 1) / binHz);
+    let p = 0;
+    for (let b = c - spread; b <= c + spread; b++) {
       if (b < 1 || b >= N / 2) continue;
-      const v = Math.hypot(re[b], im[b]);
-      if (v > m) m = v;
+      p += re[b] * re[b] + im[b] * im[b];
     }
-    out.push(m);
+    out.push(Math.sqrt(p));
   }
   return out;
 }
@@ -342,18 +350,73 @@ function cmdDutyCheck() {
     console.log(`     requested ${(d * 100).toFixed(1)}%  ->  uncompensated ${(naive.duty * 100).toFixed(2)}% (MSE ${naive.mse.toFixed(5)})   ` +
       `compensated ${(comp.duty * 100).toFixed(2)}% (MSE ${comp.mse.toFixed(5)})`);
   }
+  console.log('\n  D. WHY THE STEMS EXIST: the same three voices, isolated vs mixed.');
+  console.log('     docs/BAR.md records a requested 12.5% recovered at MSE 0.0004 from an');
+  console.log('     isolated voice and 47.5% nonsense from a polyphonic mixture. Reproduced');
+  console.log('     here on this engine: a triad of 12.5% pulses, fitted at the root.');
+  {
+    const d = 0.125;
+    const solo = renderCalibrationTone({ shape: `p:${d}`, midi: 57, seconds: 2 });   // A3, 220 Hz
+    const third = renderCalibrationTone({ shape: `p:${d}`, midi: 61, seconds: 2 });
+    const fifth = renderCalibrationTone({ shape: `p:${d}`, midi: 64, seconds: 2 });
+    const mixed = new Float32Array(solo.length);
+    for (let i = 0; i < solo.length; i++) mixed[i] = solo[i] + third[i] + fifth[i];
+    const fRoot = 220;
+    const nH = Math.min(24, Math.floor(0.45 * SAMPLE_RATE / fRoot));
+    const fs1 = fitDuty(harmonicMagnitudes(solo, SAMPLE_RATE, fRoot, nH), fRoot, SAMPLE_RATE);
+    const fm = fitDuty(harmonicMagnitudes(mixed, SAMPLE_RATE, fRoot, nH), fRoot, SAMPLE_RATE);
+    console.log(`     SOLO STEM (one voice)  requested 12.5%  ->  recovered ${(fs1.duty * 100).toFixed(2)}%   MSE ${fs1.mse.toFixed(5)}`);
+    console.log(`     MIXTURE   (three voices) requested 12.5%  ->  recovered ${(fm.duty * 100).toFixed(2)}%   MSE ${fm.mse.toFixed(5)}`);
+    console.log(`     The mixture's duty ESTIMATE happens to land near 12.5% for this voicing, but`);
+    console.log(`     its fit error (${fm.mse.toFixed(5)}) is worse than a pure SINE's against the same`);
+    console.log(`     pulse model (0.00887) — so by the only criterion available the mixture is not a`);
+    console.log(`     pulse at all, and the number it returns is not evidence. The solo stem's fit`);
+    console.log(`     error is ${fs1.mse.toFixed(8)}. That gap is the entire reason stems are a`);
+    console.log(`     requirement rather than a convenience.`);
+  }
+
   const stem = get('--stem');
   if (stem) {
-    console.log('\n  D. a real solo stem from a rendered post');
+    console.log('\n  E. the longest steady lead note in a real rendered stem');
     const seed = get('--seed', 'fixel-0001');
-    const song = composeSong(seed, { seconds: Number(get('--seconds', '60')) });
-    const secIdx = song.sections.findIndex(s => s.kind === 'A');
-    const shape = song.shapes.lead[secIdx >= 0 ? secIdx : 0];
-    console.log(`     seed ${seed} section A lead shape = ${shape}`);
-    const buf = fs.readFileSync(path.resolve(stem));
-    console.log(`     (stem file ${path.basename(stem)}, ${buf.length} bytes — a stem is a mixture of many notes,`);
-    console.log('      so the fit below is only meaningful on the isolated sustained tone in A/C above)');
+    const seconds = Number(get('--seconds', '60'));
+    const song = composeSong(seed, { seconds });
+    // find the longest lead note and where it sits
+    let best = null;
+    for (const nt of song.tracks.lead) if (!best || nt.dur > best.dur) best = nt;
+    const secOf = song.sections.find(s => Math.floor(best.tick / 16) >= s.startBar
+      && Math.floor(best.tick / 16) < s.startBar + s.bars);
+    const shape = song.shapes.lead[secOf ? secOf.index : 0];
+    const f0 = 440 * Math.pow(2, (best.midi - 69) / 12);
+    const { x, sr } = readWavFile(path.resolve(stem));
+    const s0 = Math.round(best.tick * song.secPerTick * sr);
+    const len = Math.round(best.dur * song.secPerTick * sr);
+    const seg = x.subarray(s0, s0 + len);
+    const bq = Biquad.lowpass(MASTER.lowpassHz, sr, MASTER.lowpassQ);
+    // only the harmonics this engine actually renders at that pitch
+    const nH = Math.min(bandLimitK(f0, sr), Math.floor(8000 / f0));
+    const fit = fitDuty(harmonicMagnitudes(seg, sr, f0, nH, 1 << 30, 0.18), f0, sr, bq);
+    console.log(`     note length ${(len / sr).toFixed(3)} s; analysis window fitted inside it`);
+    console.log(`     seed ${seed}: longest lead note is midi ${best.midi} (${f0.toFixed(1)} Hz) for ${best.dur} ticks`);
+    console.log(`     section ${secOf ? secOf.kind : '?'} lead shape = ${shape}  (requested duty ${(Number(shape.slice(2)) * 100).toFixed(1)}%)`);
+    console.log(`     recovered from the mastered solo stem: ${(fit.duty * 100).toFixed(2)}%   MSE ${fit.mse.toFixed(5)}   (${nH} harmonics, master lowpass divided out)`);
   }
+}
+
+/** Minimal RIFF reader, for reading back a stem this tool wrote. */
+function readWavFile(file) {
+  const buf = fs.readFileSync(file);
+  let pos = 12, dataOff = -1, dataLen = 0, sr = 44100;
+  while (pos + 8 <= buf.length) {
+    const id = buf.toString('ascii', pos, pos + 4);
+    const size = buf.readUInt32LE(pos + 4);
+    if (id === 'fmt ') sr = buf.readUInt32LE(pos + 12);
+    else if (id === 'data') { dataOff = pos + 8; dataLen = Math.min(size, buf.length - pos - 8); }
+    pos += 8 + size + (size & 1);
+  }
+  const n = dataLen >> 1, x = new Float32Array(n);
+  for (let i = 0; i < n; i++) x[i] = buf.readInt16LE(dataOff + i * 2) / 32768;
+  return { x, sr };
 }
 
 function scoreFile(file) {

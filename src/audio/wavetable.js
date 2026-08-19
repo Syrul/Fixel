@@ -95,6 +95,15 @@ export function tableFor(shape, band, sampleRate) {
   return t;
 }
 
+/**
+ * The highest harmonic this engine actually renders at `freq`. A duty fit that
+ * asks about harmonics above this is measuring the band-limiter, not the duty:
+ * the model predicts energy the table deliberately does not contain.
+ */
+export function bandLimitK(freq, sampleRate) {
+  return Math.max(1, Math.min(KMAX, Math.floor(0.45 * sampleRate / bandTop(bandOf(freq)))));
+}
+
 /** Analytic |c_k| for a pulse of duty d — the model the duty fit inverts. */
 export function pulseHarmonicMag(k, d) {
   return (4 / (Math.PI * k)) * Math.abs(Math.sin(Math.PI * k * d));

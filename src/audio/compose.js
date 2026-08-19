@@ -75,6 +75,44 @@ export function composeSong(seed, opts = {}) {
   const scale = SCALES[mode];
   const progFamily = PROGRESSIONS[mode] ? mode : (mode === 'harmonicMinor' ? 'minor' : 'major');
 
+  // ---- per-post voicing and drum kit ------------------------------------
+  // Without these every post is, statistically, the same post: measured across
+  // 8 seeds with a fixed voicing, spectralCentroidMean spanned 2702..2947 Hz
+  // (+-4%) while the reference corpus spans 1285..5428. A feed of forty scenes
+  // that all sound alike is a failure whether or not any band notices.
+  const vst = rng.stream('audio.voicing');
+  const voicing = {
+    harmony: vst.weighted([['p:0.5', 38], ['p:0.25', 34], ['tri', 28]]),
+    bass: vst.weighted([['tri', 58], ['p:0.25', 26], ['p:0.5', 16]]),
+    leadCentre: vst.int(76, 83),
+    arpLo: vst.int(52, 59),
+  };
+  const kst = rng.stream('audio.kit');
+  const kit = {
+    hatPeriod: kst.int(1, 3),
+    hatLp: kst.range(0.55, 0.99),
+    hatShort: kst.bool(0.5),
+    hatGain: kst.range(0.10, 0.21),
+    snarePeriod: kst.int(1, 4),
+    snareLp: kst.range(0.28, 0.72),
+    kickF0: kst.int(115, 195),
+    kickF1: kst.int(38, 56),
+  };
+
+  // Per-post channel balance. This is where most of the timbral spread comes
+  // from: the corpus ranges over spectralCentroidMean 1285..5428 because a
+  // bass-heavy track and a hat-heavy track are different ARRANGEMENTS, not
+  // because they were filtered differently. A post that leans on its noise
+  // channel is bright; one that leans on its triangle bass is dark.
+  const bst = rng.stream('audio.balance');
+  const balance = {
+    lead: bst.range(0.80, 1.25),
+    harmony: bst.range(0.55, 1.45),
+    arp: bst.range(0.45, 1.55),
+    bass: bst.range(0.75, 1.35),
+    drums: bst.range(0.40, 1.70),
+  };
+
   const totalBars = Math.max(8, Math.ceil(seconds / barSec));
 
   // ---- form -------------------------------------------------------------
@@ -181,7 +219,7 @@ export function composeSong(seed, opts = {}) {
   };
 
   // ---- arpeggio ---------------------------------------------------------
-  const ARP_LO = 55, ARP_HI = 71;
+  const ARP_LO = voicing.arpLo, ARP_HI = ARP_LO + 16;
   for (const s of sections) {
     const mode_ = TEXTURES[s.kind].arp;
     if (mode_ === 'off') continue;
@@ -265,7 +303,7 @@ export function composeSong(seed, opts = {}) {
   // A tune whose phrases never come back is the defect the first version of
   // this file had, and it is audible as a defect long before it is measurable
   // as one.
-  const LEAD_CENTRE = 79, LEAD_LO = 72, LEAD_HI = 91;
+  const LEAD_CENTRE = voicing.leadCentre, LEAD_LO = LEAD_CENTRE - 7, LEAD_HI = LEAD_CENTRE + 12;
   const PHRASE_PLAN = [0, 0, 0, 1];   // 0 = motif cells, 1 = cadence cells
 
   for (const s of sections) {
@@ -279,12 +317,17 @@ export function composeSong(seed, opts = {}) {
       RHYTHM_CELLS[st.int(0, RHYTHM_CELLS.length - 1)]];
 
     // decision table: [cellKind][barInGroup][slot] -> {chrom, dir, rest, orna}
+    // `chrom` is the chromatic-neighbour rate. NES-era chiptune is markedly
+    // diatonic; at 0.07 this engine measured pitchClassEntropy 3.31..3.35
+    // against a corpus p95 of 3.301 (corpus max 3.371), i.e. it was reaching
+    // for ~10 effective pitch classes where the idiom uses 8. Lowered on that
+    // ground.
     const dec = [];
     for (let ck = 0; ck < 2; ck++) {
       dec.push([0, 1].map(() => {
         const row = [];
         for (let j = 0; j < 12; j++) {
-          row.push({ chrom: orn.bool(0.07), dir: orn.bool(0.5) ? -1 : 1, rest: orn.bool(0.12), orna: orn.bool(0.3) });
+          row.push({ chrom: orn.bool(0.04), dir: orn.bool(0.5) ? -1 : 1, rest: orn.bool(0.12), orna: orn.bool(0.3) });
         }
         return row;
       }));
@@ -392,6 +435,7 @@ export function composeSong(seed, opts = {}) {
     seed: String(seed), seconds, bpm, beatSec, barSec, secPerTick,
     ticksPerBar: TICKS_PER_BAR, totalBars,
     key: { tonicPc, tonic: PC_NAMES[tonicPc], mode },
+    voicing, kit, balance,
     sections: sections.map(s => ({
       index: s.index, kind: s.kind, motif: s.motif, startBar: s.startBar, bars: s.bars,
       leadShape: leadShape[s.index], arpShape: arpShape[s.index],
