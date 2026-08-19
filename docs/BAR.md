@@ -575,3 +575,166 @@ stack measures ~5.5 kHz against a corpus p95 of 4671), fixed rather than a per-s
 builder is writing. Commit `4d59427` is titled "audio: first working chiptune engine" and contains
 only another builder's `src/gen/props/vehicles.js`. Nothing was lost and the history is not being
 rewritten while builders hold working state — but the message and the content disagree permanently.
+
+---
+
+# Round 3: lost 0–4, and the loss is the most informative result yet
+
+Eight fresh judges, four pairs, both orders, brief v3, per-judge scratch dirs, checksummed inputs.
+**Eight confident picks for the reference. Zero splits. Every judge correctly identified which side
+was the program.**
+
+That is a cleaner result than round 2 and a worse one. In r2 every pair *split*, because the verdict
+depended on which contaminated proxy each judge happened to measure. Brief v3 closed those proxies —
+and the judges now agree with each other. **They agree we lose.**
+
+## The progress was real and large
+
+- **Ink closure 9.62 → 5.17 median** across six seeds (range 4.57–6.18), spread collapsed from
+  4.25–15.74. LA 3.23, Lufthansa 4.95. The same *regime* as genuine work, **not level with it** — two
+  seeds in six beat Lufthansa; the typical seed does not.
+- ~~**The first reference floor ever cleared in this project**~~ — **RETRACTED under standing rule 10.**
+  Perceptual variety minimum pairwise distance moved 0.1754 → 0.2045 against a floor of 0.1950, which
+  looked like a clearance and was reported as a milestone in the round 3 verdict and repeated three
+  times. **The margin is +0.0095 at n=4** — inside the ~0.02 noise band. It is no result, not a
+  clearance. Symmetrically, the post-P2 reading of 0.1747 (margin −0.0203) is **not** evidence the
+  clearance was lost: both are no result in either direction, and neither should be quoted as a
+  finding. The ratio half did move genuinely: median 0.685 → **0.913**, FROZEN 1 → 0.
+- The `shade.*` family unfroze. The named root cause moved.
+
+## The single remaining pixel gap is SCALE — and it is not "add detail"
+
+**The detail is already drawn. It is drawn below the size that survives quantisation.** The vehicles'
+"two orphan yellow pixel-pairs" *are* the lamp housings the builder added; the bus's wheels are 4px
+and read as dashes. The code fires and the quantiser turns craft into noise.
+
+> A's macro geometry is machine-clean, while everything below building scale dissolves into
+> organic-contoured colour patches with interstitial dark speckle — the signature of a low-fidelity
+> source resolved onto a pixel grid rather than placed pixel by pixel.
+
+Three numbers, each from a different judge:
+
+- **Zero** objects below building scale resolve into a nameable thing at 1:1 — 0 people, 0 vehicles
+  with wheels or windows, 0 fixtures with facets. The reference: ~14 figures with faces and limbs,
+  3 vehicles, a dozen articulated fixtures.
+- **Zero** of our ~20 largest objects has an off-lattice silhouette — no curve, no 45° plane, no hip,
+  no gable. The reference has ~12 at the same scale.
+- **0.5% of our area in non-lattice-conforming form against the reference's 9.9%** — a twentyfold gap,
+  and the hardest single number in the project.
+
+So round 4 is: **make objects large enough to carry the detail already being drawn, then delete
+anything still drawn below its own legibility floor.** Not more detail. Not more ink.
+
+## The sentence that closes the measurement programme
+
+A judge measuring both sides blind found us **statistically twinned** with the reference — 5×5-flat
+0.153 vs 0.156, tile colour count 7 vs 9, structural repetition both ~22%.
+
+> **What is not twinned is decision-making.**
+
+We have matched the reference's pixel statistics and not its choices. That is why every count here had
+to be retired as a score, arrived at independently by someone who did not know the history.
+`flat.frac5x5` can no longer steer anything: it is blind at its own window size.
+
+## Open, and blocking round 4
+
+1. **`tagN` wraps at 65,534** (`scene.js:102`), worst seed already at 53,515 — 18% headroom. Wraps
+   silently; two adjacent objects sharing a tag lose the keyline between them. **Fix before increasing
+   scale**, which round 4 is entirely about.
+2. **`outline.darkShare` is an open regression** — per-crop max 29.24% against a 19.56% ceiling
+   (reference 16.26%). Round 4 cannot add ink anywhere until this is understood.
+3. Four recorded, unfixed bugs: signage foreshortening; 125 horizontal runs ≥40px against the
+   reference's 9; the merged corner (two lit facets at identical RGB, no outline, no value step); and
+   non-closing ink chains that begin and end mid-plane and bound nothing.
+4. **No tempo metric survives**, so the synth's 140–172 BPM is ungated and rests on musical judgement.
+
+## Audio: the synth is sound, the bar is not
+
+Duty recovers at **MSE 0.00000** from a solo stem, determinism byte-identical across processes, **26 ms
+cold start**, 247× realtime. But the bar failed inversion — four of five adversarial controls pass,
+and unspliced, a verbatim one-bar loop lands at **exactly the budget and passes with zero margin.**
+
+The synth's 1.50 mean ranks *above* genuine chiptune's LOO 1.89 — the same centrality signature that
+retired the pixel band. **Every count in this project is a floor, never a score. The duel is the bar.**
+
+---
+
+# The duel leaks, and the obvious remedy is worse than the leak
+
+A leak control was shown **no images at all** — only colour histograms, quantities invariant under
+shuffling every pixel. It recovered the reference-vs-generator partition **perfectly across four
+pairs, with infinite margin, and labelled every one backwards.**
+
+Both halves matter. Perfect recovery proves provenance rides in the colour multiset. The inverted sign
+proves **no instruction to a judge can suppress it** — round 3's judges said they set palette evidence
+aside, several by name, and the signal was still sitting there.
+
+**The direction is counter-intuitive: the side with pure black and clean cube corners is the human
+artwork.** eBoy spends 67,160px on cube-corner colours including 34,672px of true (0,0,0). Fixel has
+zero of either, and one exact ink `#08080a` at ~0.18 of frame.
+
+## Why quantising both sides to a shared palette does not fix it
+
+**The threshold does not travel, and the relationship is not monotonic.** Closing points were measured
+at K≤64, K≤64 and K≤24 on the same data — and the last two are *both median cut*, differently
+implemented. The same nominal algorithm flips the result; the dominant knob is the box-selection rule
+(select by max channel range vs by mass × range), not the split weighting. A normaliser was once
+shipped on-by-default at K=192 and did not close the leak it existed for.
+
+"Coarser is safer" is **false in both directions**. In one implementation at K=16 and K=24 the
+separator does not close — it **inverts**, the reference becoming the more concentrated side
+(top-1 [.226 .306 .225 .281] against ours [.208 .192 .191 .210]). That is still a perfect leak with the
+sign flipped. A sweep must test |separation| in both directions, and must not assume monotonicity: one
+implementation goes inverted-separated → closed → separated as K rises. Assert on the specific
+deployed K, measured, never on a threshold with an assumed direction.
+
+**And at the K where it does close, there is not enough colour left to judge.** Mean pixel-mass-weighted
+L1 shift at K≤24 is 41–47 (~14–16 per channel), P95 above 100. The reference collapses from ~450
+distinct colours to 23, ours from ~280 to 21. A judge would be scoring two posterised derivatives.
+
+**A suspected asymmetry did NOT reproduce, and is not asserted.** One median-cut implementation showed
+the reference absorbing more distortion at all eight K values (29 of 32 per-pair cells positive, ~25%
+more at K=48). *Another median-cut implementation* gave a sign-changing ±1, the reference absorbing
+*less* at four of eight. Recorded as **implementation-specific and unconfirmed** — and note this is two
+implementations of the same algorithm disagreeing on the sign, not two different algorithms. It is left here because a
+biased normaliser is a real hazard worth measuring for — not because it was established. The fidelity
+argument below retires the normaliser without it, which is cleaner than leaning on a claim that would
+have had to be retracted.
+
+> A remedy for the leak that biases the judgment it was built to protect is worse than no remedy,
+> because the bias is invisible in the leak metric it was tuned against.
+
+Caveats stated by its author: per-pair asymmetry is noisy (two pairs flip sign at some K), and it
+rests on n_reference = 1.
+
+**If a normaliser is ever revived, fidelity and asymmetry are acceptance criteria alongside the
+separator outcome.** A sweep that only asks "does the leak close" will select a K that closes it by
+destroying the reference — a metric selecting for its own success, the same failure as the tempo
+estimator returning the centre of its own search window.
+
+**The real fix is at source:** the strongest separator is our own ink regression. If `darkShare` brings
+our ink share into the reference's 0.05–0.10 band, the separator dies with no colour destroyed on
+either side and no normaliser needed.
+
+## Standing rule 9
+
+**Test independence before treating shared structure as evidence.** "36 exact RGB triples shared across
+four images" is overwhelming evidence of a fixed palette — and a tautology when the four images are
+four crops of one file. The disconfirming evidence was in hand (pairwise intersections 170, 74, 76,
+90, 128, 81; a stable-palette generator would show *flat* intersections) and was read as noise.
+
+## Standing rule 10: a binary verdict at n=4 is not a finding — record the margin
+
+Most of the leak thread was conducted in "separates 4/4" / "closed" verdicts. Those discard the margin,
+and on four samples they carry almost no information. Measured afterwards: a "separates 4/4, cleanly"
+verdict turned out to rest on a top-1-share margin of **+0.0077** in one implementation and **+0.0028**
+in another — one sample away from closing, in a quantity that ranges over tenths.
+
+**Record margins with the sample count attached. Treat a margin under ~0.02 at n=4 as no result in
+either direction.** Any acceptance criterion built on a bare verdict inherits the verdict's blindness.
+
+This is why the normaliser was retired on the **fidelity** argument rather than on any leak verdict.
+Fidelity is a magnitude measurement, not a binary one, and two independent implementations agree on it.
+The other durable result is the **un-normalised** leak, which is categorical — cube-corner presence 4/4
+present versus 4/4 absent, infinite margin, and un-normalised top-1 separating by +0.066. Everything
+said about *post*-normalisation leak verdicts should be held far more loosely than it was stated.
