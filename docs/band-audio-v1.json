@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-08-19T11:08:50.442Z",
+  "generated": "2026-08-19T13:12:40.307Z",
   "method": "p05..p95 across corpus tracks; per-track value = median across 30 s windows",
   "windowSeconds": 30,
   "corpusSize": 38,
@@ -52,26 +52,12 @@
       "min": 0.8166666666666667,
       "max": 10.516666666666666
     },
-    "ioiEntropy": {
-      "lo": 0.9644905429616806,
-      "hi": 3.324043567082132,
-      "median": 2.3306852430188307,
-      "min": 0.40065033610009815,
-      "max": 3.71162177016031
-    },
     "beatStrength": {
       "lo": 0.28201330416528003,
       "hi": 0.8155364773885967,
       "median": 0.7012229792705112,
       "min": 0.12240133032753728,
       "max": 0.8372927998990168
-    },
-    "tempoBpm": {
-      "lo": 32.502948113207545,
-      "hi": 142.9484599345439,
-      "median": 59.43334847984137,
-      "min": 30.046329941860463,
-      "max": 224.6942934782609
     },
     "pitchClassEntropy": {
       "lo": 2.7728266449406798,
@@ -128,13 +114,6 @@
       "median": 3489.503974785419,
       "min": 1284.8739432843709,
       "max": 5427.580447566172
-    },
-    "spectralCentroidVar": {
-      "lo": 174595.8699685448,
-      "hi": 2296770.2118459065,
-      "median": 691800.9100108533,
-      "min": 127793.55151756211,
-      "max": 5884147.350146392
     },
     "spectralCentroidCV": {
       "lo": 0.12463195376636287,
@@ -194,22 +173,22 @@
   "acceptance": {
     "rule": "PASS if the number of gating metrics outside their p05..p95 band is <= maxGatingFails",
     "maxGatingFails": 5,
-    "gatingMetricCount": 17,
+    "gatingMetricCount": 14,
     "leaveOneOut": {
       "note": "each corpus track scored against a band built from the other tracks",
       "failCounts": {
-        "3xblast-pop-punk-1.wav": 5,
+        "3xblast-pop-punk-1.wav": 4,
         "celestial-8bit-thing.wav": 5,
         "celestial-pulsar.wav": 2,
-        "celestial-summer-sunday.wav": 7,
+        "celestial-summer-sunday.wav": 6,
         "centurion-delayed-chips.wav": 1,
         "centurion-unstable-field.wav": 0,
         "congus-lasso-lady.wav": 1,
-        "congus-napping-cloud.wav": 3,
-        "hydrogene-mechanical-complex.wav": 3,
-        "hydrogene-perilous-dungeon.wav": 1,
+        "congus-napping-cloud.wav": 2,
+        "hydrogene-mechanical-complex.wav": 2,
+        "hydrogene-perilous-dungeon.wav": 0,
         "junkala-adv-bossfight.wav": 2,
-        "junkala-adv-stage1.wav": 2,
+        "junkala-adv-stage1.wav": 1,
         "junkala-level1.wav": 3,
         "junkala-level2.wav": 0,
         "junkala-level3.wav": 3,
@@ -218,28 +197,28 @@
         "obscure-moon-chime.wav": 2,
         "pmiller-nes-jazz.wav": 1,
         "randommind-old-tower-inn.wav": 4,
-        "sketchy-boss.wav": 1,
+        "sketchy-boss.wav": 0,
         "sketchy-mars.wav": 2,
-        "sketchy-mercury.wav": 1,
+        "sketchy-mercury.wav": 0,
         "sketchy-venus.wav": 4,
         "skrjablin-c64-uptempo.wav": 1,
         "springspring-great-boss.wav": 2,
         "tinyworlds-happy-adventure.wav": 2,
         "wolfgang-battle-loop.wav": 2,
-        "wolfgang-haunted-house.wav": 4,
+        "wolfgang-haunted-house.wav": 3,
         "zane-100-victories.wav": 0,
-        "zane-aura-horizon.wav": 5,
+        "zane-aura-horizon.wav": 4,
         "zane-dizzy-racing.wav": 2,
-        "zane-face-the-facts.wav": 3,
-        "zane-insect-factory.wav": 5,
-        "zane-poker-night.wav": 2,
+        "zane-face-the-facts.wav": 2,
+        "zane-insect-factory.wav": 3,
+        "zane-poker-night.wav": 1,
         "zane-sinister-abode.wav": 2,
         "zane-space-cadet.wav": 0,
         "zane-starlight-city.wav": 1
       },
-      "mean": 2.263157894736842,
+      "mean": 1.894736842105263,
       "median": 2,
-      "max": 7,
+      "max": 6,
       "acceptedAtThisBudget": 37
     }
   }

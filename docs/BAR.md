@@ -468,3 +468,47 @@ Two consequences:
 2. **A musically correct tempo that reads out of band should be reported out of band.** It is one of
    the cheapest fails to spend against the ≤5-of-17 budget, and the alternative — choosing tempi to
    satisfy a broken estimator — is writing to the test.
+
+## Resolved: `tempoBpm` is removed, and the obvious fix did not work
+
+The recommendation above — "fix the estimator with an onset-interval histogram, or retire the
+metric" — was acted on. **The fix was built and it failed.** Recording that, because the failure is
+more instructive than the fix would have been.
+
+Harmonic-sum salience over a canonical 90–180 BPM octave **looked** correct: the absurd 32.5 BPM
+readings vanished and beat-to-`ioiMedian` ratios moved from 14.4 to a coherent 2–4 corpus-wide. Ground
+truth then exposed a 3:2 hemiola error (150 BPM read as 99.4), fixed by requiring a candidate period
+to be a strong peak in its own right rather than winning on its multiples.
+
+Then the property that actually matters was tested — **resample real tracks by known factors and check
+the reading scales**. It scored **6 of 24**, and the failures were systematic rather than noisy:
+one track read 105.5 BPM at both 1.0× and 1.25×, another read 120.2 at both 1.0× and 1.5×.
+
+> **The estimator was returning the centre of its own search window, not the music's tempo.**
+> The octave fix made the numbers look right while the metric still measured its own search range.
+> **Plausibility was not evidence.**
+
+The test instrument also had to be controlled before the test could be believed: an initial run using
+ffmpeg's `atempo` was invalid, because WSOLA manufactures transients and `onsetRate` failed to scale
+under it (126–134% of expected at 0.8×). Pure resampling via `asetrate` preserves onset structure
+(94–105%). The confounded run was discarded and redone.
+
+`tempoBpm` is therefore **removed, not demoted**, with the measurement recorded in-code so nobody
+re-adds it without redoing the resampling test.
+
+**Two more demotions from the same audit.** `ioiEntropy` is not the same disease (there is no metrical
+level to choose) but correlates at **r = −0.63 with `onsetRate`** — substantially a readout of how many
+onsets the detector fired — and caught 0 of 6 controls; reported-only now. `spectralCentroidVar`
+correlates at **r = 0.710** with `CV`; `CV` is kept as the better discriminator on every control and
+the only one that is not scale-dependent. `beatStrength` **keeps its gate**: it takes the max ACF
+anywhere in 30–300 BPM so it never chooses a metrical level, and under the same resampling test it
+drifts only +17%/−24% in magnitude without changing quantity.
+
+Net: **17 gating metrics → 14**, budget re-derived and still 5, LOO mean/max improved 2.26/7 → 1.89/6,
+corpus acceptance held at 37/38, all six synthetic controls still fail, **margin preserved at 4**, and
+best-control-vs-worst-real improved from 2 to 3.
+
+**Known gap, documented rather than papered over: no tempo metric survives.** Nothing in the suite
+constrains how fast the music is — a synth may emit a crawl or a blur unnoticed provided `onsetRate`
+stays in 4.58–9.59/s. Restoring it requires an accent-aware beat tracker that passes the resampling
+self-consistency test **before** it is given a gate.

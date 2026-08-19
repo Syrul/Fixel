@@ -91,7 +91,33 @@ a genuine artwork on it.
    defect would have been buried instead of found. The separation paid for
    itself the first time it was tested.
 
-7. **Never report a PASS count as progress.** Leave-one-out shows an all-pass
+7. **PLAUSIBILITY IS NOT EVIDENCE.** A fix that makes the numbers look right is
+   not a fix. Before a metric is given a gate, it must pass a
+   *self-consistency* test: transform the input by a known factor and confirm
+   the reading scales by that factor.
+
+   Worked example, and it cost two agents to learn. `tempoBpm` was diagnosed as
+   locking to the bar rather than the beat. The obvious fix — harmonic-sum
+   salience over a canonical 90-180 BPM octave — was proposed independently by
+   two of us, built, and **looked fixed**: the absurd 32.5 BPM readings vanished
+   and beat-to-onset-interval ratios moved from 14.4 to a coherent 2-4
+   corpus-wide. A ground-truth check then exposed a 3:2 hemiola error (150 BPM
+   read as 99.4), which a second refinement fixed.
+
+   Then someone resampled real tracks by known factors and checked the reading
+   scaled. **It scored 6 of 24**, and the failures were systematic: one track
+   read 105.5 BPM at both 1.0x and 1.25x, another 120.2 at both 1.0x and 1.5x.
+   **The estimator was returning the centre of its own search window.** The
+   octave fix made the numbers look right while the metric still measured its
+   own search range.
+
+   Second-order lesson from the same audit: **control the test instrument
+   before trusting the test.** The first resampling run used ffmpeg's `atempo`,
+   which is WSOLA and manufactures transients — `onsetRate` came out at 126-134%
+   of expected at 0.8x. Pure resampling via `asetrate` preserves onset structure
+   (94-105%). The confounded run was discarded and redone.
+
+8. **Never report a PASS count as progress.** Leave-one-out shows an all-pass
    gate rejects 84% of the reference's own crops, and seven of the sixty metrics
    correlate at r=1.0000. 36 vs 35 PASS is noise; the direction of a specific
    hard fail is the signal.

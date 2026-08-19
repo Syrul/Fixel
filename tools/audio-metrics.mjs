@@ -470,17 +470,57 @@ function analyzeWindow(x, sr) {
   { const m = mean(Array.from(odf)); for (let i = 0; i < odf.length; i++) odf[i] -= m; }
   let acf0 = 0; for (let i = 0; i < odf.length; i++) acf0 += odf[i] * odf[i];
   const lagLo = Math.round(0.2 * fps1), lagHi = Math.min(odf.length - 2, Math.round(2.0 * fps1));
+  const acfMax = Math.min(odf.length - 2, Math.round(3.0 * fps1));
+  const acf = new Float64Array(acfMax + 1);
   let bestLag = 0, bestVal = 0;
   // Fewer than 8 events in the window is not a tempo, it is an accident.
   if (acf0 > 1e-12 && onsetFrames.length >= 8) {
-    for (let l = lagLo; l <= lagHi; l++) {
+    for (let l = 1; l <= acfMax; l++) {
       let s = 0; for (let i = 0; i + l < odf.length; i++) s += odf[i] * odf[i + l];
-      const v = s / acf0;
-      if (v > bestVal) { bestVal = v; bestLag = l; }
+      acf[l] = s / acf0;
     }
+    for (let l = lagLo; l <= lagHi; l++) if (acf[l] > bestVal) { bestVal = acf[l]; bestLag = l; }
   }
+  // beatStrength keeps its original definition: the strongest periodicity
+  // anywhere in 30..300 BPM. It answers "is there a beat at all", which does not
+  // depend on which metrical level that beat sits on.
   R.beatStrength = Math.max(0, bestVal);
-  R.tempoBpm = bestLag > 0 ? 60 / (bestLag / fps1) : 0;
+
+  // TEMPO IS RETIRED. There is deliberately no tempoBpm metric.
+  //
+  // It shipped as a gating metric and was wrong. Taking the argmax of the
+  // autocorrelation reported the BAR rate on dense tracks and the BEAT rate on
+  // sparse ones — 32.5 BPM for music plainly at ~130 — so the band built from it
+  // was a mixture of two different quantities and admitted a sustained square.
+  //
+  // Two repairs were attempted and measured, not assumed:
+  //   1. harmonic-sum salience over a canonical 90..180 BPM octave. This made
+  //      every reading beat-level and musically plausible (beat/ioiMedian ratios
+  //      moved from an absurd 14.4 to a coherent 2-4), but left a 3:2 hemiola
+  //      error: a 150 BPM ground truth read as 99.4.
+  //   2. multiplicative salience, requiring the candidate period to be a strong
+  //      peak in its own right. This fixed the hemiola cases.
+  //
+  // Both were then tested for the property that actually matters: does the
+  // metric report ONE quantity? Real corpus tracks were resampled by known
+  // factors (asetrate, which preserves onset structure exactly — verified, as
+  // onsetRate scales at 94-105% under it, whereas ffmpeg's atempo does NOT and
+  // invalidates the test at 126-134%). If the metric tracked tempo, a track sped
+  // up by 1.25 would report 1.25x its tempo. Measured: 6 of 24 correct, and the
+  // failures were not random — junkala-level2 reported 105.5 BPM at both 1.0x
+  // and 1.25x, sketchy-boss reported 120.2 at both 1.0x and 1.5x. The estimator
+  // returns the centre of its own search window, not the music's tempo.
+  //
+  // A metric that tracks its search window rather than its input cannot be
+  // repaired by widening a band, and reporting it at 25% accuracy would be worse
+  // than reporting nothing. Do not re-add it without redoing the resampling
+  // self-consistency test above.
+  //
+  // beatStrength survives and still gates: it is the strongest periodicity
+  // ANYWHERE in 30..300 BPM, so it never has to choose a metrical level. It
+  // answers "is there a beat at all", drifts only +17%/-24% in magnitude under
+  // the same resampling test, and catches all six adversarial controls.
+
   R._ioiHist = Array.from(ioiHist);
 
   // ---- STFT #2: pitch salience, chroma, polyphony -----------------------
@@ -724,16 +764,25 @@ function analyzeWindow(x, sr) {
 // one comparable vector each.
 // ---------------------------------------------------------------------------
 
+// A metric earns a gate only if it (a) reports ONE quantity regardless of input,
+// (b) is not a restatement of another gate, and (c) actually discriminates.
+// Three metrics were demoted for failing (c), and are still computed and
+// reported — see docs/AUDIO-MEASURED.md for the measurements behind each:
+//   ioiEntropy         - r = -0.63 with onsetRate, i.e. substantially a readout
+//                        of how many onsets the detector fired; caught 0 of 6.
+//   spectralCentroidVar- r = 0.710 with spectralCentroidCV, the same measurement
+//                        in Hz^2 instead of scale-free; CV is the better
+//                        discriminator of the two on every control.
 const GATING = [
-  'onsetRate', 'ioiEntropy', 'beatStrength', 'tempoBpm',
+  'onsetRate', 'beatStrength',
   'pitchClassEntropy', 'chromaChangeRate',
   'stepFrac', 'leapFrac', 'bigLeapFrac',
   'repeatStrength', 'novelFraction',
-  'spectralCentroidMean', 'spectralCentroidVar', 'spectralCentroidCV',
+  'spectralCentroidMean', 'spectralCentroidCV',
   'polyphony', 'silenceFraction', 'noveltyPerSecond',
 ];
 const NON_GATING = ['peakDbfs', 'rmsDbfs', 'crestFactorDb'];
-const INFO = ['ioiMedian', 'chromaFlux', 'repeatLagSec', 'noteCount', 'intervalCount'];
+const INFO = ['ioiEntropy', 'spectralCentroidVar', 'ioiMedian', 'chromaFlux', 'repeatLagSec', 'noteCount', 'intervalCount'];
 
 function analyzeFile(file) {
   const { samples, sampleRate: sr } = readWav(file);
@@ -937,7 +986,7 @@ function printSingle(r) {
   for (const k of GATING) console.log(`    ${k.padEnd(w)} ${fmt(r.metrics[k]).padStart(12)}`);
   console.log('  NON-GATING (loudness — a limiter fakes all of these; they gate nothing)');
   for (const k of NON_GATING) console.log(`    ${k.padEnd(w)} ${fmt(r.metrics[k]).padStart(12)}`);
-  console.log('  INFO');
+  console.log('  REPORTED, NOT GATING (see GATING comment in this file for why)');
   for (const k of INFO) console.log(`    ${k.padEnd(w)} ${fmt(r.metrics[k]).padStart(12)}`);
 }
 

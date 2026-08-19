@@ -29,22 +29,81 @@ mastered onto the corpus loudness median and still fail.
 
 ## Acceptance rule
 
-A track PASSES if **at most 5 of the 17 gating metrics** fall outside their p05..p95 band.
+A track PASSES if **at most 5 of the 14 gating metrics** fall outside their p05..p95 band.
 
 The budget is not a guess; it is the p95 of the leave-one-out fail-count distribution of the corpus
-against itself. Demanding all 17 metrics be in band is the wrong gate and the corpus proves it: with
-17 two-sided p05..p95 bands a track is expected to miss ~1.7 by construction, and measured
-leave-one-out only **5 of 38** genuine CC0 chiptunes clear all 17. Mean leave-one-out failures per
-real track: **2.26**, max **7**. At a budget of 5, **37 of 38** real tracks are accepted.
+against itself. Demanding all 14 metrics be in band is the wrong gate and the corpus proves it: with
+14 two-sided p05..p95 bands a track is expected to miss ~1.7 by construction, and measured
+leave-one-out only **5 of 38** genuine CC0 chiptunes clear all 14. Mean leave-one-out failures per
+real track: **1.89**, max **6**. At a budget of 5, **37 of 38** real tracks are accepted.
+
+## Metrics that were retired, and why
+
+This suite shipped with 17 gating metrics. It now has 14. Three were removed after measurement, not
+after review — a metric earns a gate only if it **(a)** reports one quantity regardless of input,
+**(b)** is not a restatement of another gate, and **(c)** actually discriminates.
+
+### `tempoBpm` — REMOVED ENTIRELY (fails a)
+
+Not merely demoted: deleted from the output. The original estimator took the argmax of the onset
+autocorrelation, which locks onto whichever periodicity is strongest — and on dense music that is the
+**bar**, not the beat. It reported 32.5 BPM for music plainly at ~130 while sparse tracks reported the
+beat directly at ~161. The 32.5..142.9 band was therefore a *mixture of two different quantities*,
+which is why it was wide enough to admit a sustained square wave.
+
+Two repairs were attempted and measured:
+
+1. **Harmonic-sum salience over a canonical 90..180 BPM octave.** Every reading became beat-level and
+   musically plausible — the ratio of beat period to median inter-onset interval moved from an absurd
+   14.4 (celestial-8bit-thing) to a coherent 2-4 across the corpus. But a 3:2 hemiola error remained:
+   a 150 BPM ground truth read as 99.4.
+2. **Multiplicative salience**, requiring the candidate period to be a strong peak in its own right
+   rather than winning on its multiples alone. This fixed the hemiola cases.
+
+Both were then tested for the only property that matters here: *does it report one quantity?* Real
+corpus tracks were resampled by known factors and the reading checked against the expected scaling.
+
+> **Test validity was itself controlled.** ffmpeg's `atempo` cannot be used — `onsetRate` fails to
+> scale under it (126-134% of expected at 0.8x), so WSOLA is manufacturing transients and any result
+> would be an artefact. Pure resampling (`asetrate`) preserves onset structure exactly: `onsetRate`
+> scales at 94-105%. The confounded test was discarded and re-run.
+
+**Result: 6 of 24 correct.** And the failures were not noise — `junkala-level2` reported 105.5 BPM at
+both 1.0x and 1.25x; `sketchy-boss` reported 120.2 at both 1.0x and 1.5x. The estimator returns the
+centre of its own search window, not the music's tempo. A metric that tracks its search window rather
+than its input cannot be fixed by widening a band, and shipping it at 25% accuracy is worse than
+shipping nothing.
+
+`beatStrength` survives and still gates. It is the strongest periodicity **anywhere** in 30..300 BPM,
+so it never has to choose a metrical level — it answers "is there a beat at all". Under the same
+resampling test it drifts only +17%/-24% in magnitude without ever changing quantity, and it catches
+all six adversarial controls.
+
+### `ioiEntropy` — demoted to reported-only (fails b and c)
+
+No octave ambiguity, but **r = -0.63 with `onsetRate`** across the corpus: it is substantially a
+readout of how many onsets the detector fired rather than of how varied the note durations are. It
+also caught **0 of 6** controls (all three sat mid-band at 1.94-2.06 against a band of 0.964..3.324).
+Still computed and reported as a descriptive statistic.
+
+### `spectralCentroidVar` — demoted to reported-only (fails b)
+
+**r = 0.710 with `spectralCentroidCV`** — the same measurement in Hz² rather than scale-free. Counting
+both inflated every static-timbre fail count by one. `CV` is kept because it is the better
+discriminator of the two on every control (control-a: CV -0.26 band-widths vs Var -0.08; control-c:
+-0.19 vs -0.06) and because Hz² is scale-dependent. This is a deliberate departure from the original
+metric list.
+
+**Effect on the bar:** leave-one-out mean fail count fell from 2.26 to 1.89 and the worst genuine
+track from 7 to 6, while the controls stayed at 9-13. The budget re-derived to the same value of 5,
+so the margin between the best-scoring fake and the budget is **unchanged at 4**.
 
 ## The band
 
 | Metric | p05 | p95 | median | min | max | Gates? |
 |---|---:|---:|---:|---:|---:|:--|
 | `onsetRate` | 4.584 | 9.591 | 6.921 | 0.817 | 10.517 | yes |
-| `ioiEntropy` | 0.964 | 3.324 | 2.331 | 0.401 | 3.712 | yes |
 | `beatStrength` | 0.282 | 0.816 | 0.701 | 0.122 | 0.837 | yes |
-| `tempoBpm` | 32.503 | 142.948 | 59.433 | 30.046 | 224.694 | yes |
 | `pitchClassEntropy` | 2.773 | 3.301 | 3.119 | 2.637 | 3.371 | yes |
 | `chromaChangeRate` | 0.990 | 1.576 | 1.330 | 0.833 | 1.602 | yes |
 | `stepFrac` | 0.176 | 0.458 | 0.271 | 0.111 | 0.638 | yes |
@@ -53,7 +112,6 @@ real track: **2.26**, max **7**. At a budget of 5, **37 of 38** real tracks are 
 | `repeatStrength` | 0.154 | 0.642 | 0.321 | 0.117 | 0.782 | yes |
 | `novelFraction` | 0.503 | 0.929 | 0.810 | 0.397 | 0.963 | yes |
 | `spectralCentroidMean` | 2201.520 | 4670.696 | 3489.504 | 1284.874 | 5427.580 | yes |
-| `spectralCentroidVar` | 174595.870 | 2296770.212 | 691800.910 | 127793.552 | 5884147.350 | yes |
 | `spectralCentroidCV` | 0.125 | 0.558 | 0.218 | 0.109 | 0.975 | yes |
 | `polyphony` | 2.951 | 4.929 | 4.206 | 2.860 | 5.414 | yes |
 | `silenceFraction` | 0.000 | 0.125 | 0.001 | 0.000 | 0.172 | yes |
@@ -68,46 +126,46 @@ Values are the median across each track's 30 s windows.
 
 ### Rhythm and pitch content
 
-| Track | `onsetRate` | `ioiEntropy` | `beatStrength` | `tempoBpm` | `pitchClassEntropy` | `chromaChangeRate` |
-|---|---:|---:|---:|---:|---:|---:|
-| 3xblast-pop-punk-1 | 4.617 | 3.346 | 0.122 | 69.0 | 3.245 | 1.233 |
-| celestial-8bit-thing | 6.893 | 2.941 | 0.755 | 32.5 | 2.953 | 1.216 |
-| celestial-pulsar | 9.538 | 1.067 | 0.651 | 44.9 | 2.999 | 1.379 |
-| celestial-summer-sunday | 10.517 | 1.071 | 0.784 | 44.9 | 2.873 | 1.133 |
-| centurion-delayed-chips | 6.560 | 2.174 | 0.727 | 77.4 | 3.272 | 1.327 |
-| centurion-unstable-field | 7.133 | 1.015 | 0.726 | 75.1 | 3.221 | 1.333 |
-| congus-lasso-lady | 7.971 | 2.412 | 0.646 | 34.9 | 3.147 | 1.572 |
-| congus-napping-cloud | 6.433 | 2.780 | 0.735 | 161.5 | 3.204 | 1.383 |
-| hydrogene-mechanical-complex | 7.875 | 0.401 | 0.753 | 117.5 | 3.362 | 1.362 |
-| hydrogene-perilous-dungeon | 8.574 | 0.676 | 0.769 | 63.8 | 3.213 | 1.067 |
-| junkala-adv-bossfight | 7.067 | 1.803 | 0.810 | 58.1 | 3.072 | 1.300 |
-| junkala-adv-stage1 | 5.600 | 1.879 | 0.814 | 139.7 | 2.992 | 1.267 |
-| junkala-level1 | 6.774 | 1.540 | 0.806 | 90.7 | 2.786 | 0.833 |
-| junkala-level2 | 7.408 | 1.624 | 0.646 | 105.5 | 2.954 | 1.000 |
-| junkala-level3 | 7.333 | 1.295 | 0.825 | 52.7 | 2.928 | 1.000 |
-| junkala-title-screen | 6.204 | 1.762 | 0.710 | 84.7 | 2.933 | 1.432 |
-| nene-theme-song-8bit | 6.950 | 1.623 | 0.747 | 32.5 | 3.130 | 1.433 |
-| obscure-moon-chime | 4.400 | 2.857 | 0.307 | 60.8 | 3.177 | 1.183 |
-| pmiller-nes-jazz | 6.172 | 2.347 | 0.690 | 42.7 | 2.964 | 1.476 |
-| randommind-old-tower-inn | 6.567 | 3.111 | 0.735 | 57.4 | 3.371 | 1.533 |
-| sketchy-boss | 8.417 | 2.093 | 0.577 | 120.2 | 3.067 | 1.433 |
-| sketchy-mars | 6.184 | 2.873 | 0.518 | 101.3 | 2.699 | 1.061 |
-| sketchy-mercury | 7.333 | 2.324 | 0.445 | 33.3 | 3.084 | 1.300 |
-| sketchy-venus | 7.268 | 2.337 | 0.466 | 74.9 | 3.083 | 1.205 |
-| skrjablin-c64-uptempo | 7.733 | 2.644 | 0.381 | 94.0 | 3.290 | 1.467 |
-| springspring-great-boss | 7.383 | 2.481 | 0.567 | 46.6 | 3.117 | 1.195 |
-| tinyworlds-happy-adventure | 8.246 | 2.437 | 0.657 | 123.0 | 3.127 | 1.267 |
-| wolfgang-battle-loop | 9.889 | 1.984 | 0.837 | 44.9 | 3.198 | 1.236 |
-| wolfgang-haunted-house | 6.377 | 3.320 | 0.747 | 37.4 | 3.196 | 1.602 |
-| zane-100-victories | 6.133 | 2.651 | 0.610 | 37.4 | 3.060 | 1.367 |
-| zane-aura-horizon | 0.817 | 3.712 | 0.142 | 41.7 | 2.637 | 0.933 |
-| zane-dizzy-racing | 6.433 | 2.300 | 0.731 | 43.8 | 3.241 | 1.433 |
-| zane-face-the-facts | 7.233 | 2.071 | 0.545 | 30.0 | 3.113 | 1.183 |
-| zane-insect-factory | 5.700 | 3.074 | 0.743 | 224.7 | 2.827 | 1.600 |
-| zane-poker-night | 6.567 | 1.840 | 0.745 | 112.3 | 3.122 | 1.467 |
-| zane-sinister-abode | 5.333 | 2.647 | 0.693 | 84.7 | 3.228 | 1.567 |
-| zane-space-cadet | 6.983 | 2.640 | 0.636 | 32.5 | 3.147 | 1.383 |
-| zane-starlight-city | 5.900 | 2.981 | 0.537 | 57.4 | 3.263 | 1.461 |
+| Track | `onsetRate` | `beatStrength` | `pitchClassEntropy` | `chromaChangeRate` |
+|---|---:|---:|---:|---:|
+| 3xblast-pop-punk-1 | 4.617 | 0.122 | 3.245 | 1.233 |
+| celestial-8bit-thing | 6.893 | 0.755 | 2.953 | 1.216 |
+| celestial-pulsar | 9.538 | 0.651 | 2.999 | 1.379 |
+| celestial-summer-sunday | 10.517 | 0.784 | 2.873 | 1.133 |
+| centurion-delayed-chips | 6.560 | 0.727 | 3.272 | 1.327 |
+| centurion-unstable-field | 7.133 | 0.726 | 3.221 | 1.333 |
+| congus-lasso-lady | 7.971 | 0.646 | 3.147 | 1.572 |
+| congus-napping-cloud | 6.433 | 0.735 | 3.204 | 1.383 |
+| hydrogene-mechanical-complex | 7.875 | 0.753 | 3.362 | 1.362 |
+| hydrogene-perilous-dungeon | 8.574 | 0.769 | 3.213 | 1.067 |
+| junkala-adv-bossfight | 7.067 | 0.810 | 3.072 | 1.300 |
+| junkala-adv-stage1 | 5.600 | 0.814 | 2.992 | 1.267 |
+| junkala-level1 | 6.774 | 0.806 | 2.786 | 0.833 |
+| junkala-level2 | 7.408 | 0.646 | 2.954 | 1.000 |
+| junkala-level3 | 7.333 | 0.825 | 2.928 | 1.000 |
+| junkala-title-screen | 6.204 | 0.710 | 2.933 | 1.432 |
+| nene-theme-song-8bit | 6.950 | 0.747 | 3.130 | 1.433 |
+| obscure-moon-chime | 4.400 | 0.307 | 3.177 | 1.183 |
+| pmiller-nes-jazz | 6.172 | 0.690 | 2.964 | 1.476 |
+| randommind-old-tower-inn | 6.567 | 0.735 | 3.371 | 1.533 |
+| sketchy-boss | 8.417 | 0.577 | 3.067 | 1.433 |
+| sketchy-mars | 6.184 | 0.518 | 2.699 | 1.061 |
+| sketchy-mercury | 7.333 | 0.445 | 3.084 | 1.300 |
+| sketchy-venus | 7.268 | 0.466 | 3.083 | 1.205 |
+| skrjablin-c64-uptempo | 7.733 | 0.381 | 3.290 | 1.467 |
+| springspring-great-boss | 7.383 | 0.567 | 3.117 | 1.195 |
+| tinyworlds-happy-adventure | 8.246 | 0.657 | 3.127 | 1.267 |
+| wolfgang-battle-loop | 9.889 | 0.837 | 3.198 | 1.236 |
+| wolfgang-haunted-house | 6.377 | 0.747 | 3.196 | 1.602 |
+| zane-100-victories | 6.133 | 0.610 | 3.060 | 1.367 |
+| zane-aura-horizon | 0.817 | 0.142 | 2.637 | 0.933 |
+| zane-dizzy-racing | 6.433 | 0.731 | 3.241 | 1.433 |
+| zane-face-the-facts | 7.233 | 0.545 | 3.113 | 1.183 |
+| zane-insect-factory | 5.700 | 0.743 | 2.827 | 1.600 |
+| zane-poker-night | 6.567 | 0.745 | 3.122 | 1.467 |
+| zane-sinister-abode | 5.333 | 0.693 | 3.228 | 1.567 |
+| zane-space-cadet | 6.983 | 0.636 | 3.147 | 1.383 |
+| zane-starlight-city | 5.900 | 0.537 | 3.263 | 1.461 |
 
 ### Melodic shape and structure
 
@@ -154,46 +212,46 @@ Values are the median across each track's 30 s windows.
 
 ### Timbre, voices, silence
 
-| Track | `spectralCentroidMean` | `spectralCentroidVar` | `spectralCentroidCV` | `polyphony` | `silenceFraction` |
-|---|---:|---:|---:|---:|---:|
-| 3xblast-pop-punk-1 | 3383.8 | 255544.4 | 0.149 | 4.580 | 0.003 |
-| celestial-8bit-thing | 2330.3 | 1583470.8 | 0.540 | 2.960 | 0.172 |
-| celestial-pulsar | 3605.0 | 1235849.7 | 0.308 | 3.490 | 0.003 |
-| celestial-summer-sunday | 2895.7 | 127793.6 | 0.124 | 4.374 | 0.001 |
-| centurion-delayed-chips | 2752.3 | 542434.5 | 0.265 | 4.767 | 0.000 |
-| centurion-unstable-field | 3669.6 | 682540.2 | 0.224 | 4.637 | 0.000 |
-| congus-lasso-lady | 3480.4 | 1529775.8 | 0.355 | 4.057 | 0.003 |
-| congus-napping-cloud | 1284.9 | 267657.1 | 0.438 | 3.130 | 0.011 |
-| hydrogene-mechanical-complex | 3181.5 | 460546.8 | 0.213 | 3.852 | 0.000 |
-| hydrogene-perilous-dungeon | 3505.7 | 246834.4 | 0.142 | 4.597 | 0.000 |
-| junkala-adv-bossfight | 3692.4 | 1070001.8 | 0.280 | 3.752 | 0.000 |
-| junkala-adv-stage1 | 3516.7 | 1275451.6 | 0.321 | 3.587 | 0.000 |
-| junkala-level1 | 4280.1 | 701061.6 | 0.194 | 3.670 | 0.000 |
-| junkala-level2 | 4416.7 | 739244.5 | 0.195 | 3.442 | 0.000 |
-| junkala-level3 | 4781.5 | 500614.2 | 0.148 | 4.064 | 0.000 |
-| junkala-title-screen | 4035.1 | 768302.1 | 0.217 | 3.318 | 0.048 |
-| nene-theme-song-8bit | 3498.6 | 2143911.7 | 0.444 | 4.638 | 0.000 |
-| obscure-moon-chime | 3099.7 | 1002406.4 | 0.336 | 4.739 | 0.000 |
-| pmiller-nes-jazz | 2743.5 | 523219.5 | 0.264 | 2.860 | 0.050 |
-| randommind-old-tower-inn | 4110.5 | 244210.5 | 0.109 | 3.917 | 0.000 |
-| sketchy-boss | 2673.8 | 175150.6 | 0.156 | 4.279 | 0.001 |
-| sketchy-mars | 3074.1 | 245216.6 | 0.161 | 3.594 | 0.013 |
-| sketchy-mercury | 2424.7 | 171452.4 | 0.171 | 4.191 | 0.003 |
-| sketchy-venus | 3424.3 | 578931.8 | 0.222 | 5.414 | 0.005 |
-| skrjablin-c64-uptempo | 3071.5 | 346650.8 | 0.195 | 3.957 | 0.000 |
-| springspring-great-boss | 4084.2 | 563247.7 | 0.183 | 4.837 | 0.000 |
-| tinyworlds-happy-adventure | 1471.9 | 2065107.9 | 0.975 | 3.174 | 0.000 |
-| wolfgang-battle-loop | 3367.9 | 522778.6 | 0.215 | 4.377 | 0.000 |
-| wolfgang-haunted-house | 2547.7 | 1361138.1 | 0.458 | 2.900 | 0.141 |
-| zane-100-victories | 3817.4 | 947533.9 | 0.259 | 4.525 | 0.002 |
-| zane-aura-horizon | 2336.1 | 190363.3 | 0.192 | 4.445 | 0.000 |
-| zane-dizzy-racing | 4534.5 | 317936.4 | 0.125 | 4.900 | 0.000 |
-| zane-face-the-facts | 4651.1 | 785996.6 | 0.187 | 4.611 | 0.004 |
-| zane-insect-factory | 3408.9 | 5884147.4 | 0.659 | 3.013 | 0.122 |
-| zane-poker-night | 3705.8 | 3162968.3 | 0.520 | 4.221 | 0.030 |
-| zane-sinister-abode | 5427.6 | 1343266.6 | 0.209 | 4.456 | 0.005 |
-| zane-space-cadet | 4254.6 | 1742251.2 | 0.316 | 4.269 | 0.004 |
-| zane-starlight-city | 4479.2 | 956647.1 | 0.218 | 5.087 | 0.002 |
+| Track | `spectralCentroidMean` | `spectralCentroidCV` | `polyphony` | `silenceFraction` |
+|---|---:|---:|---:|---:|
+| 3xblast-pop-punk-1 | 3383.8 | 0.149 | 4.580 | 0.003 |
+| celestial-8bit-thing | 2330.3 | 0.540 | 2.960 | 0.172 |
+| celestial-pulsar | 3605.0 | 0.308 | 3.490 | 0.003 |
+| celestial-summer-sunday | 2895.7 | 0.124 | 4.374 | 0.001 |
+| centurion-delayed-chips | 2752.3 | 0.265 | 4.767 | 0.000 |
+| centurion-unstable-field | 3669.6 | 0.224 | 4.637 | 0.000 |
+| congus-lasso-lady | 3480.4 | 0.355 | 4.057 | 0.003 |
+| congus-napping-cloud | 1284.9 | 0.438 | 3.130 | 0.011 |
+| hydrogene-mechanical-complex | 3181.5 | 0.213 | 3.852 | 0.000 |
+| hydrogene-perilous-dungeon | 3505.7 | 0.142 | 4.597 | 0.000 |
+| junkala-adv-bossfight | 3692.4 | 0.280 | 3.752 | 0.000 |
+| junkala-adv-stage1 | 3516.7 | 0.321 | 3.587 | 0.000 |
+| junkala-level1 | 4280.1 | 0.194 | 3.670 | 0.000 |
+| junkala-level2 | 4416.7 | 0.195 | 3.442 | 0.000 |
+| junkala-level3 | 4781.5 | 0.148 | 4.064 | 0.000 |
+| junkala-title-screen | 4035.1 | 0.217 | 3.318 | 0.048 |
+| nene-theme-song-8bit | 3498.6 | 0.444 | 4.638 | 0.000 |
+| obscure-moon-chime | 3099.7 | 0.336 | 4.739 | 0.000 |
+| pmiller-nes-jazz | 2743.5 | 0.264 | 2.860 | 0.050 |
+| randommind-old-tower-inn | 4110.5 | 0.109 | 3.917 | 0.000 |
+| sketchy-boss | 2673.8 | 0.156 | 4.279 | 0.001 |
+| sketchy-mars | 3074.1 | 0.161 | 3.594 | 0.013 |
+| sketchy-mercury | 2424.7 | 0.171 | 4.191 | 0.003 |
+| sketchy-venus | 3424.3 | 0.222 | 5.414 | 0.005 |
+| skrjablin-c64-uptempo | 3071.5 | 0.195 | 3.957 | 0.000 |
+| springspring-great-boss | 4084.2 | 0.183 | 4.837 | 0.000 |
+| tinyworlds-happy-adventure | 1471.9 | 0.975 | 3.174 | 0.000 |
+| wolfgang-battle-loop | 3367.9 | 0.215 | 4.377 | 0.000 |
+| wolfgang-haunted-house | 2547.7 | 0.458 | 2.900 | 0.141 |
+| zane-100-victories | 3817.4 | 0.259 | 4.525 | 0.002 |
+| zane-aura-horizon | 2336.1 | 0.192 | 4.445 | 0.000 |
+| zane-dizzy-racing | 4534.5 | 0.125 | 4.900 | 0.000 |
+| zane-face-the-facts | 4651.1 | 0.187 | 4.611 | 0.004 |
+| zane-insect-factory | 3408.9 | 0.659 | 3.013 | 0.122 |
+| zane-poker-night | 3705.8 | 0.520 | 4.221 | 0.030 |
+| zane-sinister-abode | 5427.6 | 0.209 | 4.456 | 0.005 |
+| zane-space-cadet | 4254.6 | 0.316 | 4.269 | 0.004 |
+| zane-starlight-city | 4479.2 | 0.218 | 5.087 | 0.002 |
 
 ### Loudness — NON-GATING
 
@@ -245,24 +303,22 @@ A limiter and a gain stage set every column below to whatever you ask for. They 
 Each track scored against a band built from the other 37. This is the distribution the
 acceptance budget of 5 is derived from.
 
-| Track | gating metrics out of band (of 17) |
+| Track | gating metrics out of band (of 14) |
 |---|---:|
-| celestial-summer-sunday | 7 |
-| 3xblast-pop-punk-1 | 5 |
+| celestial-summer-sunday | 6 |
 | celestial-8bit-thing | 5 |
-| zane-aura-horizon | 5 |
-| zane-insect-factory | 5 |
+| 3xblast-pop-punk-1 | 4 |
 | randommind-old-tower-inn | 4 |
 | sketchy-venus | 4 |
-| wolfgang-haunted-house | 4 |
-| congus-napping-cloud | 3 |
-| hydrogene-mechanical-complex | 3 |
+| zane-aura-horizon | 4 |
 | junkala-level1 | 3 |
 | junkala-level3 | 3 |
-| zane-face-the-facts | 3 |
+| wolfgang-haunted-house | 3 |
+| zane-insect-factory | 3 |
 | celestial-pulsar | 2 |
+| congus-napping-cloud | 2 |
+| hydrogene-mechanical-complex | 2 |
 | junkala-adv-bossfight | 2 |
-| junkala-adv-stage1 | 2 |
 | junkala-title-screen | 2 |
 | obscure-moon-chime | 2 |
 | sketchy-mars | 2 |
@@ -270,19 +326,21 @@ acceptance budget of 5 is derived from.
 | tinyworlds-happy-adventure | 2 |
 | wolfgang-battle-loop | 2 |
 | zane-dizzy-racing | 2 |
-| zane-poker-night | 2 |
+| zane-face-the-facts | 2 |
 | zane-sinister-abode | 2 |
 | centurion-delayed-chips | 1 |
 | congus-lasso-lady | 1 |
-| hydrogene-perilous-dungeon | 1 |
+| junkala-adv-stage1 | 1 |
 | pmiller-nes-jazz | 1 |
-| sketchy-boss | 1 |
-| sketchy-mercury | 1 |
 | skrjablin-c64-uptempo | 1 |
+| zane-poker-night | 1 |
 | zane-starlight-city | 1 |
 | centurion-unstable-field | 0 |
+| hydrogene-perilous-dungeon | 0 |
 | junkala-level2 | 0 |
 | nene-theme-song-8bit | 0 |
+| sketchy-boss | 0 |
+| sketchy-mercury | 0 |
 | zane-100-victories | 0 |
 | zane-space-cadet | 0 |
 
@@ -296,7 +354,7 @@ code** (`node tools/audio-metrics.mjs --make-controls <dir>` — no samples, jus
 |---|---|
 | **a** | a single sustained square-wave note, 90 s, no change of any kind |
 | **b** | uniformly-random notes from a chromatic scale (3 octaves) at a fixed 8 notes/s |
-| **c** | a single 2-second bar at 120 BPM (C-major arpeggio lead over a root bass), repeated verbatim for 90 s |
+| **c** | one 2-bar-per-loop C-major bar at 120 BPM, repeated verbatim for 90 s |
 
 ### The mastering
 
@@ -323,21 +381,21 @@ depends on it.
 
 | Control | variant | gating metrics out of band | budget | verdict |
 |---|---|---:|---:|:--|
-| control-a-sustained-square | peak dead centre | **14** | 5 | **FAIL** |
-| control-a-sustained-square | RMS dead centre | **13** | 5 | **FAIL** |
+| control-a-sustained-square | peak dead centre | **13** | 5 | **FAIL** |
+| control-a-sustained-square | RMS dead centre | **12** | 5 | **FAIL** |
 | control-b-random-notes | peak dead centre | **9** | 5 | **FAIL** |
 | control-b-random-notes | RMS dead centre | **9** | 5 | **FAIL** |
-| control-c-one-bar-loop | peak dead centre | **10** | 5 | **FAIL** |
-| control-c-one-bar-loop | RMS dead centre | **10** | 5 | **FAIL** |
+| control-c-one-bar-loop | peak dead centre | **9** | 5 | **FAIL** |
+| control-c-one-bar-loop | RMS dead centre | **9** | 5 | **FAIL** |
 
-For comparison, real corpus tracks average **2.26** out-of-band metrics (worst: 7).
+For comparison, real corpus tracks average **1.89** out-of-band metrics (worst: 6).
 
 ### Which metric caught which control, and by how much
 
 Signed distance is in band-widths: 0 means inside, negative means below `lo`, positive above `hi`.
 Showing the RMS-dead-centre variant of each.
 
-**control-a-sustained-square** — 13 of 17 out of band
+**control-a-sustained-square** — 12 of 14 out of band
 
 | Metric | value | band | distance (band-widths) |
 |---|---:|---|---:|
@@ -353,9 +411,8 @@ Showing the RMS-dead-centre variant of each.
 | `beatStrength` | 0.964 | 0.282 .. 0.816 | +0.28 |
 | `spectralCentroidCV` | 0.013 | 0.125 .. 0.558 | -0.26 |
 | `bigLeapFrac` | 0.000 | 0.064 .. 0.502 | -0.15 |
-| `spectralCentroidVar` | 7210.581 | 174595.870 .. 2296770.212 | -0.08 |
 
-**control-b-random-notes** — 9 of 17 out of band
+**control-b-random-notes** — 9 of 14 out of band
 
 | Metric | value | band | distance (band-widths) |
 |---|---:|---|---:|
@@ -369,7 +426,7 @@ Showing the RMS-dead-centre variant of each.
 | `leapFrac` | 0.283 | 0.295 .. 0.552 | -0.05 |
 | `bigLeapFrac` | 0.514 | 0.064 .. 0.502 | +0.03 |
 
-**control-c-one-bar-loop** — 10 of 17 out of band
+**control-c-one-bar-loop** — 9 of 14 out of band
 
 | Metric | value | band | distance (band-widths) |
 |---|---:|---|---:|
@@ -382,7 +439,6 @@ Showing the RMS-dead-centre variant of each.
 | `chromaChangeRate` | 0.867 | 0.990 .. 1.576 | -0.21 |
 | `spectralCentroidCV` | 0.044 | 0.125 .. 0.558 | -0.19 |
 | `bigLeapFrac` | 0.000 | 0.064 .. 0.502 | -0.15 |
-| `spectralCentroidVar` | 41777.398 | 174595.870 .. 2296770.212 | -0.06 |
 
 ## Where this band is still gameable
 
@@ -392,7 +448,7 @@ Stated bluntly, because a bar you cannot attack is a bar you do not understand.
 `novelFraction`, `noveltyPerSecond`, `polyphony`. Those six caught all three controls on both
 mastering variants. If a future synth is tuned against this band, these are the ones doing the work.
 
-**`onsetRate` and `beatStrength` are the weakest gating metrics here.** Before mastering, the
+**`onsetRate` and `beatStrength` are the weakest surviving gates.** Before mastering, the
 sustained-square control scored `onsetRate` 19.93/s and `beatStrength` 0.95 with *no notes in it at
 all* — a naive square oscillator's period jitters between 50 and 51 samples at 440 Hz, and that
 broadband fizz peak-picks as a 20 Hz note stream. Four successive fixes (band-summed flux, relative
@@ -400,27 +456,28 @@ flux normalisation, an absolute floor, and a prominence test) reduced but did no
 finally caught it was the *upper* side of the two-sided band, i.e. 19.93/s is not a plausible note
 rate. Then the mastering tremolo handed it a real 4 Hz envelope and `onsetRate` landed in band at
 4.87. Treat these two as evidence that *something happens at a rate*, not that notes are played.
-
-**`tempoBpm` (32.5..142.9) passed all six control files** and is close to useless as a gate — almost
-any periodic signal lands inside. **`ioiEntropy` (0.964..3.324) also passed all six.** Both are kept
-for reporting, not for gating strength. **`silenceFraction` never gated anything** — every control
-measured 0.000; it only guards against dead air, which is worth having but is not a music test.
+`beatStrength` additionally drifts +17%/-24% in magnitude under pure resampling — it reports one
+quantity consistently, but not a precise one.
 
 **`stepFrac` passed both the random-note and the one-bar-loop control.** Only `leapFrac` and
 `bigLeapFrac` had teeth on the interval distribution. The melodic line is tracked as the highest
 strong voice confined to a two-octave register around its own median; on dense polyphony it still
 swaps voices, which is why the corpus `bigLeapFrac` band is wide (0.064..0.502).
 
-**`spectralCentroidVar` and `spectralCentroidCV` are the same measurement twice** (Hz² and its
-scale-free twin). Counting both inflates fail counts by one whenever a track has static timbre. They
-are not independent evidence and should be read as one metric.
+**`silenceFraction` has never gated anything** — every control measured 0.000. It guards against dead
+air, which is worth having, but it is not a music test and should not be counted as one.
 
-**The margin over real music is real but not comfortable.** The worst genuine corpus track misses 7
-metrics; the random-note control misses 9. The budget sits at 5. This band reliably rejects *crude*
+**The margin over real music is real but not comfortable.** The worst genuine corpus track misses 6
+metrics; the best-scoring fake misses 9. The budget sits at 5. This band reliably rejects *crude*
 fakes — a drone, a random-note generator, a single looped bar. A more competent fake (Markov-chain
 melody over a ii-V-I with a genuine repeated 8-bar section and a couple of timbre changes) would
 very plausibly land under the budget while still being bad music. **This is a floor, not a ceiling:
 passing it means a synth is not obviously broken, not that it is good.**
+
+**No tempo metric survives.** Nothing in this suite constrains how fast the music is. A synth can
+emit anything from a crawl to a blur and no gate will notice, provided the onset *rate* stays in
+4.58..9.59/s. Fixing that needs a beat tracker that passes the resampling self-consistency test in
+the retirement section above, which the autocorrelation approach did not.
 
 **Corpus monoculture.** All 38 tracks come from OpenGameArt, and two artists supply 15 of them
 (Zane Little Music 9, Juhani Junkala 6). Band widths partly encode those artists' habits rather than
@@ -431,47 +488,36 @@ harmonics at +12/19/24/28/31/34/36 semitones, so a melody sitting exactly an oct
 octave-plus-fifth above a bass note is suppressed and undercounted in `polyphony` and chroma. Chiptune
 waveforms all carry strong fundamentals, which is what makes the approximation survivable here.
 
+
 ---
 
-## Independent verification of the bar by the lead, before any synth existed
+## Lead re-verification after the tempo audit
 
-Run against `docs/band-audio-v1.json` with `tools/audio-metrics.mjs`, by someone
-who did not build either. This is the audio twin of the pixel side's inversion
-test, and it is the check that decides whether any later synth score means
-anything.
+Gating set is now **14** (`tempoBpm`, `ioiEntropy`, `spectralCentroidVar` removed);
+`peakDbfs`, `rmsDbfs`, `crestFactorDb` remain non-gating. Budget re-derived, still 5.
 
-| file | gating metrics out of band (budget 5) | verdict |
+| | out of band (budget 5) | |
 |---|---:|---|
-| `control-a-sustained-square` peak-centred | 14 | FAIL |
-| `control-a-sustained-square` rms-centred | 13 | FAIL |
-| `control-c-one-bar-loop` peak-centred | 10 | FAIL |
-| `control-c-one-bar-loop` rms-centred | 10 | FAIL |
-| `control-b-random-notes` peak-centred | 9 | FAIL |
-| `control-b-random-notes` rms-centred | 9 | FAIL |
-| `3xblast-pop-punk-1` | 4 | PASS |
-| `celestial-8bit-thing` | 4 | PASS |
-| `celestial-pulsar` | 1 | PASS |
-| `celestial-summer-sunday` | 5 | PASS |
-| `centurion-delayed-chips` | 1 | PASS |
-| `centurion-unstable-field` | 0 | PASS |
+| sustained square, peak-centred | 13 | FAIL |
+| sustained square, rms-centred | 12 | FAIL |
+| random notes, peak / rms | 9 / 9 | FAIL |
+| one-bar loop, peak / rms | 9 / 9 | FAIL |
+| 8 genuine CC0 tracks | 0, 1, 1, 2, 3, 4, 4, 4 | all PASS |
 
-**Worst genuine track 5, best fake 9 — a clean margin of 4, with no overlap.**
-Both mastering variants of every fake fail, so centring loudness does not rescue
-any of them: the gate is not measuring level.
+**Margin preserved: worst genuine 4, best fake 9.** Removing three gates did not
+cost separation — which is the point, since they were not contributing any.
 
-Worked example of *why* the one-bar loop fails, which is the useful part:
-`repeatStrength` 0.915 against a 0.154–0.642 band (+0.56), `noveltyPerSecond`
-0.000 against 0.194–0.350 (−1.24), `novelFraction` 0.165 against 0.503–0.929
-(−0.79), `pitchClassEntropy` 2.314 against 2.773–3.301 (−0.87). The metrics that
-catch it are the ones that measure whether the music *develops*, and they cannot
-be faked by processing — which is the whole design goal.
+## THE GAP THIS OPENS — carry it into every audio verdict
 
-`crestFactorDb` read 6.349 against the corpus band 9.422–17.203 and is correctly
-printed as **NON-GATING**, with the tool labelling it limiter-fakeable in its own
-output. The n=3 claim in `docs/BAR.md` that crest factor is the load-bearing
-gate does not survive n=38 and is not being relied on.
+**No tempo metric survives. Nothing in the suite constrains how fast the music
+is.** A synth can emit a crawl or a blur unnoticed, provided `onsetRate` stays
+inside 4.58-9.59 onsets/sec.
 
-**Conclusion: the audio bar has teeth and is safe to judge a synth against.**
-Unlike the 60-metric pixel band, it was built from 38 works by 16 artists rather
-than 128 crops of one artwork, which is precisely why it generalises where the
-pixel band did not.
+This bears directly on the synth, whose range is 140-172 BPM: **that range is now
+UNGATED.** Its correctness rests on musical judgement alone and must be stated in
+any report as an *assumption*, never implied to have passed a check.
+
+Restoring a tempo gate requires an accent-aware beat tracker that passes the
+**resampling self-consistency test** — transform by a known factor, confirm the
+reading scales — *before* it is given a gate. The previous attempt passed every
+plausibility check and still failed that one at 6 of 24.
