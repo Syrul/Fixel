@@ -387,3 +387,29 @@ in nothing.
 
 Together with the signage foreshortening error, that is two genuine
 *correctness* bugs in the projection layer, distinct from the scale limitation.
+
+## The scale defect, settled on one object
+
+A judge described our bus as "a red prism on a yellow prism... its lower edge
+degrading into a dashed row of disconnected black pixels rather than resolving
+into an edge", and said it had no wheels.
+
+Checked in code: **it has wheels.** `src/gen/props/vehicles.js` gives every kind
+— bus included — wheels in arches with a lit hub, a waist seam and door seams,
+all in black ink. The bus spec carries a wheel radius of 2.10 world units and
+four seams.
+
+At bus scale that wheel radius is about **4 screen pixels**. So the judge was
+describing the wheels: at 4px they are a dashed row of dark pixels, not a wheel.
+
+That is round 3 in one object. **Every fix is correct in kind and drawn at
+roughly a third of the size needed to resolve.** The round-3 work is not wrong
+and should not be redone — it is invisible. A judge comparing it against a
+reference police car of 78x55px with a two-lens light bar, a raked windscreen,
+a push-bumper of individually drawn bars, four wheels with rim highlights and a
+whip antenna is not seeing worse drawing; it is seeing the same drawing at a
+third of the scale, below the threshold where any of it reads.
+
+**Round 4 is scale, and only scale.** The builder judged that re-tuning every
+world dimension at once was too large to gamble inside a round it could not
+re-validate. That judgement was right, and it is the whole of the next round.
