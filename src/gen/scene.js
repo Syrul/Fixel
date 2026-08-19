@@ -35,9 +35,25 @@ import * as N from './props/nature.js';
 
 const MD = (f) => ({ top: f.l, left: f.r, right: f.d });
 
-/** Canvas that stamps the current object tag on everything it draws. */
+/**
+ * Canvas that stamps the current object tag on everything it draws.
+ *
+ * THE TAG BUFFER IS 32-BIT, AND THAT IS A CORRECTNESS FIX, NOT A TIDY-UP.
+ * `Canvas` allocates a `Uint16Array`, and the tag counter here used to wrap at
+ * 65534. The worst of eight seeds reached 53,515 tags at 1600x1100 — 18%
+ * headroom — and the failure is SILENT: two objects that happen to share a tag
+ * have no keyline drawn between them, so a wrapped scene loses outlines in a
+ * way nothing in the harness can see. Round 4 changes object counts and the
+ * viewport is a parameter, so both inputs to the wrap were about to move.
+ * Widening it here rather than in `src/core/canvas.js` keeps the change inside
+ * the generator's own files.
+ */
 class TaggedCanvas extends Canvas {
-  constructor(w, h, pal) { super(w, h, pal); this.t = 0; }
+  constructor(w, h, pal) {
+    super(w, h, pal);
+    this.tag = new Uint32Array(w * h);
+    this.t = 0;
+  }
   put(x, y, ci, d, tag = 0) { return super.put(x, y, ci, d, tag || this.t); }
   putZ(x, y, ci, d, tag = 0) { return super.putZ(x, y, ci, d, tag || this.t); }
   fillPoly(p, a, b, c, sh, tag = 0) { return super.fillPoly(p, a, b, c, sh, tag || this.t); }
@@ -99,9 +115,20 @@ export function renderScene(seed, opts = {}) {
   const gs = rng.stream('ground');
   const seedN = gs.int(1, 1 << 28);
 
+  // Tags are handed out monotonically and never reused. The side table that
+  // records which of them opt out of the silhouette sweep grows with them, so
+  // there is no ceiling to run into and no modulo to wrap through.
   let tagN = 0;
-  const noOutline = new Uint8Array(65536);
-  const tag = () => { tagN = (tagN % 65534) + 1; return tagN; };
+  let noOutline = new Uint8Array(1 << 14);
+  const tag = () => {
+    tagN++;
+    if (tagN >= noOutline.length) {
+      const grown = new Uint8Array(noOutline.length * 2);
+      grown.set(noOutline);
+      noOutline = grown;
+    }
+    return tagN;
+  };
   // Sprite-blitted things — pedestrians, foliage — carry their own authored
   // keyline. A second 1px rim on a five-pixel-wide figure eats the figure.
   const tagRaw = () => { const t = tag(); noOutline[t] = 1; return t; };
@@ -243,7 +270,7 @@ export function renderScene(seed, opts = {}) {
   }
 
   traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw, D);
-  if (opts.outline !== false && !opts.noOut) outlinePass(cv, C.black, noOutline);
+  if (opts.outline !== false && !opts.noOut) outlinePass(cv, C.black, noOutline, tagN);
   return cv;
 }
 
@@ -252,8 +279,8 @@ export function renderScene(seed, opts = {}) {
 // NEARER object at every tag change. Small objects are skipped — a 1px rim on a
 // five-pixel-wide pedestrian would eat the pedestrian.
 
-function outlinePass(cv, black, skip) {
-  const w = cv.w, h = cv.h, N = 65536;
+function outlinePass(cv, black, skip, nTags) {
+  const w = cv.w, h = cv.h, N = nTags + 1;
   const tag = cv.tag, depth = cv.depth, idx = cv.idx;
   const minx = new Int32Array(N).fill(1 << 30), maxx = new Int32Array(N).fill(-1);
   const miny = new Int32Array(N).fill(1 << 30), maxy = new Int32Array(N).fill(-1);
