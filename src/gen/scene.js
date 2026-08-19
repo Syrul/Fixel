@@ -177,7 +177,13 @@ export function renderScene(seed, opts = {}) {
   // Twenty-two asphalt tones, not nine: a 320px crop crosses two or three
   // streets, and with nine in the frame the same grey came back four blocks
   // away. `palette.top1Share` reads that as one colour eating the frame.
-  const tones = { road: jit(C.road, 22, 16, 0.16), roadD: jit(C.roadD, 22, 16, 0.16) };
+  // The scene's asphalt value, on top of the per-street spread. A bleached
+  // concrete boulevard and a fresh black-top are different pictures, and the
+  // road is the single largest connected surface in the frame.
+  const roadLit = cs0.range(0.78, 1.22);
+  const rBase = C.mk(C.road._h, C.road._s, Math.min(0.94, C.road._L * roadLit));
+  const rDark = C.mk(C.roadD._h, C.roadD._s, Math.min(0.9, C.roadD._L * roadLit));
+  const tones = { road: jit(rBase, 22, 16, 0.16), roadD: jit(rDark, 22, 16, 0.16) };
   cv.t = 0;
   drawSlab(cv, iso, X0, Y0, 0, X1 - X0, Y1 - Y0,
     roadShade(iso, C, plan, seedN, tones,

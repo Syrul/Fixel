@@ -163,9 +163,9 @@ export function buildPalette(rng) {
   // it runs, and how pale. These used to be ±8 degrees and ±9% of saturation,
   // which is why `hue.meanSat` and `palette.top1Share` barely moved seed to
   // seed. A desert noon and an overcast harbour are different pictures.
-  const drift = r.range(-18, 18);
+  const drift = r.range(-26, 26);
   const satMul = r.range(0.60, 1.14);
-  const litMul = r.range(0.88, 1.10);
+  const litMul = r.range(0.83, 1.13);
   // THE NEUTRALS CARRY THE SCENE AND THEY WERE THE PART THAT DID NOT MOVE.
   // 59% of the frame is near-neutral, and the neutral families used to take
   // only 0.3 of the scene drift — about five degrees — so the greys that make
