@@ -738,3 +738,91 @@ Fidelity is a magnitude measurement, not a binary one, and two independent imple
 The other durable result is the **un-normalised** leak, which is categorical — cube-corner presence 4/4
 present versus 4/4 absent, infinite margin, and un-normalised top-1 separating by +0.066. Everything
 said about *post*-normalisation leak verdicts should be held far more loosely than it was stated.
+
+---
+
+# FALSIFIED: the two mp4s in `refs/` are not an animation reference
+
+**The claim, asserted twice and confidently by the lead of the animation round:**
+that `#spheretales.mp4` and `I am four seconds old.mp4` are vertical, phone-shaped,
+**animated pixel art** — characters moving subtly against a still ground — and that five
+rounds had misread them as composition references. The instruction that followed was to
+extract frames and set Fixel's animation amplitude and frequency from them.
+
+**Measured, and every part of the claim is wrong.**
+
+| claim | measurement |
+|---|---|
+| pixel art | **no native pixel grid.** Phase energy at k=4 is [0.430, 0.656, 0.432, 0.795]; an integer upscale would show three near-zero phases. 38,805–51,515 unique RGB **per frame**. Edges anti-aliased at a median 3.0 px transition width, only 1.3–4.2% hard 1px. Screen captures of smooth 3D creature generators rendered natively at 720x1280. |
+| a loop | **not a loop.** The lag curve rises monotonically from k=1 in every window, global minimum always at k=1, never within 11–63x of the noise floor. "four seconds" has 90-frame cycles, but each is a 60-frame plateau then a 30-frame cross-dissolve to a **new creature and a new background** — a sequence, not a loop. |
+| subtle motion | **median block displacement 6–10 px per 1/30 s** = 185–300 px/s. Sub-2px motion is only 6–9% of moving blocks. 7.5% of pixels change per frame in one video. |
+
+Taking amplitude from these would have put 6–10 px/frame into a 375x812 pixel-art post,
+which is a screensaver. **No amplitude in the animation round has a measured provenance,
+and the record says so rather than implying one.**
+
+## Where the amplitude actually came from, stated plainly
+
+1. **The loop-closure constraint**, which is the only hard mathematical bound in play and
+   the one that killed the obvious design on its own. A crest that marches closes the loop
+   only if it advances a whole period across it; the swell pitch is 115–205 screen px, so
+   one period over 8 frames is 14–26 px **per frame**. The arithmetic rejects a marching
+   lattice before any taste is applied.
+2. **The user's own words** — "slightly breathing", the amplitude where you are not sure
+   whether it moved.
+3. **A strip review by eye** (`tools/strip.mjs`).
+
+Taste, disciplined by a strip review. That is weaker provenance than a measurement and it
+is what we have; stating it as measured would be the fifth thing this project retracted.
+
+## What DOES transfer, and it is worth more than the amplitude would have been
+
+The references are useless for amplitude and genuinely informative about **spatial
+structure**:
+
+- **Coherent and regional, never scattered.** In every window a single connected component
+  carries **78–99.8%** of all changed pixels. The size distribution is bimodal — dozens of
+  1–4 px specks, which are compression noise, plus 1–3 components over 1000 px. **There is
+  no mid-size population.**
+- **Translation, not substitution.** 65–84% of moving blocks are explained by a rigid
+  shift; motion compensation removes 65–78% of frame-to-frame error. Things move; they do
+  not flicker in place.
+- **A still world with one moving subject.** The camera is locked and the ground is
+  **0.00% ever-changed** across every segment; the creature plus its shadow carries 70–92%
+  of all changed pixels. Fewer things moving, more decisively, beats everything moving a
+  little.
+- **THE EXPLICIT DO-NOT.** The one genuinely pixel-scale element in either file — a speckle
+  sphere — is **re-randomised every frame**: spatial autocorrelation lag-1 **0.341** (pure
+  per-pixel white noise), motion-compensated ratio 0.98 (no translation explains it), a new
+  colour at 58 of 60 frames. Per-pixel noise animation. **Nothing in Fixel may twinkle.** It
+  would also read as dithering, which every reference in this file lacks (2x2 checkerboard
+  rate 1.7–2.1%), and it manufactures orphan 1px islands, already at the ceiling on desert
+  and highland.
+
+`tools/animcheck.mjs` gates the last of these: it 4-connects the ever-moved mask and fails a
+seed whose motion lives in 1–2 px specks. **A floor, never a score** — it rejects per-pixel
+noise and does not rank two designs that clear it.
+
+## The one tension, resolved deliberately rather than by deference
+
+Fixel's water surges across **spatially offset** stretches, which is distributed motion; the
+references say coherent motion is **one island**. These disagree.
+
+The design stands, because the references are neither pixel art nor a loop and so do not get
+to overrule a constraint derived from loop closure — and because the reasoning holds on its
+own: real swell arrives in sets, and a sea pulsing in unison would be worse than a still one.
+The finding is taken at the level where it does transfer: **each surging stretch must be
+internally coherent**, its offset fieldlow-frequency enough that a contiguous run of coastline
+moves as one region rather than adjacent pixels sitting at different phases. Distributed
+regions, each coherent — not one region, and not noise.
+
+## The process note
+
+This is the second time in this project a load-bearing assumption about the reference files
+went unstated and untested while decisions were built on it — the first being standing rule 9,
+where "36 exact RGB triples shared across four images" was overwhelming evidence of a fixed
+palette and a tautology about four crops of one file. Here the assumption was "these are
+pixel art", it was never checked in five rounds, and it was about to set a number.
+
+**Measure the reference before you take a number from it, including when the number is the
+whole reason you looked.**
