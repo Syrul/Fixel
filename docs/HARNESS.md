@@ -499,6 +499,43 @@ argument, because it is a demonstrated harm rather than a projected one. It also
 means "max channel 255" and "extreme share" must NOT be sent to the generator as
 defects — they are measurement artefacts.
 
+### Notes for a revival that probably should not happen
+
+Three corrections to the record, none of which change the retirement:
+
+- **The asymmetry divergence was not k-means versus median cut.** Both numbers
+  came from median-cut implementations. So it is **two median cuts disagreeing
+  on the SIGN of the same quantity**, which strengthens "behaviour does not
+  travel" rather than weakening it.
+- **The knob is box SELECTION, not split weighting.** Selecting boxes by max
+  channel range gives asymmetry positive at all 8 K; selecting by mass x range
+  gives the small sign-changing values this pipeline produces. `normalise.mjs`
+  selects by `ext * log2(1+mass)`, which is mass-weighted — that one line
+  plausibly explains both divergences. Checkable, worth confirming only on
+  revival.
+- **"Coarser is safer" is FALSE.** At coarse K the separator can **invert**
+  rather than close, the reference's top-1 overshooting ours once quantisation
+  merges its fragmented black hard enough. Still a perfect leak, opposite sign.
+  So a sweep must test **|separation| in both directions** and must not assume
+  monotonicity: one implementation goes inverted-separated, then closed, then
+  separated again as K rises.
+
+### Why the retirement decision holds regardless
+
+**The normaliser was retired on the FIDELITY argument** — a magnitude
+measurement that two independent implementations reproduce — **not on any leak
+verdict.** Every leak verdict in that thread was a binary at n=4, and several
+turned out to rest on margins of +0.0077 and +0.0028. The fidelity numbers are
+margins by construction: 24 slots and a mean shift of 40 L1 is not a verdict
+that can flip on one sample.
+
+And the un-normalised leak stands untouched and **categorical**: 4/4 cube-corner
+present vs 4/4 absent, infinite margin, ~200 distinct near-blacks vs exactly 1.
+
+That the surviving argument is the one that does not rest on a thin verdict is
+worth recording as a reason rather than as luck: **prefer the argument that is a
+measured magnitude over the one that is a verdict, especially at small n.**
+
 ### Two acceptance criteria, if the normaliser is ever revived
 
 Not optional, and neither is "does the leak close":
