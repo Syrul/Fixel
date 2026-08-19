@@ -62,7 +62,7 @@ import { makeTerrain, drawTerrain, walkTrack } from '../terrain.js';
 import { drawSlab, drawBox } from '../../core/iso.js';
 import { box } from '../draw.js';
 import { h3 } from '../palette.js';
-import { topFace } from '../faces.js';
+import { topFace, leftFace, rightFace } from '../faces.js';
 import { localC } from '../stage.js';
 import { dep, projR } from '../view.js';
 import * as P from '../props/highland.js';
@@ -404,8 +404,8 @@ export function paintHighland(stage) {
     }
     out[CH_FAN] = cl01((rise - 0.50) / 0.42) * cl01((0.90 - am) / 0.40)
       * (0.45 + 1.05 * fbm(x * 0.015, y * 0.015, seedN + 177, 2));
-    out[CH_RA] = vnoise(x * 0.0142, y * 0.0142, seedN + 211);
-    out[CH_RB] = vnoise(x * 0.0121, y * 0.0121, seedN + 307);
+    out[CH_RA] = vnoise(x * 0.0172, y * 0.0172, seedN + 211);
+    out[CH_RB] = vnoise(x * 0.0148, y * 0.0148, seedN + 307);
   });
 
   // ------------------------------------------------------------ the palette
@@ -864,9 +864,19 @@ export function paintHighland(stage) {
     const bd = hero.ax === 0 ? hero.wide + 2.8 : 8;
     const gz = T.surfaceZ(bx + bw * 0.5, by + bd * 0.5);
     if (hero.zDeck + 1.4 - gz < 1) continue;
+    // COURSED, LIKE THE PIERS. Drawn as three flat faces it was a hundred by a
+    // hundred and sixty pixels of unbroken pale grey at the end of the finest
+    // object in the frame, which is the largest flat region this biome makes
+    // and it reads as a concrete block rather than as the end of a viaduct.
+    const sd = vs.int(1, 1 << 26);
+    const FL = leftFace(iso, by + bd, bx, gz - 2);
+    const FR = rightFace(iso, bx + bw, by, gz - 2);
     cv.t = tag();
-    box(cv, iso, bx, by, gz - 2, bw, bd, hero.zDeck + 1.4 - gz + 2,
-      { top: mason.t, left: mason.l, right: mason.r });
+    box(cv, iso, bx, by, gz - 2, bw, bd, hero.zDeck + 1.4 - gz + 2, {
+      top: mason.t,
+      left: P.masonry(FL, mason, sd, { course: 1.55, base: mason.l, lit: mason.t, dark: mason.r }),
+      right: P.masonry(FR, mason, sd + 7, { course: 1.55, base: mason.r, lit: mason.l, dark: mason.k }),
+    });
   }
 
   // --------------------------------------------------- the route's furniture
@@ -1379,7 +1389,7 @@ function scatterHighland(stage, X) {
   const onHero = (x, y) => x > hx0 && x < hx1 && y > hy0 && y < hy1;
 
   // ---- conifers
-  lattice(6.1, 0.80, S2 + 11, (x, y, hh) => {
+  lattice(6.7, 0.80, S2 + 11, (x, y, hh) => {
     const z = T.surfaceZ(x, y);
     if (T.isWet(x, y) || onHero(x, y)) return;
     if (!seen(x, y, z, 24)) return;
@@ -1389,7 +1399,7 @@ function scatterHighland(stage, X) {
     if (F.ch(CH_SLP) > 1.45) return;                 // not on a crag
     if (F.ch(CH_FAN) > FAN0) return;                 // not on live scree
     if (F.ch(CH_RIB) > RIB0) return;                 // not on an outcrop
-    const p = Math.min(cl01((above + 44) / 20), cl01((5 - above) / 14));
+    const p = Math.min(cl01((above + 38) / 18), cl01((4 - above) / 12));
     if (((hh >>> 23) & 255) / 256 > p) return;
     const reg = regOf(F.ch(CH_RA), F.ch(CH_RB));
     const tier = ((hh >>> 6) & 255) / 256;
@@ -1405,7 +1415,7 @@ function scatterHighland(stage, X) {
   });
 
   // ---- krummholz: the same tree, beaten flat, in the band and just above it
-  lattice(5.2, 0.84, S2 + 23, (x, y, hh) => {
+  lattice(6.4, 0.84, S2 + 23, (x, y, hh) => {
     const z = T.surfaceZ(x, y);
     if (T.isWet(x, y) || onHero(x, y)) return;
     if (!seen(x, y, z, 8)) return;
@@ -1419,7 +1429,7 @@ function scatterHighland(stage, X) {
     const reg = regOf(F.ch(CH_RA), F.ch(CH_RB));
     cv.t = tagRaw();
     P.conifer(cv, iso, C, x, y, z, {
-      hw: 2.0 + ((hh >>> 6) & 15) / 7, aspect: 0.80 + ((hh >>> 15) & 15) / 24,
+      hw: 1.7 + ((hh >>> 6) & 31) / 8, aspect: 0.76 + ((hh >>> 15) & 15) / 20,
       variant: (hh >>> 19) & 7, kind: 'krummholz',
       tone: CONIF[reg], trunk: TRUNK[reg], tip: CONIF[reg].l,
     });
@@ -1437,7 +1447,8 @@ function scatterHighland(stage, X) {
     const p = Math.max(
       cl01((fan - FAN0 * 0.45) / 0.3) * 0.98,         // on and below the fans
       cl01((rib - RIB0 + 0.12) / 0.12) * 0.88,        // on the outcrops
-      cl01(conc / 0.3) * cl01((above + 40) / 30) * 0.30); // erratics on moraine
+      cl01(conc / 0.3) * cl01((above + 40) / 30) * 0.30,  // erratics on moraine
+      cl01(above / 10) * 0.42);                       // blockfield on the tops
     if (((hh >>> 23) & 255) / 256 > p) return;
     const reg = regOf(F.ch(CH_RA), F.ch(CH_RB));
     cv.t = tagRaw();
