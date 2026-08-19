@@ -41,8 +41,12 @@
 // Usage:
 //   node tools/duel.mjs --round r1 --pairs 4 --size 320
 //   node tools/duel.mjs --round r1c --pairs 2 --size 320 --control ref
+//
+// Only city posts are duelled: --biome selects which, and the default is the
+// only one this reference can fairly judge. See the redraw filter in main().
 
 import { mkdir, writeFile, rm, utimes } from 'node:fs/promises';
+import { pickBiome } from '../src/gen/scene.js';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -62,6 +66,8 @@ const ROUND = String(args.round ?? 'r1');
 const PAIRS = Number(args.pairs ?? 4);
 const SIZE = Number(args.size ?? 320);
 const INSET = Number(args.inset ?? 24);   // crops never touch a scene edge
+// Which biome may face this reference. See the redraw filter in main().
+const DUEL_BIOME = String(args.biome ?? 'city');
 const SCENE_W = Number(args.sw ?? 1600);
 const SCENE_H = Number(args.sh ?? 1100);
 const CONTROL = args.control || null;
@@ -139,6 +145,7 @@ async function main() {
 
   const rng = new Rng(`fixel-duel-${ROUND}`);
   const stPost = rng.stream('post-seeds');
+  const postSkips = [];
   const stRefCrop = rng.stream('ref-crops');
   const stOurCrop = rng.stream('our-crops');
 
@@ -186,7 +193,34 @@ async function main() {
       otherC = c;
       otherWhat = { source: 'reference-control', x: c.x, y: c.y };
     } else {
-      const postSeed = `fixel-${ROUND}-${stPost.int(0, 0x7fffffff).toString(36)}`;
+      // ONLY CITY POSTS MAY BE DUELLED AGAINST THIS REFERENCE, AND THE FILTER
+      // IS A REDRAW, NOT A FORCED BIOME.
+      //
+      // The feed now emits four kinds of place. The bar is one urban Pixorama
+      // — measured, it contains no water body and no beach: its largest
+      // single-colour region is 8,780 px of pale cream and its two biggest
+      // blues are ~3,200 px each, which is signage scale. So a desert, a shore
+      // or a highland crop set beside it is not a craft comparison, it is a
+      // subject comparison, and a judge would be answering a question nobody
+      // asked. Quietly duelling only the cities and reporting a pass would be
+      // worse still.
+      //
+      // The filter REDRAWS the post seed until the seed's own biome is a city,
+      // rather than rendering a forced city at a seed the feed would have shown
+      // as a desert. That distinction is the whole point: the duel must judge an
+      // artefact the feed actually ships. Forcing the biome would produce a
+      // picture that exists nowhere else, and a win on it would mean nothing.
+      //
+      // The number of seeds passed over is written into the key file, because a
+      // filter nobody can audit is a cherry-pick with a comment above it.
+      let postSeed, skipped = 0;
+      for (;;) {
+        postSeed = `fixel-${ROUND}-${stPost.int(0, 0x7fffffff).toString(36)}`;
+        if (pickBiome(postSeed) === DUEL_BIOME) break;
+        skipped++;
+        if (skipped > 2000) throw new Error(`no ${DUEL_BIOME} post seed found in 2000 draws`);
+      }
+      postSkips.push(skipped);
       const scenePath = path.join(OUT, '.tmp', `scene-${i}.png`);
       await mkdir(path.dirname(scenePath), { recursive: true });
       execFileSync('node', [
@@ -197,7 +231,7 @@ async function main() {
       const ourImg = readPNG(scenePath);
       const c = seededCrop(ourImg, stOurCrop, SIZE, INSET);
       otherC = c;
-      otherWhat = { source: 'fixel', seed: postSeed, x: c.x, y: c.y, scene: `${ourImg.w}x${ourImg.h}` };
+      otherWhat = { source: 'fixel', seed: postSeed, biome: DUEL_BIOME, seedsSkippedToFindIt: postSkips[postSkips.length - 1], x: c.x, y: c.y, scene: `${ourImg.w}x${ourImg.h}` };
     }
 
     // --- encode both through the same encoder, pad to equal length
