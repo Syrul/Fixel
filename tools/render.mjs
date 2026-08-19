@@ -5,7 +5,7 @@
 
 import { renderScene } from '../src/gen/scene.js';
 import { pickConditions, resolveConditions, TIME_KEYS, WEATHER_KEYS } from '../src/gen/conditions.js';
-import { pickBiome } from '../src/gen/biome-mix.js';
+import { pickBiome, BIOME_KEYS } from '../src/gen/biome-mix.js';
 import { writePNG } from '../src/core/png.js';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -28,7 +28,17 @@ const h = parseInt(arg('h', '1100'), 10);
 // for a duel — see the redraw filter in `tools/duel.mjs`, which finds a seed
 // whose OWN biome is a city rather than forcing a city onto a desert's seed.
 // Left off, this file behaves as it always has.
-const biome = arg('biome', undefined);
+//
+// READING THE FLAG IS ITSELF A TRAP, and this file's `arg()` fails differently
+// from `tools/strip.mjs`'s, so the two validators cannot share one line:
+//   * `--time --weather rain` makes `arg('time')` return the STRING '--weather',
+//     which is truthy and would sail into the resolver as a time name;
+//   * a trailing `--time` with nothing after it returns the default, which is
+//     indistinguishable from the flag being absent — exactly the silent discard.
+// So a value counts only if it is a non-empty string that is not itself a flag,
+// and PRESENCE is read from `argv` directly rather than inferred from `arg()`.
+const str = (v) => (typeof v === 'string' && v.length && !v.startsWith('--') ? v : undefined);
+const biome = str(arg('biome', undefined));
 // --time / --weather OVERRIDE THE SEED'S OWN DRAW, and are measurement tools
 // only, for the same reason --biome is. Sweeping one condition across many
 // seeds is what they are for. `--time day --weather clear` renders the
@@ -47,21 +57,19 @@ const biome = arg('biome', undefined);
 // output, not by the exit code. Same shape as this repo's three silent-discard
 // bugs: it reports success while doing something other than what was asked.
 //
-// THE ACCEPTED NAMES COME FROM THE RESOLVER'S OWN EXPORTS. A second copy of the
-// table here would be a bug waiting for someone to add a fifth weather.
+// THE ACCEPTED NAMES COME FROM THE RESOLVER'S AND THE MIX'S OWN EXPORTS. A
+// second copy of either table here would be a bug waiting for someone to add a
+// fifth weather or a fifth biome.
 //
-// READING THE FLAG IS ITSELF A TRAP, and this file's `arg()` fails differently
-// from `tools/strip.mjs`'s, so the two validators cannot share one line:
-//   * `--time --weather rain` makes `arg('time')` return the STRING '--weather',
-//     which is truthy and would sail into the resolver as a time name;
-//   * a trailing `--time` with nothing after it returns the default, which is
-//     indistinguishable from the flag being absent — exactly the silent discard.
-// So a value counts only if it is a non-empty string that is not itself a flag,
-// and PRESENCE is read from `argv` directly rather than inferred from `arg()`.
-const str = (v) => (typeof v === 'string' && v.length && !v.startsWith('--') ? v : undefined);
+// `--biome` is validated on the same grounds and in the same loop. It had the
+// identical defect: `--biome nonsense` rendered a city and printed
+// `biome=nonsense` back, so a typo'd biome in a sweep produced a plausible
+// picture of the wrong biome and a log line confirming the typo. `str()` and the
+// presence test above apply to it unchanged.
 const time = str(arg('time', undefined));
 const weather = str(arg('weather', undefined));
-for (const [flag, val, keys] of [['time', time, TIME_KEYS], ['weather', weather, WEATHER_KEYS]]) {
+for (const [flag, val, keys] of [['time', time, TIME_KEYS], ['weather', weather, WEATHER_KEYS],
+  ['biome', biome, BIOME_KEYS]]) {
   if (!argv.includes('--' + flag)) continue;
   if (val === undefined || !keys.includes(val)) {
     process.stderr.write(
