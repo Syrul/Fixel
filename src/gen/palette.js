@@ -165,7 +165,8 @@ export function buildPalette(rng) {
   // seed. A desert noon and an overcast harbour are different pictures.
   const drift = r.range(-26, 26);
   const satMul = r.range(0.60, 1.14);
-  const litMul = r.range(0.83, 1.13);
+  const LZONE = [0.85, 0.96, 1.10];
+  const litMul = LZONE[r.int(0, LZONE.length - 1)] * r.range(0.97, 1.03);
   // THE NEUTRALS CARRY THE SCENE AND THEY WERE THE PART THAT DID NOT MOVE.
   // 59% of the frame is near-neutral, and the neutral families used to take
   // only 0.3 of the scene drift — about five degrees — so the greys that make
@@ -174,8 +175,16 @@ export function buildPalette(rng) {
   // view is dominated by the commonest colours. A warm sand city, a cool blue
   // one and a flat concrete one are different pictures at a glance, and that
   // difference lives almost entirely here.
-  const neutralHue = r.range(-34, 34);
-  const neutralSat = r.range(0.30, 2.05);
+  // STRATIFIED, not uniform. With eight seeds drawn independently from one
+  // continuous interval, two of the twenty-eight pairs land close together
+  // often enough to decide the gate's minimum — and the perceptual half of the
+  // gate reads the commonest colours first, which are these. Drawing a zone
+  // and then jittering inside it spreads the eight seeds instead of sampling
+  // them, so the CLOSEST pair of cities is still a different pair of cities.
+  const HZONE = [-36, -22, -8, 6, 20, 34];
+  const neutralHue = HZONE[r.int(0, HZONE.length - 1)] + r.range(-5, 5);
+  const SZONE = [0.35, 0.75, 1.2, 1.75];
+  const neutralSat = SZONE[r.int(0, SZONE.length - 1)] * r.range(0.85, 1.18);
   for (const [k, h, s, l] of FAM) {
     const neutral = s < 0.25;
     C[k] = mk(h + (neutral ? neutralHue : drift),
