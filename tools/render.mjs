@@ -4,7 +4,7 @@
 // Deterministic: the same seed produces a byte-identical PNG across processes.
 
 import { renderScene } from '../src/gen/scene.js';
-import { pickConditions, resolveConditions } from '../src/gen/conditions.js';
+import { pickConditions, resolveConditions, TIME_KEYS, WEATHER_KEYS } from '../src/gen/conditions.js';
 import { pickBiome } from '../src/gen/biome-mix.js';
 import { writePNG } from '../src/core/png.js';
 import { mkdirSync } from 'node:fs';
@@ -34,8 +34,42 @@ const biome = arg('biome', undefined);
 // seeds is what they are for. `--time day --weather clear` renders the
 // REFERENCE condition, which is how the byte-identity check against the
 // pre-conditions tree is done.
-const time = arg('time', undefined);
-const weather = arg('weather', undefined);
+//
+// AN UNKNOWN NAME IS REFUSED, NOT DEFAULTED, and that is the whole point of the
+// block below. Nothing downstream validates one: `resolveConditions` falls
+// through to `daySun 0.10` for any unrecognised time and to the FOG branch for
+// any unrecognised weather. So `--time nite --weather rian` used to render a
+// silent night and then print `nite/rian` back at you — a typo in a sweep
+// producing a plausible picture of the wrong condition and a log line
+// confirming the typo. It has already voided a 56-render sweep, where a zsh
+// word-splitting mistake handed every render `--time "day clear" --weather ""`
+// and the resolver accepted it as a night. It was caught by looking at the
+// output, not by the exit code. Same shape as this repo's three silent-discard
+// bugs: it reports success while doing something other than what was asked.
+//
+// THE ACCEPTED NAMES COME FROM THE RESOLVER'S OWN EXPORTS. A second copy of the
+// table here would be a bug waiting for someone to add a fifth weather.
+//
+// READING THE FLAG IS ITSELF A TRAP, and this file's `arg()` fails differently
+// from `tools/strip.mjs`'s, so the two validators cannot share one line:
+//   * `--time --weather rain` makes `arg('time')` return the STRING '--weather',
+//     which is truthy and would sail into the resolver as a time name;
+//   * a trailing `--time` with nothing after it returns the default, which is
+//     indistinguishable from the flag being absent — exactly the silent discard.
+// So a value counts only if it is a non-empty string that is not itself a flag,
+// and PRESENCE is read from `argv` directly rather than inferred from `arg()`.
+const str = (v) => (typeof v === 'string' && v.length && !v.startsWith('--') ? v : undefined);
+const time = str(arg('time', undefined));
+const weather = str(arg('weather', undefined));
+for (const [flag, val, keys] of [['time', time, TIME_KEYS], ['weather', weather, WEATHER_KEYS]]) {
+  if (!argv.includes('--' + flag)) continue;
+  if (val === undefined || !keys.includes(val)) {
+    process.stderr.write(
+      `--${flag} ${val === undefined ? 'needs a value' : `"${val}" is not a ${flag}`}; ` +
+      `one of: ${keys.join(' ')}\n`);
+    process.exit(2);
+  }
+}
 
 // --frame / --frames: WHICH picture of the loop, and how many there are.
 //
