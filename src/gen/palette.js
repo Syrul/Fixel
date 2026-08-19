@@ -190,7 +190,17 @@ export function buildPalette(rng) {
       // light rather than being a fifth constant, and it is deliberately BELOW
       // `d`: `d` is a face of the object that the light reaches badly, `k` is a
       // line the light does not reach at all.
-      k: step(LEFT * 0.49, 2.6),
+      // The ratio is 0.49 on a light material and rises toward 0.66 on a dark
+      // one, because a shadow on a dark object is PROPORTIONALLY lighter — the
+      // material has less range to give and ambient dominates. That is
+      // physically right and it fixes a failure of the technique in the one
+      // place it matters most: on a slate or a rubber or a deep blue, a fixed
+      // 0.49 put the contour below the ink threshold, so the "object's own
+      // dark" was indistinguishable from the shared black and the whole point
+      // was lost. It also filled crops with dark pixels that read as murk: the
+      // darkest of eight seeds carried 5.3% of its worst crop in dark MATERIAL
+      // on top of its ink.
+      k: step(LEFT * (0.49 + 0.17 * Math.max(0, Math.min(1, (0.55 - l) / 0.45))), 2.6),
       // metadata, deliberately underscored: `l` is already the LEFT face index
       _h: h, _s: s, _L: l,
     };
@@ -208,7 +218,16 @@ export function buildPalette(rng) {
   const DZONE = [-27, -16, -6, 5, 16, 27];
   const drift = DZONE[r.int(0, DZONE.length - 1)] + r.range(-5, 5);
   const satMul = r.range(0.60, 1.14);
-  const LZONE = [0.84, 0.93, 1.02, 1.12];
+  // The floor was 0.84 and the darkest of eight seeds came out with 20% of its
+  // whole frame under luma 45 — not one bad crop, the whole picture. The
+  // mechanism is that the neutrals are 59% of the frame and the road is its
+  // largest single surface, so an 18% cut to neutral lightness pushes the
+  // road's own shaded steps across the ink threshold everywhere at once. Four
+  // stratified zones stay (that stratification is what stops two seeds landing
+  // on the same city), the darkest is just no longer darker than the family
+  // this generator belongs to: the reference is a LIGHT image whose commonest
+  // colour is a warm pale grey.
+  const LZONE = [0.90, 0.97, 1.04, 1.13];
   const litMul = LZONE[r.int(0, LZONE.length - 1)] * r.range(0.97, 1.03);
   // THE NEUTRALS CARRY THE SCENE AND THEY WERE THE PART THAT DID NOT MOVE.
   // 59% of the frame is near-neutral, and the neutral families used to take

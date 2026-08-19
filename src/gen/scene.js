@@ -175,7 +175,12 @@ export function renderScene(seed, opts = {}) {
     // size — and they are narrow because these were constants. How dense a
     // city is, how it roofs itself, how big its blocks are and how much
     // palette it spends are things a city HAS, not things a generator has.
-    density: ds.range(0.82, 1.62),
+    // The top of this range was 1.62 and one seed in eight came out at 21.9%
+    // per-crop dark against a 19.56% ceiling: at that density the 18-39px props
+    // pack until a quarter to a third of each one's own area is its neighbours'
+    // keylines. Density is a property a city HAS and it must still vary, but
+    // the ceiling has to sit where a crop is dense rather than clotted.
+    density: ds.range(0.80, 1.28),
     pitchRate: ds.range(0.06, 0.66),
     tallBias: ds.range(0.0, 1.0),
     nAcc: ds.int(2, 6),
@@ -215,7 +220,7 @@ export function renderScene(seed, opts = {}) {
   // The scene's asphalt value, on top of the per-street spread. A bleached
   // concrete boulevard and a fresh black-top are different pictures, and the
   // road is the single largest connected surface in the frame.
-  const roadLit = cs0.range(0.78, 1.22);
+  const roadLit = cs0.range(0.86, 1.22);
   const rBase = C.mk(C.road._h, C.road._s, Math.min(0.94, C.road._L * roadLit));
   const rDark = C.mk(C.roadD._h, C.roadD._s, Math.min(0.9, C.roadD._L * roadLit));
   const tones = { road: jit(rBase, 22, 16, 0.16), roadD: jit(rDark, 22, 16, 0.16) };
@@ -473,7 +478,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
       else if (k === 'lamp') S.lampPost(cv, iso, C, ps, px, py, Z, 0);
       else N.tree(cv, iso, C, ps, px, py, Z, false);
     }
-    for (let i = 0; i < Math.max(3, Math.round(w * d * D.density / 58)); i++) {
+    for (let i = 0; i < Math.max(3, Math.round(w * d * D.density / 82)); i++) {
       cv.t = tagRaw();
       drawPerson(cv, iso, C, pes, x0 + pes.range(1, w - 1), y0 + pes.range(1, d - 1), Z);
     }
@@ -502,7 +507,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
         S.marketStall(cv, iso, C, ps, x0 + u, y0 + v, Z, 6.0, 5.0);
       }
     }
-    for (let i = 0; i < Math.max(4, Math.round(w * d * D.density / 44)); i++) {
+    for (let i = 0; i < Math.max(4, Math.round(w * d * D.density / 62)); i++) {
       cv.t = tagRaw();
       drawPerson(cv, iso, C, pes, x0 + pes.range(1, w - 1), y0 + pes.range(1, d - 1), Z);
     }
@@ -627,7 +632,12 @@ function sidewalkProps(cv, iso, C, st, b, tag, CW, tagRaw, D) {
         cv.t = tag();
         drawSlab(cv, iso, rx + (along ? t : 0), ry + (along ? 0 : t), Z + 0.02,
           along ? Math.min(seg, total - t) : rw, along ? rd : Math.min(seg, total - t), gt);
-        const n = Math.max(1, Math.round(seg / 7));
+        // One tree per eleven units of verge, not one per seven. A canopy is
+        // now 24-34px across instead of 12, so at the old spacing a planted
+        // verge was a continuous wall of foliage — the densest seed reached
+        // 22.7% per-crop dark against a 19.56% ceiling, and it was keylines on
+        // overlapping canopies rather than anything structural.
+        const n = Math.max(1, Math.round(seg / 11));
         for (let q = 0; q < n; q++) {
           cv.t = tagRaw();
           const px = rx + (along ? t + ns.range(0.4, seg - 0.4) : ns.range(0.3, rw - 0.3));
@@ -775,7 +785,7 @@ function traffic(cv, iso, C, ts, pes, plan, vis, tag, cs, tagRaw, D) {
   for (const [a, b] of bx.streets) {
     for (const [c, d] of by.streets) {
       if (!vis(a, c, b, d, 4)) continue;
-      const n = Math.round(pes.int(4, 15) * D.density);
+      const n = Math.round(pes.int(3, 10) * D.density);
       for (let i = 0; i < n; i++) {
         cv.t = tag();
         if (pes.bool(0.5)) drawPerson(cv, iso, C, pes, a + pes.range(1, b - a - 1), c - pes.range(1, 10), 0);
