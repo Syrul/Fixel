@@ -129,8 +129,8 @@ export function drawVehicle(cv, iso, C, st, x, y, z, ax, kind, mkTag) {
     [st.pick(C.accents), 5], [C.white, 4], [C.concrete, 2],
     [C.slate, 2], [C.steel, 2], [C.metal, 2], [C.cream, 1],
   ]);
-  const own = C.ownColour === undefined ? 1 : C.ownColour;
-  const body = st.bool(own)
+  const ownCol = C.ownColour === undefined ? 1 : C.ownColour;
+  const body = st.bool(ownCol)
     ? C.mk(base._h + st.range(-13, 13),
       Math.min(1, base._s * st.range(0.72, 1.28)),
       Math.min(0.96, base._L * st.range(0.86, 1.14)))
