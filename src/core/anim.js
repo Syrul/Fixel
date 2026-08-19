@@ -3,12 +3,22 @@
 // THE MEMORY ARGUMENT, WHICH IS THE WHOLE DESIGN.
 //
 // A phone-shaped post is 440x1000 = 440,000 pixels. Stored as RGBA that is
-// 1.76 MB per frame, so an eight-frame loop is 14 MB per post and the feed —
-// already 94 MB over twelve posts — would not survive a scroll. The generator
-// does not work in RGBA, though: `Canvas.idx` is one palette index per pixel,
-// so a whole indexed frame is 880 KB and eight of them 7 MB. Better, and still
-// far too much for something whose entire content is a few pixels of water
-// moving two pixels sideways.
+// 1.76 MB per frame, so an eight-frame loop is 14 MB PER POST.
+//
+// THE NUMBER THAT SIZES THAT, STATED IN ITS OWN UNITS. The feed round measured
+// "12 posts in 8.4 s: heap steady at 94 MB", and that is a TOTAL JS HEAP
+// READING, NOT A PIXEL BUDGET — it is dominated by audio, at roughly 8 MB of
+// Float32 per post, or about 97 MB over twelve. The pixel side over the same
+// twelve posts is about 20 MB of canvas backing store. Quoting 94 MB as though
+// it were a pixel budget is how a number with ambiguous units becomes a wrong
+// decision, and this project has been burned by that twice already.
+//
+// So the honest comparison is 14 MB per post against a ~1.7 MB per post pixel
+// footprint: an RGBA loop is an EIGHTFOLD increase on the thing it is being
+// added to. The generator does not work in RGBA, though — `Canvas.idx` is one
+// palette index per pixel, so a whole indexed frame is 880 KB and eight of them
+// 7 MB. Better, and still far too much for something whose entire content is a
+// few pixels of water moving two pixels sideways.
 //
 // So nothing stores a frame. What is stored is THE SET OF PIXELS THAT EVER
 // MOVE, once, and then one palette index per member per frame:
@@ -46,7 +56,16 @@ export function buildLoop(planes, w, h) {
   const K = planes.length;
   const base = planes[0];
   const n = w * h;
-  if (K === 1) return { frames: 1, w, h, n: 0, off: new Uint32Array(0), val: new Uint16Array(0) };
+  // Diagnostics are present on EVERY return, including this one. They read 0,
+  // never undefined: a caller that logs `loop.dropped` on a still post should
+  // see a zero rather than a hole, and the next reader should not have to
+  // discover by experiment which branch populates what.
+  if (K === 1) {
+    return {
+      frames: 1, w, h, n: 0, off: new Uint32Array(0), val: new Uint16Array(0),
+      dropped: 0, flat: 0, shadowed: 0, dropInk: 0, dropTag: 0, dropSame: 0,
+    };
+  }
 
   const moved = new Uint8Array(n);
   let count = 0;
@@ -188,7 +207,26 @@ export class AnimRec {
     this.tag = new Uint32Array(this.cap);
     this.val = new Uint16Array(this.cap * frames);
     this.dropped = 0;      // filtered out at finish; reported, never hidden
-    this.flat = 0;         // recorded but identical across the loop
+    this.flat = 0;         // never recorded: identical across the loop
+    // WHY A DROP HAPPENED, not just how many. The count alone states a
+    // disjunction with opposite fixes at its two ends, and the wrong end is
+    // invisible to every other gate here:
+    //
+    //   EITHER the recorder is claiming pixels it never needed — pure cost,
+    //   fix by recording less;
+    //   OR real motion is being painted over — a product defect that presents
+    //   as "the animation came out more subtle than we designed", fix by
+    //   drawing the animated thing later or not covering it.
+    //
+    // `tools/animcheck.mjs` cannot separate them, and that is the trap: it
+    // asserts the fast path matches a full re-render, so if the SLOW path also
+    // buries the motion, both agree and both are wrong. A matching oracle is
+    // not a correct picture. So the reason is recorded at the moment the pixel
+    // is rejected, where it is knowable, instead of being inferred later from
+    // a total.
+    this.dropInk = 0;      // the silhouette sweep blackened it — ink, correctly immovable
+    this.dropTag = 0;      // another object was drawn over it — genuinely hidden
+    this.dropSame = 0;     // same tag, different index — overdrawn by its own kind
   }
 
   _grow() {
@@ -207,6 +245,17 @@ export class AnimRec {
    */
   push(off, tag, vals) {
     if (!this.on) return;
+    // A PIXEL THAT DOES NOT MOVE IS NOT RECORDED AT ALL. Checked here rather
+    // than at finish because the caller is a shader running over every pixel of
+    // open water: the shore records around 209,000 water pixels of which some
+    // 169,000 never change, and storing those first and discarding them later
+    // cost about 5 MB of transient buffer, a doubling of the record array, and
+    // a full extra pass — to learn nothing. K compares is cheaper than any of
+    // it. The count is still kept, because "how much of the water is being
+    // evaluated for motion that never arrives" is a real diagnostic.
+    let moves = 0;
+    for (let k = 1; k < this.frames; k++) if (vals[k] !== vals[0]) { moves = 1; break; }
+    if (!moves) { this.flat++; return; }
     if (this.n === this.cap) this._grow();
     const i = this.n++;
     this.off[i] = off;
@@ -223,13 +272,14 @@ export class AnimRec {
    * would. A buoy drawn over the water, a hull, a pile's reflection, and every
    * pixel the silhouette sweep blackened all fail it.
    */
-  finish(cv) {
+  finish(cv, ink = -1) {
     const K = this.frames;
     if (!this.on || !this.n) {
       return {
         frames: K, w: cv.w, h: cv.h, n: 0,
         off: new Uint32Array(0), val: new Uint16Array(0),
-        dropped: 0, flat: 0, shadowed: 0,
+        dropped: this.dropped, flat: this.flat, shadowed: 0,
+        dropInk: this.dropInk, dropTag: this.dropTag, dropSame: this.dropSame,
       };
     }
     const idx = cv.idx, tg = cv.tag;
@@ -237,10 +287,13 @@ export class AnimRec {
     let m = 0;
     for (let i = 0; i < this.n; i++) {
       const o = this.off[i], b = i * K;
-      if (idx[o] !== this.val[b] || tg[o] !== this.tag[i]) { this.dropped++; continue; }
-      let moves = 0;
-      for (let k = 1; k < K; k++) if (this.val[b + k] !== this.val[b]) { moves = 1; break; }
-      if (!moves) { this.flat++; continue; }
+      if (idx[o] !== this.val[b] || tg[o] !== this.tag[i]) {
+        this.dropped++;
+        if (tg[o] !== this.tag[i]) this.dropTag++;
+        else if (idx[o] === ink) this.dropInk++;
+        else this.dropSame++;
+        continue;
+      }
       keep[i] = 1; m++;
     }
     // TWO PASSES CAN CLAIM ONE PIXEL, and left alone that is a determinism bug
@@ -277,6 +330,7 @@ export class AnimRec {
     return {
       frames: K, w: cv.w, h: cv.h, n: uniq, off, val,
       dropped: this.dropped, flat: this.flat, shadowed: this.shadowed,
+      dropInk: this.dropInk, dropTag: this.dropTag, dropSame: this.dropSame,
     };
   }
 }

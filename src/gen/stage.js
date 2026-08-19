@@ -220,7 +220,7 @@ export function makeStage(seed, opts = {}) {
       // their index no longer matches what was recorded, which makes "the
       // outlines hold still" a consequence of the arithmetic rather than a rule
       // somebody has to remember.
-      if (frames > 1) cv.anim = anim.finish(cv);
+      if (frames > 1) cv.anim = anim.finish(cv, C.black);
       return cv;
     },
   };

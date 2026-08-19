@@ -95,6 +95,34 @@ for (const seed of seeds) {
     }
   }
 
+  // ---- WHY PIXELS WERE DROPPED, AND THE ONE QUESTION THE ORACLE CANNOT ASK --
+  //
+  // The oracle above proves the fast path equals a full re-render. It cannot
+  // prove the picture is right, and there is a specific way both can be wrong
+  // together: if the animated thing is DRAWN AND THEN PAINTED OVER, the fast
+  // path drops those pixels and the slow path never shows them either. Both
+  // agree, both are gates-green, and the animation is quietly more subtle than
+  // it was designed to be. A matching oracle is not a correct picture.
+  //
+  // So the drop total is broken into its reasons, and the one reason that is
+  // CORRECT BY DESIGN is separated from the two that are not:
+  //
+  //   dropInk   the silhouette sweep blackened it. This is the intended
+  //             behaviour and the reason animation cannot regress ink closure:
+  //             ink is immovable by construction, not by anyone's care.
+  //   dropTag   a later object covered it. Genuinely invisible — but if this is
+  //             large, the animated surface is being buried under props and the
+  //             fix is upstream, not in the recorder.
+  //   dropSame  overdrawn by its own kind, same tag, different index. Usually
+  //             means a pass is shading the same pixel twice, which is pure
+  //             waste.
+  //
+  // And the direct experiment for the disjunction: render again with the
+  // silhouette sweep OFF and compare the surviving union. If n jumps, motion is
+  // being buried under ink rather than over-recorded.
+  const noInk = renderScene(seed, { ...o, frame: 0, noOut: true });
+  const nNoInk = noInk.anim ? noInk.anim.n : 0;
+
   // Loop closure: frame K must be frame 0.
   const wrap = renderScene(seed, { ...o, frame: K });
   let wd = 0;
@@ -161,7 +189,8 @@ for (const seed of seeds) {
     dropped: loop.dropped, flat: loop.flat, shadowed: loop.shadowed,
     mism, mismFrames, firstAt, wd, tFast, tSlow, ok,
     islands: sizes.length, largest: sizes[0] || 0, p50: p(0.5), p90: p(0.9),
-    speckShare, bigShare, twinkles,
+    speckShare, bigShare, twinkles, nNoInk,
+    dropInk: loop.dropInk, dropTag: loop.dropTag, dropSame: loop.dropSame,
   });
   console.log(
     `${ok ? 'ok  ' : 'FAIL'}  ${seed.padEnd(16)} animated ${String(loop.n).padStart(7)} px ` +
@@ -169,6 +198,10 @@ for (const seed of seeds) {
     `dropped ${String(loop.dropped).padStart(6)}  ` +
     `mismatch ${String(mism).padStart(6)}${mism ? ` @${firstAt % W},${(firstAt / W) | 0}` : ''}  ` +
     `wrap ${wd}  ${tFast.toFixed(0)}ms vs ${tSlow.toFixed(0)}ms`);
+  console.log(
+    `      kept ${String(loop.n).padStart(7)}  flat ${String(loop.flat).padStart(7)}  ` +
+    `dropped ${String(loop.dropped).padStart(6)} = ink ${loop.dropInk} + covered ${loop.dropTag} + overdrawn ${loop.dropSame}   ` +
+    `sweep off -> n ${nNoInk} (${loop.n ? ((nNoInk / loop.n - 1) * 100).toFixed(0) : '0'}%)`);
   console.log(
     `      islands ${String(sizes.length).padStart(6)}  largest ${String(sizes[0] || 0).padStart(6)}  ` +
     `p50 ${String(p(0.5)).padStart(5)}  p90 ${String(p(0.9)).padStart(5)}  ` +
@@ -189,6 +222,17 @@ console.log(`motion shape:    island p50 ${p50s[0]}-${p50s[p50s.length - 1]} px,
   `(ceiling ${(100 * SPECK_MAX).toFixed(0)}%) — a FLOOR that rejects per-pixel noise, never a score`);
 console.log(`cost: fast path ${fast.toFixed(0)}ms for the whole loop, against ${slow.toFixed(0)}ms to render it frame by frame ` +
   `(${(slow / Math.max(fast, 0.001)).toFixed(1)}x)`);
+{
+  const kept = rows.reduce((a, r) => a + r.n, 0);
+  const dInk = rows.reduce((a, r) => a + (r.dropInk || 0), 0);
+  const dTag = rows.reduce((a, r) => a + (r.dropTag || 0), 0);
+  const dSame = rows.reduce((a, r) => a + (r.dropSame || 0), 0);
+  const noInk = rows.reduce((a, r) => a + (r.nNoInk || 0), 0);
+  console.log(`drops:  ink ${dInk}  covered ${dTag}  overdrawn ${dSame}   against ${kept} kept`);
+  console.log(`buried? with the silhouette sweep OFF the union is ${noInk} against ${kept} ` +
+    `(${kept ? ((noInk / kept - 1) * 100).toFixed(0) : 0}%). A large jump means motion is being ` +
+    `buried under ink, not over-recorded — and it is the one failure the oracle above cannot see.`);
+}
 
 const after = treeHash().digest;
 if (after !== TREE) { console.error(`\nTORN RUN: tree moved ${TREE} -> ${after}. Void.`); process.exit(2); }
