@@ -227,7 +227,7 @@ export function buildPalette(rng) {
   // on the same city), the darkest is just no longer darker than the family
   // this generator belongs to: the reference is a LIGHT image whose commonest
   // colour is a warm pale grey.
-  const LZONE = [0.90, 0.97, 1.04, 1.13];
+  const LZONE = [0.90, 0.99, 1.08, 1.18];
   const litMul = LZONE[r.int(0, LZONE.length - 1)] * r.range(0.97, 1.03);
   // THE NEUTRALS CARRY THE SCENE AND THEY WERE THE PART THAT DID NOT MOVE.
   // 59% of the frame is near-neutral, and the neutral families used to take
