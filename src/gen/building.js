@@ -262,8 +262,18 @@ export function drawBuilding(cv, iso, C, st, x, y, z, w, d, opt) {
     cw = nw; cd = nd; n++;
   }
 
-  for (const [mx, my, mz, mw, md, mh] of masses) {
-    mass(cv, iso, C, st, mx, my, mz, mw, md, mh, wall, style, seed + Math.round(mz));
+  // EACH MASS TAKES ITS OWN TONE OFF THE BUILDING'S. A podium in stone under a
+  // shaft in render is what a building looks like, and it is also where a crop
+  // gets its colour count: `palette.distinct` per 320px crop wants 337 and the
+  // scale change cut ours to under 200 by quartering the object count. The way
+  // back is not more objects — it is more COMMITTED SURFACES per object, which
+  // is the reference's arrangement (many colours, each confined to one thing).
+  for (let mi = 0; mi < masses.length; mi++) {
+    const [mx, my, mz, mw, md, mh] = masses[mi];
+    const wt = mi === 0 ? wall
+      : C.mk(wall._h + st.range(-7, 7), Math.min(1, wall._s * st.range(0.8, 1.25)),
+        Math.min(0.97, wall._L * st.range(0.86, 1.16)));
+    mass(cv, iso, C, st, mx, my, mz, mw, md, mh, wt, style, seed + Math.round(mz));
   }
 
   const pitched = tall < 26 && Math.min(w, d) < 26
