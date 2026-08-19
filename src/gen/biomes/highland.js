@@ -352,7 +352,7 @@ export function paintHighland(stage) {
     }
     if (zTop < zBot) { zTop = base + HREL; zBot = base; }
   }
-  const TL0 = zBot + (zTop - zBot) * ms.range(0.40, 0.55);   // mean tree line
+  const TL0 = zBot + (zTop - zBot) * ms.range(0.34, 0.48);   // mean tree line
   const SN0 = zTop - ms.range(7, 15);                        // mean snow line
   const kGully = ms.range(0.9, 1.7);
   const kAspect = ms.range(4.0, 8.0);
@@ -404,8 +404,8 @@ export function paintHighland(stage) {
     }
     out[CH_FAN] = cl01((rise - 0.50) / 0.42) * cl01((0.90 - am) / 0.40)
       * (0.45 + 1.05 * fbm(x * 0.015, y * 0.015, seedN + 177, 2));
-    out[CH_RA] = vnoise(x * 0.0105, y * 0.0105, seedN + 211);
-    out[CH_RB] = vnoise(x * 0.0091, y * 0.0091, seedN + 307);
+    out[CH_RA] = vnoise(x * 0.0142, y * 0.0142, seedN + 211);
+    out[CH_RB] = vnoise(x * 0.0121, y * 0.0121, seedN + 307);
   });
 
   // ------------------------------------------------------------ the palette
@@ -693,7 +693,15 @@ export function paintHighland(stage) {
       const bd = hf / 2.4;
       const bf = bd - Math.floor(bd);
       if (bf < 0.13) return RK.k;
-      return pk(RK);
+      // AND THE LEDGE IS NEVER CLEAN. A terraced rock knoll drawn as flat pale
+      // tops with dark risers reads as a ruined building — measured by eye on
+      // three seeds, and the openings between its levels look like doorways.
+      // What breaks it is debris: blocks fallen off the bed above, lying in
+      // lobes on the ledge, plus the shaded half of each bed.
+      const p2 = patch(u, v, 12, S1 + 151, 3);
+      if (p2 === 2) return TN(M_SCREE, reg, li).l;
+      if (p2 === 1) return RK.r;
+      return bf < 0.40 ? RK.d : pk(RK);
     }
 
     // ---- above the tree line: heath, alpine sward, moss in the hollows
@@ -767,8 +775,13 @@ export function paintHighland(stage) {
     const reg = regOf(F.ch(CH_RA), F.ch(CH_RB));
     const above = hf - F.ch(CH_TL);
     const rib = F.ch(CH_RIB);
-    const rock = v > step * 1.45 || rib > RIB0 - 0.04
-      || (F.ch(CH_SLP) > CRAG && above > -30) || above > 10;
+    // A RISER ABOVE THE TREE LINE IS NOT AUTOMATICALLY ROCK. It was, and the
+    // whole upper mountain came back as flat grey faces in a regular block
+    // pattern that read as brutalist architecture rather than as a crag. Moor
+    // and scree cover their own risers; bedrock shows on a genuinely TALL face,
+    // on an outcrop, and where the massif is too steep to hold anything.
+    const rock = v > step * 1.60 || rib > RIB0 - 0.02
+      || (F.ch(CH_SLP) > CRAG && above > -30);
     let m;
     if (zabs > SN0 - kSnowC * conc - kSnowA * F.ch(CH_ASP)) m = M_SNOW;
     else if (rock) m = M_ROCK;
@@ -794,12 +807,15 @@ export function paintHighland(stage) {
     const course = 2.5;
     const row = Math.floor(v / course);
     if (v > 1.3 && v - row * course < 0.5 * q) return G.k;
-    const blk = 6.5;
-    const off = (h3(row, 3, S1) & 7) * (blk * 0.15);
+    // The block width varies per course as well as its phase, so the face is
+    // rubble rather than a panel grid, and the value spread is narrow: two
+    // steps and the contour, not a checkerboard.
+    const blk = 4.2 + (h3(row, 9, S1 + 2) & 7) * 0.7;
+    const off = (h3(row, 3, S1) & 15) * (blk * 0.08);
     const col = Math.floor((u + off) / blk);
     const qq = h3(col, row, S1 + 5) & 15;
-    if (qq < 5) return axis === 1 ? G.r : G.l;
-    if (qq < 8) return G.k;
+    if (qq < 6) return axis === 1 ? G.r : G.l;
+    if (qq < 9) return G.k;
     return axis === 1 ? G.d : G.r;
   };
 
@@ -857,6 +873,88 @@ export function paintHighland(stage) {
   const fs = rng.stream('routefurniture');
   const allPts = wa.pts.slice().reverse().concat(wb.pts);
   routeFurniture(cv, iso, C, fs, T, F, allPts, hero, tag, tagRaw, seen, mason);
+
+  // ------------------------------------------------------- the enclosed land
+  // THE HEAD DYKE. On a real hill the wall that matters is the one that
+  // separates the enclosed pasture from the open moor, and it runs along the
+  // contour because that is where the boundary between the two IS. It is
+  // followed out of the field rather than drawn: step perpendicular to the
+  // gradient and the wall goes where the hillside says it goes.
+  const ls = rng.stream('walls');
+  const wallTone = C.mk(C.stone._h + ls.range(-11, 11), C.stone._s * ls.range(0.5, 1.5),
+    Math.min(0.84, C.stone._L * ls.range(0.60, 0.86)));
+  const dykeH = TL0 - ls.range(10, 30);
+  const dyke = contourSeek(T, F, iso, W, H, S, dykeH, ls);
+  if (dyke) {
+    const line = contourRun(T, dyke[0], dyke[1], 62, 3.4, ls);
+    cv.t = tag();
+    P.wallRun(cv, iso, C, ls, line, (x, y) => T.surfaceZ(x, y), {
+      tone: wallTone, h: ls.range(1.9, 2.6), t: 1.2, step: 1.3, gap: 1,
+      cull: (x, y) => seen(x, y, T.surfaceZ(x, y), 4),
+    });
+    // Cross walls dropping down the fall line off it, so the pasture is
+    // divided into fields rather than fenced along one edge.
+    for (let k = 4; k < line.length - 4; k += ls.int(7, 14)) {
+      const [sx, sy] = line[k];
+      const down = fallRun(T, sx, sy, ls.int(7, 16), 3.4);
+      if (down.length < 4) continue;
+      cv.t = tag();
+      P.wallRun(cv, iso, C, ls, down, (x, y) => T.surfaceZ(x, y), {
+        tone: wallTone, h: ls.range(1.7, 2.4), t: 1.15, step: 1.3, gap: 2,
+        cull: (x, y) => seen(x, y, T.surfaceZ(x, y), 4),
+      });
+    }
+  }
+
+  // ------------------------------------------------------------- the steading
+  // A bothy on a bench beside the track: the biome's second authored place, and
+  // the thing that gives the pasture a reason. Sited by the same method as the
+  // hero — vetoes, then a score — over the track's own points.
+  const bs = rng.stream('bothy');
+  const steadTone = C.mk(C.stone._h + bs.range(-9, 9), C.stone._s * bs.range(0.6, 1.5),
+    Math.min(0.86, C.stone._L * bs.range(0.66, 0.94)));
+  const roofTone = C.mk(C.slate._h + bs.range(-14, 14), Math.min(0.22, C.slate._s * bs.range(0.6, 1.6)),
+    Math.min(0.62, C.slate._L * bs.range(0.72, 1.20)));
+  const stead = pickSteading(T, F, allPts, seen, TL0, bs);
+  if (stead) {
+    const [sx, sy] = stead;
+    const sz = T.surfaceZ(sx, sy);
+    cv.t = tag();
+    P.bothy(cv, iso, C, bs, sx, sy, sz, bs.range(11, 15), bs.range(8, 11),
+      { tone: steadTone, roof: roofTone, dark: C.slate });
+    cv.t = tag();
+    P.logStack(cv, iso, C, bs, sx - bs.range(5, 8), sy + bs.range(1, 5), sz,
+      { tone: C.mk(C.wood._h + bs.range(-8, 8), C.wood._s * bs.range(0.7, 1.2), C.wood._L) });
+    // a fold — the one enclosure that is a closed loop of wall
+    const fx = sx + bs.range(-26, -15), fy = sy + bs.range(9, 22);
+    if (seen(fx, fy, T.surfaceZ(fx, fy), 4)) {
+      const r = bs.range(7, 11);
+      const ring = [];
+      for (let i = 0; i <= 12; i++) {
+        const a = i % 12;
+        ring.push([fx + FOLD[a][0] * r * bs.range(0.86, 1.14),
+          fy + FOLD[a][1] * r * bs.range(0.86, 1.14)]);
+      }
+      ring.push(ring[0]);
+      cv.t = tag();
+      P.wallRun(cv, iso, C, bs, ring, (x, y) => T.surfaceZ(x, y),
+        { tone: wallTone, h: bs.range(2.0, 2.6), t: 1.2, step: 1.35, gap: 0,
+          cull: (x, y) => seen(x, y, T.surfaceZ(x, y), 4) });
+    }
+  }
+
+  // ----------------------------------------------------------- the cable line
+  // Three pylons and the wire between them. It is the one stroke in this biome
+  // that crosses open air, and it is drawn in the metal's own contour step
+  // rather than in the shared ink: it is a wire, not a silhouette.
+  const cs2 = rng.stream('cable');
+  cableLine(cv, iso, C, cs2, T, F, iso, W, H, S, tag, seen, TL0);
+
+  // ------------------------------------------------------------- the scatter
+  scatterHighland(stage, {
+    T, F, TN, TRK, tw, hero, seen, step, TL0, SN0, RIB0, FAN0, CRAG, regOf,
+    A0, A1, B0, B1, cl: cl01,
+  });
 
   stage.highland = { T, F, TN, LI, regOf, step, TL0, SN0, A0, A1, B0, B1, TRK, hero, wa, wb, tw };
 }
@@ -1081,6 +1179,310 @@ function routeFurniture(cv, iso, C, st, T, F, pts, hero, tag, tagRaw, seen, maso
     }
     i += n + st.int(10, 30);
   }
+}
+
+const FOLD = [
+  [1, 0], [0.87, 0.5], [0.5, 0.87], [0, 1], [-0.5, 0.87], [-0.87, 0.5],
+  [-1, 0], [-0.87, -0.5], [-0.5, -0.87], [0, -1], [0.5, -0.87], [0.87, -0.5],
+];
+
+/** A visible point at about a given height, on ground gentle enough to build a
+ *  wall on. Screen positions inverted onto the surface, best score wins. */
+function contourSeek(T, F, iso, W, H, S, want, st) {
+  let best = null, bestS = 1e9;
+  for (let a = -6; a <= 6; a++) {
+    for (let b = -4; b <= 5; b++) {
+      const sx = W * 0.5 + a * (W * 0.09), sy = H * 0.5 + b * (H * 0.075);
+      const u = (sx - iso.ox) / (2 * S);
+      let p = [((sy - iso.oy) / S + u) / 2, ((sy - iso.oy) / S - u) / 2];
+      for (let i = 0; i < 3; i++) {
+        const v = (sy - iso.oy) / S + 2 * T.surfaceZ(p[0], p[1]);
+        p = [(v + u) / 2, (v - u) / 2];
+      }
+      if (T.isWet(p[0], p[1])) continue;
+      const sl = T.slopeAt(p[0], p[1]);
+      if (sl > 1.1) continue;
+      const d = Math.abs(T.heightAt(p[0], p[1]) - want) + sl * 6;
+      if (d < bestS) { bestS = d; best = p; }
+    }
+  }
+  return bestS < 26 ? best : null;
+}
+
+/** Walk along a contour: every step is perpendicular to the local gradient, so
+ *  the line is the hillside's own and is off the 2:1 lattice at every angle. */
+function contourRun(T, x0, y0, n, len, st) {
+  const pts = [[x0, y0]];
+  let x = x0, y = y0, px = 0, py = 0;
+  const e = 4;
+  for (let i = 0; i < n; i++) {
+    const gx = (T.heightAt(x + e, y) - T.heightAt(x - e, y)) / (2 * e);
+    const gy = (T.heightAt(x, y + e) - T.heightAt(x, y - e)) / (2 * e);
+    const g = Math.sqrt(gx * gx + gy * gy) || 1;
+    let dx = -gy / g, dy = gx / g;
+    if (i === 0) { if (dx + dy < 0) { dx = -dx; dy = -dy; } }
+    else if (px * dx + py * dy < 0) { dx = -dx; dy = -dy; }
+    // A dyke is built, not surveyed: a small wander keeps it off a perfect
+    // isopleth without letting it leave the contour it is following.
+    const w = st.range(-0.10, 0.10);
+    const nx = dx - dy * w, ny = dy + dx * w;
+    const nn = Math.sqrt(nx * nx + ny * ny) || 1;
+    px = nx / nn; py = ny / nn;
+    x += px * len; y += py * len;
+    pts.push([x, y]);
+  }
+  return pts;
+}
+
+/** Walk down the fall line. */
+function fallRun(T, x0, y0, n, len) {
+  const pts = [[x0, y0]];
+  let x = x0, y = y0;
+  const e = 4;
+  for (let i = 0; i < n; i++) {
+    const gx = (T.heightAt(x + e, y) - T.heightAt(x - e, y)) / (2 * e);
+    const gy = (T.heightAt(x, y + e) - T.heightAt(x, y - e)) / (2 * e);
+    const g = Math.sqrt(gx * gx + gy * gy);
+    if (g < 1e-3) break;
+    x -= (gx / g) * len; y -= (gy / g) * len;
+    pts.push([x, y]);
+  }
+  return pts;
+}
+
+/** A bench beside the track, below the tree line, flat enough to build on. */
+function pickSteading(T, F, pts, seen, TL0, st) {
+  let best = null, bestS = -1e9;
+  for (let i = 6; i < pts.length - 6; i += 2) {
+    const [px, py] = pts[i];
+    for (let k = 0; k < 2; k++) {
+      const s = k === 0 ? 1 : -1;
+      const q = pts[i + 2];
+      const dx = q[0] - px, dy = q[1] - py;
+      const L = Math.sqrt(dx * dx + dy * dy) || 1;
+      const x = px - s * (dy / L) * 13, y = py + s * (dx / L) * 13;
+      if (T.isWet(x, y)) continue;
+      const h = T.heightAt(x, y);
+      if (h > TL0 - 6) continue;                    // a bothy is below the moor
+      const sl = T.slopeAt(x, y);
+      if (sl > 0.22) continue;                      // and on a bench
+      if (!seen(x, y, T.surfaceZ(x, y), 18)) continue;
+      const sc = (1 - sl / 0.22) * 0.6 + st.range(0, 0.4);
+      if (sc > bestS) { bestS = sc; best = [x, y]; }
+    }
+  }
+  return best;
+}
+
+/** Three pylons on the skyline and the wire between them. */
+function cableLine(cv, iso, C, st, T, F, _i, W, H, S, tag, seen, TL0) {
+  const m = C.mk(C.metal._h + st.range(-12, 12), Math.min(0.22, C.metal._s * st.range(0.6, 1.8)),
+    Math.min(0.80, C.metal._L * st.range(0.62, 0.94)));
+  const cc = C.mk(C.orange._h + st.range(-10, 10), C.orange._s * st.range(0.7, 1.0),
+    C.orange._L * st.range(0.8, 1.1));
+  const seed = contourSeek(T, F, iso, W, H, S, TL0 + st.range(4, 26), st);
+  if (!seed) return;
+  const a = st.range(0, 1) < 0.5 ? 1 : -1;
+  let dx = st.range(0.3, 1.0) * a, dy = st.range(0.3, 1.0) * -a;
+  const n = Math.sqrt(dx * dx + dy * dy); dx /= n; dy /= n;
+  const gap = st.range(52, 78);
+  let prev = null;
+  for (let i = -1; i <= 1; i++) {
+    const x = seed[0] + dx * gap * i, y = seed[1] + dy * gap * i;
+    if (T.isWet(x, y)) { prev = null; continue; }
+    const z = T.surfaceZ(x, y);
+    const hh = st.range(13, 20);
+    if (!seen(x, y, z, hh + 4)) { prev = null; continue; }
+    cv.t = tag();
+    const top = P.pylon(cv, iso, C, st, x, y, z, hh, { tone: m, base: st.range(2.2, 3.0) });
+    if (prev) {
+      cv.t = tag();
+      P.cable(cv, iso, C, prev, top, st.range(10, 20), m.k);
+      const mx = (prev[0] + top[0]) * 0.5, my = (prev[1] + top[1]) * 0.5;
+      cv.t = tag();
+      P.skip(cv, iso, C, mx, my, (prev[2] + top[2]) * 0.5 - 5.5, { tone: cc });
+    }
+    prev = top;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// THE SCATTER, AND THE TREE LINE IS THE WHOLE OF IT.
+//
+// Every attribute of every scattered object is its own coordinate hash at its
+// own salt — position jitter, acceptance, species, size tier, variant — never a
+// sequential draw off a stream. Two things fall out that a stream cannot give:
+// nothing depends on iteration order or on how many candidates were culled
+// before it, and a sixth attribute can be added without re-rolling the other
+// five on every object in the frame.
+//
+// Spacing is enforced by GEOMETRY, not by rejection. One candidate per lattice
+// cell at `cell*g + hash*cell*jit + cell*(1-jit)/2`, so the axis separation
+// between adjacent samples is at least `cell*(1-jit)` — a floor that is a
+// guarantee rather than a hope. To make a stand sparser, enlarge the cell.
+// Thinning by rejection keeps the survivors' spacing and punches holes in it.
+//
+// And the acceptance ramp is what makes the tree line a BAND. It rises from
+// nothing sixty units below the local ceiling to certainty at thirty-eight, and
+// falls from certainty eight units below the ceiling to nothing five above it.
+// The ceiling itself sags in the gullies and rises on the sunny shoulders by
+// twenty units, which on a third-slope is sixty units of horizontal wander. A
+// tree therefore stands above where its neighbour down the slope stopped, and
+// the edge of the wood is ragged in two directions at once.
+
+function scatterHighland(stage, X) {
+  const { C, cv, rng, iso, W, S, seedN, tag, tagRaw } = stage;
+  const { T, F, TN, TRK, tw, hero, seen, TL0, RIB0, FAN0, A0, A1, B0, B1, regOf } = X;
+  const ss = rng.stream('scatter');
+  const S2 = seedN ^ 0x2f13;
+  const NR = 16;
+  const CONIF = [], TIPS = [], TRUNK = [], BOUL = [];
+  for (let r = 0; r < NR; r++) {
+    const g = C.mk(C.leaf._h + ss.range(-15, 15),
+      Math.min(0.74, C.leaf._s * ss.range(0.60, 1.30)),
+      Math.min(0.44, C.leaf._L * ss.range(0.52, 1.02)));
+    CONIF.push(g);
+    TIPS.push(C.mk(g._h + ss.range(-6, 10), g._s * ss.range(0.7, 1.05),
+      Math.min(0.60, g._L * ss.range(1.10, 1.45))));
+    TRUNK.push(C.mk(C.wood._h + ss.range(-8, 8), C.wood._s * ss.range(0.6, 1.1),
+      C.wood._L * ss.range(0.55, 0.88)));
+    BOUL.push(C.mk(C.stone._h + ss.range(-12, 12),
+      Math.min(0.17, C.stone._s * ss.range(0.5, 1.6)),
+      Math.min(0.84, C.stone._L * ss.range(0.60, 0.96))));
+  }
+  const FLEECE = C.mk(C.cream._h + ss.range(-8, 8), C.cream._s * ss.range(0.14, 0.48),
+    Math.min(0.94, C.cream._L * ss.range(0.94, 1.04)));
+
+  const uLo = (-80 - iso.ox) / (2 * S), uHi = (W + 80 - iso.ox) / (2 * S);
+  const lattice = (cellS, jit, salt, fn) => {
+    const i0 = Math.floor(A0 / cellS), i1 = Math.ceil(A1 / cellS);
+    const j0 = Math.floor(B0 / cellS), j1 = Math.ceil(B1 / cellS);
+    const off = cellS * (1 - jit) * 0.5;
+    for (let gj = j0; gj <= j1; gj++) {
+      for (let gi = i0; gi <= i1; gi++) {
+        const u = (gi - gj) * cellS;
+        if (u < uLo - 2 * cellS || u > uHi + 2 * cellS) continue;
+        const hh = h3(gi, gj, salt);
+        const x = gi * cellS + off + (((hh >>> 3) & 511) / 512) * cellS * jit;
+        const y = gj * cellS + off + (((hh >>> 13) & 511) / 512) * cellS * jit;
+        if (x < A0 || x > A1 || y < B0 || y > B1) continue;
+        fn(x, y, hh);
+      }
+    }
+  };
+  // The formation yields nothing to the ecology: a viaduct's deck, piers and
+  // approach are cleared ground.
+  const hx0 = hero.ax === 0 ? hero.x0 - 12 : hero.x0 - hero.wide * 0.5 - 6;
+  const hx1 = hero.ax === 0 ? hero.x0 + hero.len + 12 : hero.x0 + hero.wide * 1.5 + 6;
+  const hy0 = hero.ax === 0 ? hero.y0 - hero.wide * 0.5 - 6 : hero.y0 - 12;
+  const hy1 = hero.ax === 0 ? hero.y0 + hero.wide * 1.5 + 6 : hero.y0 + hero.len + 12;
+  const onHero = (x, y) => x > hx0 && x < hx1 && y > hy0 && y < hy1;
+
+  // ---- conifers
+  lattice(6.1, 0.80, S2 + 11, (x, y, hh) => {
+    const z = T.surfaceZ(x, y);
+    if (T.isWet(x, y) || onHero(x, y)) return;
+    if (!seen(x, y, z, 24)) return;
+    if (TRK.at(x, y) < tw + 2.8) return;
+    F.locate(x, y);
+    const above = F.ch(CH_H) - F.ch(CH_TL);
+    if (F.ch(CH_SLP) > 1.45) return;                 // not on a crag
+    if (F.ch(CH_FAN) > FAN0) return;                 // not on live scree
+    if (F.ch(CH_RIB) > RIB0) return;                 // not on an outcrop
+    const p = Math.min(cl01((above + 44) / 20), cl01((5 - above) / 14));
+    if (((hh >>> 23) & 255) / 256 > p) return;
+    const reg = regOf(F.ch(CH_RA), F.ch(CH_RB));
+    const tier = ((hh >>> 6) & 255) / 256;
+    // Tall in the body of the wood, stunted at its upper margin.
+    const hw = (9.5 + 13 * cl01((-above - 8) / 40)) * (0.78 + 0.48 * tier);
+    cv.t = tagRaw();
+    P.conifer(cv, iso, C, x, y, z, {
+      hw, aspect: 0.30 + ((hh >>> 15) & 15) / 60,
+      variant: (hh >>> 19) & 7,
+      kind: ((hh >>> 2) & 3) < 2 ? 'spruce' : 'pine',
+      tone: CONIF[reg], trunk: TRUNK[reg], tip: TIPS[reg].t,
+    });
+  });
+
+  // ---- krummholz: the same tree, beaten flat, in the band and just above it
+  lattice(5.2, 0.84, S2 + 23, (x, y, hh) => {
+    const z = T.surfaceZ(x, y);
+    if (T.isWet(x, y) || onHero(x, y)) return;
+    if (!seen(x, y, z, 8)) return;
+    if (TRK.at(x, y) < tw + 2.2) return;
+    F.locate(x, y);
+    const above = F.ch(CH_H) - F.ch(CH_TL);
+    if (F.ch(CH_SLP) > 1.5) return;
+    if (F.ch(CH_FAN) > FAN0 + 0.10) return;
+    const p = Math.min(cl01((above + 12) / 10), cl01((17 - above) / 13)) * 0.85;
+    if (((hh >>> 23) & 255) / 256 > p) return;
+    const reg = regOf(F.ch(CH_RA), F.ch(CH_RB));
+    cv.t = tagRaw();
+    P.conifer(cv, iso, C, x, y, z, {
+      hw: 2.0 + ((hh >>> 6) & 15) / 7, aspect: 0.80 + ((hh >>> 15) & 15) / 24,
+      variant: (hh >>> 19) & 7, kind: 'krummholz',
+      tone: CONIF[reg], trunk: TRUNK[reg], tip: CONIF[reg].l,
+    });
+  });
+
+  // ---- boulders: where a cliff put them, and on the moraine
+  lattice(10.5, 0.86, S2 + 37, (x, y, hh) => {
+    const z = T.surfaceZ(x, y);
+    if (T.isWet(x, y) || onHero(x, y)) return;
+    if (!seen(x, y, z, 6)) return;
+    if (TRK.at(x, y) < tw + 2.0) return;
+    F.locate(x, y);
+    const fan = F.ch(CH_FAN), rib = F.ch(CH_RIB), conc = F.ch(CH_CONC);
+    const above = F.ch(CH_H) - F.ch(CH_TL);
+    const p = Math.max(
+      cl01((fan - FAN0 * 0.45) / 0.3) * 0.98,         // on and below the fans
+      cl01((rib - RIB0 + 0.12) / 0.12) * 0.88,        // on the outcrops
+      cl01(conc / 0.3) * cl01((above + 40) / 30) * 0.30); // erratics on moraine
+    if (((hh >>> 23) & 255) / 256 > p) return;
+    const reg = regOf(F.ch(CH_RA), F.ch(CH_RB));
+    cv.t = tagRaw();
+    P.boulder(cv, iso, C, x, y, z, {
+      R: 4 + ((hh >>> 6) & 31) * 0.32, variant: (hh >>> 12) & 7, tone: BOUL[reg],
+    });
+  });
+
+  // ---- cairns on the tops: the one place-kind this ground can honestly make
+  lattice(46, 0.88, S2 + 51, (x, y, hh) => {
+    const z = T.surfaceZ(x, y);
+    if (T.isWet(x, y) || onHero(x, y)) return;
+    if (!seen(x, y, z, 8)) return;
+    F.locate(x, y);
+    if (F.ch(CH_H) - F.ch(CH_TL) < 4) return;        // only on the open tops
+    if (F.ch(CH_CONC) > -0.04) return;               // and only on a convexity
+    if (F.ch(CH_SLP) > 0.7) return;
+    if (((hh >>> 23) & 255) / 256 > 0.55) return;
+    const reg = regOf(F.ch(CH_RA), F.ch(CH_RB));
+    cv.t = tag();
+    P.cairn(cv, iso, C, ss, x, y, z, { tone: BOUL[reg], R: 1.4 + ((hh >>> 6) & 7) * 0.16 });
+  });
+
+  // ---- sheep on the enclosed pasture, in twos and threes
+  lattice(15, 0.85, S2 + 67, (x, y, hh) => {
+    const z = T.surfaceZ(x, y);
+    if (T.isWet(x, y) || onHero(x, y)) return;
+    if (!seen(x, y, z, 4)) return;
+    F.locate(x, y);
+    const above = F.ch(CH_H) - F.ch(CH_TL);
+    if (above > -6) return;                          // below the head dyke
+    if (F.ch(CH_SLP) > 0.55) return;
+    if (F.ch(CH_FAN) > FAN0 * 0.6 || F.ch(CH_RIB) > RIB0 - 0.06) return;
+    if (((hh >>> 23) & 255) / 256 > 0.42) return;
+    const n = 1 + ((hh >>> 4) & 3);
+    for (let k = 0; k < n; k++) {
+      const q = h3(Math.round(x), Math.round(y) + k * 13, S2 + 71);
+      const px = x + (((q >>> 3) & 63) - 31) * 0.16;
+      const py = y + (((q >>> 11) & 63) - 31) * 0.16;
+      if (T.isWet(px, py)) continue;
+      cv.t = tagRaw();
+      P.sheep(cv, iso, C, px, py, T.surfaceZ(px, py),
+        { flip: ((q >>> 19) & 1) === 1, tone: FLEECE });
+    }
+  });
 }
 
 function cutTarns(T, F, st, step, TL0, seedN) {
