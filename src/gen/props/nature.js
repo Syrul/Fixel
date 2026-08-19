@@ -510,7 +510,9 @@ function frondCrown(R, variant, swingPx = 0, sec = 0, wid = 0) {
   //
   // Slots: variant < 16, swingPx + 32 < 64 (clamped by DISP_MAX), sec <
   // CROWN_SECTORS = 8 < 16, wid <= GUST_MAX = 15 < 16. The 100000 offset keeps
-  // the whole range disjoint from `blob`'s keys, which top out at 22015.
+  // the whole range disjoint from `blob`'s keys, which are
+  // (R * 16 + variant) * 64 + (shift + 32) and so stay under 100000 for any R
+  // below 97 — the largest canopy this file draws is R = 14.
   const key = 100000 + ((((R * 16 + variant) * 64 + (swingPx + 32)) * 16 + sec) * 16 + wid);
   const had = BLOB_CACHE.get(key);
   if (had) return had;

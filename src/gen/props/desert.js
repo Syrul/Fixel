@@ -122,9 +122,11 @@ function organic(R, sqN, variant, shift = 0) {
  */
 function spray(R, n, variant, sqN, sec = 0, wid = 0) {
   // EVERY PARAMETER THAT CHANGES A PIXEL IS IN THE KEY, in its own fixed-width
-  // slot. Slots: variant < 64, sec < 8 < 16, wid <= SCRUB_GUST_MAX = 15 < 16.
-  // The 100000000 offset keeps the range disjoint from `organic`'s keys, which
-  // top out around 1.6M; this one tops out around 187M.
+  // slot. Slots: variant < 64, sec < SCRUB_SECTORS = 8 < 16, wid <=
+  // SCRUB_GUST_MAX = 15 < 16. The 100000000 offset keeps the range disjoint
+  // from `organic`'s keys, which are ((R * 32 + sqN) * 64 + variant) * 64 +
+  // (shift + 32) and so stay under 100000000 for any R below 762 — the largest
+  // mass this file draws is a nebkha mound at R = 12.
   const key = 100000000 + (((((R * 32 + n) * 16 + sqN) * 64 + variant) * 16 + sec) * 16 + wid);
   const had = MASKS.get(key);
   if (had) return had;
