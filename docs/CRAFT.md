@@ -666,3 +666,62 @@ which every pixel is 4-isolated — so they scored as orphan speckle, the named 
 rather than as lines. Widening both moved orphan islands 3.53% -> 2.67%. **A line thinner than
 one pixel is not a thin line, it is noise**, which is the round-4 legibility-floor rule
 arriving from the other direction: delete what cannot resolve, and a stroke has a floor too.
+
+---
+
+## Ink closure MUST NOT be read on a night post, and the reading cannot be corrected
+
+Two builders found this independently, which is how it got taken seriously.
+`tools/colour.mjs` masks ink at luma < 50. That threshold is calibrated for
+daylight, and after dark it stops meaning "outline" and starts meaning "dark".
+
+Measured, 8 seeds x 7 conditions at 1600x1100, whole frame:
+
+| regime | n | min | p50 | max |
+|---|---:|---:|---:|---:|
+| day + golden, all weathers | 40 | 6.76% | 13.47% | 18.92% |
+| night, all weathers | 16 | **33.51%** | 48.89% | **85.25%** |
+
+**Overcast, fog and precipitation do NOT sit between the two regimes** — they read
+*below* plain day (fog 6.76-13.82, overcast 6.79-13.98, rain 6.81-14.14). They
+flatten the ladder rather than darken the frame. Night is the only condition that
+moves ink share, which is a useful result in its own right: the veil is a
+saturation and contrast effect, not a value one.
+
+### The part that stops this being a simple correction
+
+At **320px crop scale — which is what `--compare` actually measures, and what a
+duel judge is actually shown** — the separation is not clean. Daylight crops reach
+**26.93%** (n=360) while night crops fall to **21.47%** (n=144). Eight of 360
+daylight crops and seven of 144 night crops live in the overlap. That is standing
+rule 8's corollary again: a whole-image threshold would have been wrong, and the
+statistic has to match how the artefact is judged.
+
+So `colour.mjs` reports **three** states and labels 21-27% undecidable. Label, not
+refuse — a refusal asserts a binary that the crop data shows is not binary
+(standing rule 10), and night-against-night comparison is still meaningful.
+
+### And the night number reads BETTER, for the wrong reason
+
+Seed `fixel-1`: day/clear `inkClosure` **7.11**, night/clear **4.68**, against the
+LA reference's 3.13. That is not closed loops. At 49.90% of pixels under
+threshold the mask shatters the cell count — **3526 -> 5351 cells on one seed** —
+and the ratio falls because its denominator exploded.
+
+Across 8 seeds, day/clear spans 5.29-7.19 while night/clear spans **4.37-22.20**,
+moving **down on 3 seeds and up on 5**. **Decoupled, not offset.** There is no
+constant to subtract and no factor to divide by, so the reading cannot be
+rescued — it has to be refused or labelled. This is the `tempoBpm` disease in a
+new costume: one metric reporting a different quantity depending on its input,
+which is exactly what got that metric deleted rather than demoted.
+
+### Live bug found on the way, in a different file
+
+`resolveConditions` validates nothing. Any unknown time falls through to
+`daySun 0.10` and any unknown weather falls through to the **fog** branch, so
+`tools/render.mjs --time nite --weather rian` renders a silent night and reports
+`nite/rian` back to you. A 56-render calibration sweep was **voided** by exactly
+this, via a zsh word-splitting mistake that handed every render
+`--time "day clear"`. `strip.mjs` now exits 2 on an unknown name; `render.mjs` is
+being matched to it. **A tool that echoes your typo back as a successful
+parameter is worse than one that crashes.**
