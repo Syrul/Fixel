@@ -223,11 +223,27 @@ Median of 9 seeded 320px crops, `tools/colour.mjs`:
 | **Fixel round 3** | **4.94** | 111.03 |
 | Fixel round 2 | 8.98 | 117.32 |
 
-**Ink closure 8.98 -> 4.94, which is Lufthansa's 4.95 to two decimal places.**
-On the one diagnostic that passes the ordering test — the test the 60-metric
-band failed — Fixel now sits level with a genuine eBoy Pixorama and behind only
-the bar itself. That is the first time anything in this project has reached
-genuine-work level on a discriminating metric.
+> **RETRACTED.** This originally read "ink closure 8.98 -> 4.94, level with
+> Lufthansa's 4.95... the first time anything in this project has reached
+> genuine-work level on a discriminating metric." **That was one seed, quoted as
+> if typical, and it sat at the good end of the distribution.** It would have
+> been the sixth claim this project had to retract, and it is the crest-factor
+> failure in miniature: a real improvement, characterised from too few samples,
+> stated one notch stronger than the data supports.
+
+Measured across **six seeds**, nine crops each:
+
+| seed | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---:|---:|---:|---:|---:|---:|
+| ink closure | 4.94 | 6.18 | 4.90 | 4.57 | 5.84 | 5.39 |
+
+**Median 5.17, mean 5.30, range 4.57-6.18.** LA reference 3.23, Lufthansa 4.95.
+**Two seeds in six beat Lufthansa; the typical seed does not.**
+
+The honest claim, still a strong one: ink closure moved from ~9.6 to a median
+near 5.2, and the seed-to-seed spread collapsed from 4.25-15.74 to 4.57-6.18.
+**The generator is now in the same regime as genuine work rather than a
+different one. It is not level with a genuine Pixorama.**
 
 Radius of gyration barely moved (117.32 -> 111.03) and remains ~1.85x the
 reference. It is a floor metric only, so this is not a verdict, but it says the
@@ -235,11 +251,31 @@ palette localisation work is not done.
 
 ### Confirmed open regression: ink is now OVER budget
 
-`outline.darkShare` **0.1975** against a band ceiling of **0.1956** — FAIL, and
-the reference is 0.1626. Round 2's brief said "redistribute, do not add"; ink
-went from slightly under, through correct, to over. Redistribution became
-addition somewhere. This belongs in the verdict as an open regression, not
-buried in a metric table.
+Quoting a single seed's 0.1975 made this look like a marginal touch of the
+ceiling. It is not. Measured six seeds x nine crops, and **the whole-image and
+per-crop readings disagree in a way that is itself the finding**:
+
+| seed | whole-image | crop min | crop median | **crop MAX** |
+|---|---:|---:|---:|---:|
+| 1 | 19.53% | 17.93 | 19.61 | 19.92 |
+| 2 | 16.57% | 14.21 | 16.62 | 17.67 |
+| 3 | 16.91% | 14.63 | 16.58 | 18.45 |
+| 4 | 17.79% | 14.80 | 16.51 | 19.88 |
+| 5 | 17.37% | 15.80 | 17.77 | 20.43 |
+| 6 | 19.34% | 16.75 | 17.60 | **29.24** |
+
+Band ceiling 19.56%, reference 16.26%.
+
+**Whole-image averaging hides it.** No seed's whole-image reading exceeds the
+ceiling, yet crops reach 20.43% and 29.24% — nearly a third of one crop is ink.
+Ink is not uniformly over; it is **spatially concentrated**, and averaging over
+1600x1100 dilutes exactly the concentration that matters.
+
+**And the duel judges 320px crops, not whole images.** So the crop-level figure
+is the one that counts: the judges are shown precisely the windows where this is
+worst. Gate `darkShare` on the per-crop max, never the whole-image mean.
+
+Round 4 cannot add ink anywhere until this is understood.
 
 `flat.frac5x5` also slipped from 0.1190 to **0.1134** against a floor of 0.1228.
 

@@ -117,7 +117,21 @@ a genuine artwork on it.
    of expected at 0.8x. Pure resampling via `asetrate` preserves onset structure
    (94-105%). The confounded run was discarded and redone.
 
-8. **Never report a PASS count as progress.** Leave-one-out shows an all-pass
+8. **THE GENERATOR IS A DISTRIBUTION, NOT AN ARTEFACT.** Any number measured on
+   fewer than about six seeds carries its range, or it does not appear. This
+   project has now made the same error repeatedly: a seed-varying quantity
+   characterised from one or two renders and stated one notch stronger than the
+   data supports. Ink closure was quoted as "4.94, level with Lufthansa" from a
+   single seed when the six-seed median is 5.17 and only two of six beat
+   Lufthansa.
+
+   **Corollary: match the statistic to how the artefact is judged.** The duel
+   shows judges 320x320 crops, so a whole-image mean is the wrong summary.
+   `darkShare` reads 16.57-19.53% whole-image with nothing over the 19.56%
+   ceiling, while per-crop it reaches 20.43% and 29.24%. Averaging over the
+   frame dilutes precisely the local concentration a judge sees.
+
+9. **Never report a PASS count as progress.** Leave-one-out shows an all-pass
    gate rejects 84% of the reference's own crops, and seven of the sixty metrics
    correlate at r=1.0000. 36 vs 35 PASS is noise; the direction of a specific
    hard fail is the signal.
