@@ -865,6 +865,28 @@ export function paintShore(stage) {
   // phase scalars differ per frame, and each costs a triangle wave and a
   // compare.
   //
+  // WHAT THE ANIMATION DID NOT FIX, STATED SO NOBODY HAS TO REDISCOVER IT.
+  //
+  // The brief for this work expected articulating the water for animation to
+  // also fix the craft regression the sea carries — `flat.largestRegion` and
+  // `flat5x5`. IT DID NOT, and the reason is that no articulation turned out to
+  // be REQUIRED: the bands the surge moves (crest, trough, foam edge) were
+  // already drawn, and a surge moves their edges rather than adding any. Frame
+  // 0 is byte-identical to the still render, so at 440x900 over six seeds the
+  // ground stage still reads largestRegion 1.25-2.68% and flat5x5 0.3308-0.3976
+  // exactly as it did before. Adding bands to buy those numbers would be a
+  // PICTURE change smuggled in under an animation commit, and it has to be
+  // measured — against the moiré this shader's own header records — on its own.
+  //
+  // THE ONE DEFECT THE ANIMATION DOES EXPOSE, measured: of the twenty largest
+  // sea-coloured flat fields across six seeds (top five per seed), fifteen
+  // carry 52-384 moving pixels and FIVE carry 0-12. So three seeds in six have
+  // a 2,600-4,500 px patch of sea — 0.7-1.1% of the frame — that holds
+  // completely still while the water around it breathes. It is where the `si`
+  // parity happens to make the crest tone equal the band tone, so there is no
+  // edge in that patch for the surge to move. That is the honest case for more
+  // bands, and it is the case a duel should decide rather than a metric.
+  //
   // `vals` is hoisted out of the shader and reused. A `new Uint16Array(K)` per
   // pixel would be 200,000 allocations a frame.
   const K = stage.frames;
