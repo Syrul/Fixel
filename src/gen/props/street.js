@@ -255,7 +255,11 @@ export function awning(cv, iso, C, st, x, y, z, len, ax, colA) {
     const u = ax === 0 ? (F.au * sxp + F.bu * syp + F.cu) : (F.av * sxp + F.bv * syp + F.cv);
     return (Math.floor(u / 5) & 1) ? a.t : C.white.t;
   });
-  const hem = (sxp, syp) => (((sxp + syp) >> 1) & 3) === 0 ? C.black : a.r;
+  // The hem's scallops are the awning's own shadow, not ink. Drawn in the
+  // shared black they were a DASHED black run along the front of every awning
+  // in the frame — ink that starts and stops in mid-plane and encloses nothing,
+  // which is the non-closing-chain defect in its purest form.
+  const hem = (sxp, syp) => (((sxp + syp) >> 1) & 3) === 0 ? a.k : a.r;
   if (ax === 0) box(cv, iso, x, y + d - 0.2, z - 0.9, w, 0.2, 0.9, { top: a.r, left: hem, right: a.d });
   else box(cv, iso, x + w - 0.2, y, z - 0.9, 0.2, d, 0.9, { top: a.r, left: a.d, right: hem });
 }

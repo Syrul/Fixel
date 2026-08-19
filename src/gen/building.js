@@ -54,7 +54,11 @@ function facade(F, o) {
       const bi = Math.floor(u / o.shopU);
       const gu = u - bi * o.shopU;
       const hh = h3(o.seed, bi, 101);
-      if (v > o.groundH - 0.55) return K;                 // fascia head
+      // The fascia head is the shadow the fascia throws on the wall above it,
+      // so it is the WALL's own dark. It used to be a full-width run of shared
+      // ink across every shopfront on every building — one of the longest
+      // single strokes in the frame and one that enclosed nothing on its own.
+      if (v > o.groundH - 0.55) return o.wallK;
       if (v > o.groundH - 2.6) return o.fascia[hh % o.fascia.length];
       if (gu < 1.3 || gu > o.shopU - 1.3) return o.quoin;  // pier between units
       if (v < 1.4) return o.shopBase;                      // stall riser
@@ -88,7 +92,12 @@ function facade(F, o) {
     // the region without spending ink, which matters because ink is at budget
     // and because `slope.corrDx0Share` has no headroom left for more verticals.
     if (o.blank) {
-      if (o.jointEvery > 0 && (bay % o.jointEvery) === 0 && fu < 0.5) return K;
+      // An expansion joint is a groove in the wall, not an outline. Drawn in
+      // shared ink it was a full-height black vertical on every second or third
+      // bay of every blank flank — the single largest producer of unclosed
+      // vertical ink in the frame, and `slope.corrDx0Share` has been reading it
+      // as "too much of the outline mass is vertical" for two rounds.
+      if (o.jointEvery > 0 && (bay % o.jointEvery) === 0 && fu < 0.5) return o.wallK;
       if (o.bandEvery > 0 && (fl % o.bandEvery) === 0 && fv < 1.4) return o.band;
       return panelTone(o, bay, fl);
     }
@@ -116,8 +125,12 @@ function facade(F, o) {
     // now present). Ink spent is about the same; ink that CLOSES is all of it.
     if (fu < wx0 + 0.55 || fu > wx1 - 0.55) return K;
     if (fv < wy0 + 0.5 || fv > wy1 - 0.5) return K;
-    if (o.centreMull && wx1 - wx0 > 3.6 && Math.abs(fu - o.bayU * 0.5) < 0.28) return K;
-    if (o.transom && wy1 - wy0 > 3.2 && Math.abs(fv - (wy0 + wy1) * 0.5) < 0.26) return K;
+    // Glazing bars divide ONE opening. The frame around it is the object
+    // boundary and stays ink; the bars inside it are the glass's own dark, for
+    // the same reason the solar grille is. This is where the reference's
+    // "rings itself at 0.49 of interior luma" actually applies — interior form.
+    if (o.centreMull && wx1 - wx0 > 3.6 && Math.abs(fu - o.bayU * 0.5) < 0.28) return o.glassK;
+    if (o.transom && wy1 - wy0 > 3.2 && Math.abs(fv - (wy0 + wy1) * 0.5) < 0.26) return o.glassK;
     const hh = h3(o.seed, bay, fl) & 15;
     if (hh < o.gA) return o.g0;
     if (hh < o.gB) return o.g1;
@@ -134,6 +147,7 @@ function facadeOpts(C, st, wall, W, H, seed, style, blank) {
   const o = {
     W, H, seed, black: C.black, blank,
     wall: wall.l, wallD: wall.r, quoin: wall.r,
+    wallK: wall.k, glassK: glass.k,
     panelSpan: st.weighted([[1, 4], [2, 6], [3, 3]]),
     panelRun: st.int(2, 5), panelRate: st.int(3, 7),
     plinth: wall.r, cornice: trim.l,

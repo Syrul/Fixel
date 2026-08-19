@@ -59,9 +59,14 @@ export function solar(cv, iso, C, st, x, y, z, w, d) {
   const F = topFace(iso, z + 0.6, x, y);
   for (const [dx, dy] of [[0.2, 0.2], [w - 0.6, 0.2], [0.2, d - 0.6], [w - 0.6, d - 0.6]])
     box(cv, iso, x + dx, y + dy, z, 0.4, 0.4, 0.6, MD(C.metal));
+  // The cell divisions are the panel's OWN dark, not the shared ink. A solar
+  // array is a grid of glass in an aluminium frame; drawing that frame in the
+  // silhouette black made a 3x2-unit roof gadget about a fifth pure black, and
+  // it is one of a dozen props that were each spending silhouette ink on
+  // interior form. Same drawing, a value step instead of a keyline.
   drawSlab(cv, iso, x, y, z + 0.6, w, d, (sxp, syp) => {
     const u = F.au * sxp + F.bu * syp + F.cu, v = F.av * sxp + F.bv * syp + F.cv;
-    if ((u % 5.5) < 0.62 || (v % 5.5) < 0.62) return C.black;
+    if ((u % 5.5) < 0.62 || (v % 5.5) < 0.62) return C.indigo.k;
     return C.indigo.l;
   });
 }
@@ -75,15 +80,33 @@ export function skylight(cv, iso, C, st, x, y, z, w, d) {
   });
 }
 
+/**
+ * A mast with cross-elements.
+ *
+ * THE CROSSBARS USED TO BE PERFECTLY HORIZONTAL BLACK LINES, and that is a
+ * projection bug, not a style. A horizontal run is off-axis for BOTH the 2:1
+ * lattice and the vertical, so nothing in a dimetric city can produce one as a
+ * chosen break — measured, we had 125 horizontal constant runs >= 40px against
+ * the reference's 9. Four black horizontals per aerial, on every roof in the
+ * frame, were a visible share of that. They also bounded nothing: a stroke that
+ * begins and ends in mid-air is the "non-closing ink chain" defect exactly.
+ *
+ * A crossbar is now a physical box lying along +x, so it projects onto the
+ * lattice like everything else, and it is drawn in the metal's own dark rather
+ * than in the shared ink.
+ */
 export function aerial(cv, iso, C, st, x, y, z) {
   const h = st.range(5, 13);
   box(cv, iso, x, y, z, 0.3, 0.3, h, MD(C.metal));
-  const p0 = iso.proj(x + 0.15, y + 0.15, z + h);
-  for (let i = 0; i < 4; i++) {
-    const yy = p0[1] + i * 2;
-    cv.line(p0[0] - 3 - i, yy, p0[0] + 3 + i, yy, C.ink, x + y + z + h + 2);
+  const n = st.int(2, 4);
+  for (let i = 0; i < n; i++) {
+    const len = 2.6 + i * 0.9;
+    const zz = z + h - 0.6 - i * 1.5;
+    if (zz < z + 1) break;
+    box(cv, iso, x + 0.15 - len / 2, y + 0.1, zz, len, 0.28, 0.28,
+      { top: C.metal.r, left: C.metal.k, right: C.metal.k });
   }
-  if (st.bool(0.4)) cv.blit(p0[0] - 1, p0[1] - 3, ['##', '##'], { '#': C.red.t }, x + y + z + h + 3);
+  if (st.bool(0.4)) box(cv, iso, x - 0.1, y - 0.1, z + h, 0.5, 0.5, 0.5, M(C.red));
 }
 
 export function railing(cv, iso, C, st, x, y, z, len, ax, h) {

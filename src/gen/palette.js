@@ -79,10 +79,18 @@ export function buildPalette(rng) {
   const pal = new Palette();
   const cache = new Map();
 
-  // One shared near-black does every outline in the frame. The reference uses
+  // One shared black does every SILHOUETTE in the frame. The reference uses
   // one, not a per-material dark — that is what makes the edges read as a
   // system rather than as shading.
-  const BLACK = pal.add(8, 8, 10);
+  //
+  // IT IS NOW TRUE BLACK, AND THAT IS PART OF AN INK MODEL, NOT A TWEAK.
+  // Measured on whole frames: the reference spends 34,672 px on literal (0,0,0)
+  // while its most-used colour is a mid-tone sand at 4.84%. Ours spent ZERO on
+  // true black while a single near-black #08080a held 18-19% of the frame. We
+  // were simultaneously over-inked and never actually black — ink as the
+  // dominant material rather than as punctuation. The correction has two
+  // halves and this is the first: where we commit, commit hard.
+  const BLACK = pal.add(0, 0, 0);
 
   // ---- this scene's light ------------------------------------------------
   // LEFT is the lit-to-shaded ratio; RIGHT falls further; DARK is the step
@@ -161,6 +169,21 @@ export function buildPalette(rng) {
       l: step(LEFT, 1),
       r: step(RIGHT, 1.7),
       d: step(DARK, 2.3),
+      // THE CONTOUR STEP — the second half of the ink model, and the technique
+      // this generator did not have at all.
+      //
+      // `docs/BAR.md`: an isolated reference object has 0.00% below luma 20 and
+      // "rings itself in its own darkest tone at 0.49 of interior luma". We
+      // drew interior form with black or with nothing. A panel line, a recess,
+      // a seam, a grille, a joint between two boards is not a silhouette — it
+      // is a shadow in the object's own material, and drawing it in the shared
+      // ink is both wrong and the reason a fifth of the frame was near-black.
+      //
+      // Fixed at 0.49 of the LEFT (interior) step, so it tracks the scene's own
+      // light rather than being a fifth constant, and it is deliberately BELOW
+      // `d`: `d` is a face of the object that the light reaches badly, `k` is a
+      // line the light does not reach at all.
+      k: step(LEFT * 0.49, 2.6),
       // metadata, deliberately underscored: `l` is already the LEFT face index
       _h: h, _s: s, _L: l,
     };
