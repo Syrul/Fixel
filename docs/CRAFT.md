@@ -345,3 +345,45 @@ And the shape of it: our scale hierarchy is **bimodal** — large undetailed
 facets plus a field of near-identical small boxes, with nothing in between —
 against the reference's continuous ladder from 3px sign glyphs through 14px
 figures to 60px vehicles, with detail budgeted proportionally to size.
+
+## flat.frac5x5 measures at the one window size where the defect is invisible
+
+Verified by the lead on the r3 pair4 crops, after a judge measured it first:
+
+| uniform-window share | 5x5 | 9x9 | 13x13 | 17x17 |
+|---|---:|---:|---:|---:|
+| reference | 13.08% | 1.79% | 0.23% | **0.01%** |
+| Fixel | 13.95% | 5.51% | 2.84% | **1.34%** |
+| ratio | **1.07x** | 3.1x | 12x | **134x** |
+
+**At 5x5 the two are indistinguishable.** The reference has essentially zero
+pixels inside a uniform 17x17 patch; we have 1.34%. The defect is invisible at
+the window we gate on and grows superlinearly with window size.
+
+We have been treating `flat.frac5x5` as a hard constraint with "zero headroom"
+(0.1134 against a 0.1228 floor) and steering the generator by it. It is the
+wrong instrument: it cannot see the thing it was introduced to protect. The
+judge's phrasing is the right way to hold it — *A's flat areas are facet-sized,
+B's are region-sized*: in the reference every flat is a plank, a car panel, a
+step riser; ours are blank walls and empty roadway.
+
+**Round 4 should gate on the 13x13 or 17x17 share, not 5x5.** A metric whose
+discriminating power at the chosen window is 1.07x is not a gate.
+
+## A second projection bug: long horizontal runs
+
+| | runs >=40px | longest | near-black among them |
+|---|---:|---:|---:|
+| reference | **9** | 50px | 0 |
+| Fixel | **125** | 106px | 1 |
+
+Fourteen times as many, and the judge's reasoning for why this is a *bug* rather
+than a style difference is exact: **a perfectly horizontal line is off-axis for
+both the 2:1 lattice and the vertical, so it cannot be a chosen lattice break.**
+In a 2:1 dimetric projection almost nothing should produce a long horizontal
+constant run; the reference's nine are short (max 50px) and none are ink. One of
+ours is a 103px pure-black horizontal line crossing open ground and terminating
+in nothing.
+
+Together with the signage foreshortening error, that is two genuine
+*correctness* bugs in the projection layer, distinct from the scale limitation.
