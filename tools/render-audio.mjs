@@ -148,6 +148,33 @@ function makeControlSongs(seed, seconds) {
   for (const n of base.tracks.drums) rt.drums.push({ ...n, kind: kinds[ds.int(0, 2)] });
   out['ctrl-random-walk'] = { ...base, tracks: rt };
 
+  // (2b) STRICT uniform control. (2) above keeps the real rhythm, the real
+  // sectional texture changes and the real drum pattern and randomises only
+  // pitch — which flatters the fake on every rhythm and structure metric. This
+  // one is the brief's control done without that mercy: uniform random pitch,
+  // uniform random onset times, uniform random durations, no sections, no
+  // motif, no harmony. Same voices, same mixer, same master chain.
+  const uw = new Rng(seed + '/uniform');
+  const ut = { lead: [], harmony: [], arp: [], bass: [], drums: [] };
+  const RATE = { lead: 3.0, harmony: 4.0, arp: 6.0, bass: 4.0, drums: 8.0 };
+  for (const c of ['lead', 'harmony', 'arp', 'bass']) {
+    const st = uw.stream(`uni.${c}`);
+    const [lo, hi] = RANGES[c];
+    const nEv = Math.round(RATE[c] * seconds);
+    for (let k = 0; k < nEv; k++) {
+      ut[c].push({ tick: st.int(0, totalTicks - 1), dur: st.int(1, 6), midi: st.int(lo, hi), vel: st.range(0.6, 1) });
+    }
+  }
+  {
+    const st = uw.stream('uni.drums');
+    const nEv = Math.round(RATE.drums * seconds);
+    for (let k = 0; k < nEv; k++) {
+      ut.drums.push({ tick: st.int(0, totalTicks - 1), dur: 2, kind: kinds[st.int(0, 2)], vel: st.range(0.6, 1) });
+    }
+  }
+  for (const c of Object.keys(ut)) ut[c].sort((a, b) => a.tick - b.tick);
+  out['ctrl-uniform-strict'] = { ...base, tracks: ut };
+
   // (3) sustained drone: one chord held on every tonal channel, no percussion
   const ch = base.chords[0];
   const dt = { lead: [], harmony: [], arp: [], bass: [], drums: [] };

@@ -22,10 +22,10 @@ export const CHANNELS = ['lead', 'harmony', 'arp', 'bass', 'drums'];
 // centroid ~5.5 kHz measured) is brighter than any of the 38 reference tracks.
 // Cutoff and slope are fixed constants, not per-seed knobs.
 export const MASTER = {
-  lowpassHz: 7200,
+  lowpassHz: 10500,
   lowpassQ: 0.707,
   ceiling: 0.8688,          // -1.215 dBFS, the corpus median peak
-  preGain: 1.45,
+  preGain: 0.92,            // headroom: the limiter should catch peaks, not ride
   lookaheadMs: 5,
   releaseMs: 70,
 };
