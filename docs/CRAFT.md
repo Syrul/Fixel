@@ -626,3 +626,43 @@ real mark, and the only complete remedies are a much longer word — which stops
 signage — or a register lookup this generator cannot carry. **Stated as a bounded, measured,
 residual risk rather than as a fix.** A feed drawing tens of signs per scene should expect a
 collision every few hundred scenes.
+
+---
+
+## Five findings from the biome round that generalise past the biome that found them
+
+Reported by the desert and highland builders, kept because each is a trap any future
+landform work walks into and none is visible in the output as its own defect.
+
+**1. A FIXED THRESHOLD ON AN fbm DOES NOT TRAVEL BETWEEN SEEDS.** Identical constants cutting
+one noise field into sand / rock / pan produced splits of 57/43/0, 10/73/17, 79/19/2 and
+**100/0/0** across four seeds. An fbm's realised distribution moves seed to seed, so a
+literal threshold is a different decision every time. Fix: sample the field over exactly the
+region that will be drawn and cut at **order statistics** — a quantile is a decision about
+proportion, a constant is a decision about a number. This is the seed-to-seed twin of the
+frame-size problem: a threshold must be derived where it is applied.
+
+**2. THE TERRACE STEP CANCELS OUT OF THE CORDUROY RATIO.** Derived and then confirmed:
+`tread_px / riser_px = 2.1 / (slope · (4 + 2·cell/step))`. Raising the step widens the tread
+and deepens the riser in the same proportion, so **stripiness is set by mean slope alone** and
+no amount of step tuning fixes a corduroy. The lead spent an exchange advising exactly that
+tuning; it was wrong. The relief has to be measured and scaled to a slope target instead.
+
+**3. A DARK TERRACE RISER IS INK SPENT TWICE ON ONE EDGE.** Risers shaded at `.d`/`.k` made a
+gently contoured pale plain read as pale treads between near-black bands however wide the
+treads got. The terrace break is **already** inked by the silhouette sweep, so the dark riser
+is a second stroke on an edge that has one. The value step on a riser belongs inside the
+material's own family.
+
+**4. HUE CLAMPING ON A WRAPPED HUE LANDS IN A DIFFERENT COLOUR ENTIRELY.** `mk` wraps `_h`
+into [0, 360), so a family drifted to −13 degrees returns **347**, and pulling that toward 26
+by a signed difference lands on **135 — green**. It put flat sea-green ground in a desert.
+Any hue-band clamp must take the signed difference **modulo 360**; every biome doing hue
+pulling has this bug latent.
+
+**5. SUB-PIXEL LINES RASTERISE TO CORNER-TOUCHING CHAINS OF ORPHANS.** Playa cracks authored
+at 0.28 world units (0.9px) and a material boundary at 0.1 units (0.4px) produced chains in
+which every pixel is 4-isolated — so they scored as orphan speckle, the named round-1 defect,
+rather than as lines. Widening both moved orphan islands 3.53% -> 2.67%. **A line thinner than
+one pixel is not a thin line, it is noise**, which is the round-4 legibility-floor rule
+arriving from the other direction: delete what cannot resolve, and a stroke has a floor too.
