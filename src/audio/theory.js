@@ -225,20 +225,33 @@ export function degreeStep(midi, steps, tonicPc, scale) {
   return tonicPc + scale[ni] + 12 * no;
 }
 
-// The salience grid in tools/audio-metrics.mjs suppresses a note that sits
-// +12/19/24/28/31/34/36 semitones (+-1) above an already-accepted louder note,
-// because that is where a strong fundamental's own harmonics land. Voicing
-// around those intervals is also ordinary practice for keeping inner voices
-// audible, but it is stated here plainly: this constant exists because of a
-// documented property of the analyser, and it is the one place the composer
-// is shaped by the measurement rather than only by the music.
-export const HARMONIC_SHADOW = [12, 19, 24, 28, 31, 34, 36];
-
-export function inShadow(midi, lowerMidis) {
-  for (const lo of lowerMidis) {
-    const d = midi - lo;
-    if (d <= 0) continue;
-    for (const h of HARMONIC_SHADOW) if (Math.abs(d - h) <= 1) return true;
-  }
-  return false;
-}
+// HARMONIC_SHADOW AND inShadow() USED TO LIVE HERE. THEY ARE GONE, AND THE
+// MEASUREMENT THAT REMOVED THEM IS THE POINT OF THIS COMMENT.
+//
+// The constant was [12, 19, 24, 28, 31, 34, 36] — the semitone offsets at which
+// the salience grid in tools/audio-metrics.mjs suppresses a note sitting above
+// an already-accepted louder one. compose.js consulted it on every harmony and
+// arp note and nudged the note when it matched. It was the one place the
+// composer was shaped by the measurement rather than by the music, it was
+// disclosed as such, and it did not work.
+//
+// Measured over 24 seeds x 60 s (6,226 harmony notes):
+//   * the rule fired on 80.8-93.1% of harmony notes (median 87.4%);
+//   * 75.1-96.7% of those (median 83.4%) were STILL in the shadow after being
+//     moved, so it failed at its own purpose on five notes in six;
+//   * its escape path was `m + 12 <= HARM_HI ? m + 12 : m - 1`, and the octave
+//     had headroom on 0.00-12.7% of notes (median 0.0%), so in the median seed
+//     it ALWAYS fell through to `m - 1`: a chord's own third or fifth detuned a
+//     semitone, every time it fired.
+//
+// The reason it fired on almost everything is arithmetic, not bad luck. With
+// +-1 tolerance the seven offsets cover 20 distinct intervals, and the harmony
+// register sits 10..39 semitones above the bass — 30 possible intervals. The
+// set covers 20 of 30 = 66.7% of the space A PRIORI, before a single musical
+// decision. A test that says yes to two thirds of its inputs is not a filter.
+//
+// What it cost: 75.0-92.9% of harmony notes (median 87.0%) were not in the
+// chord of their own bar, and every seed used all 12 pitch classes.
+//
+// See docs/OWNERSHIP.md rule 6. The analyser's suppression grid is a fact about
+// the analyser. It is not a fact about music, and nothing here is owed to it.

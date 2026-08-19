@@ -14,7 +14,7 @@ import { Rng } from '../core/rng.js';
 import {
   SCALES, QUALITIES, PROGRESSIONS, CADENCES, RHYTHM_CELLS, CONTOURS,
   DRUM_PATTERNS, BASS_FIGURES, ARP_SHAPES, PC_NAMES,
-  chordTones, degreeStep, inShadow,
+  chordTones, degreeStep,
 } from './theory.js';
 
 const TICKS_PER_BAR = 16;
@@ -214,13 +214,6 @@ export function composeSong(seed, opts = {}) {
       }
     }
   }
-  const bassAtTick = new Map();
-  for (const n of tracks.bass) bassAtTick.set(n.tick, n.midi);
-  const bassNear = tick => {
-    for (let t = tick; t >= tick - 8; t--) if (bassAtTick.has(t)) return bassAtTick.get(t);
-    return BASS_LO;
-  };
-
   // ---- arpeggio ---------------------------------------------------------
   const ARP_LO = voicing.arpLo, ARP_HI = ARP_LO + 16;
   for (const s of sections) {
@@ -251,10 +244,6 @@ export function composeSong(seed, opts = {}) {
         let m = ARP_LO + (((ch.rootPc - ARP_LO) % 12) + 12) % 12 + iv;
         while (m > ARP_HI) m -= 12;
         while (m < ARP_LO) m += 12;
-        if (inShadow(m, [bassNear((s.startBar + b) * TICKS_PER_BAR + t)])) {
-          const alt = m + (m + 2 <= ARP_HI ? 2 : -2);
-          if (!inShadow(alt, [bassNear((s.startBar + b) * TICKS_PER_BAR + t)])) m = alt;
-        }
         tracks.arp.push({
           tick: (s.startBar + b) * TICKS_PER_BAR + t,
           dur: step, midi: m, vel: t % 4 === 0 ? 0.85 : 0.62,
@@ -282,11 +271,12 @@ export function composeSong(seed, opts = {}) {
           : [[2, 2], [6, 2], [10, 2], [14, 2]];
       for (const [t, d] of events) {
         for (const iv of picks) {
+          // The chord tone, played. Nothing is nudged off it to satisfy an
+          // analyser — see the deleted-constant note in theory.js for the
+          // measurement that removed the rule that used to sit here.
           let m = base + iv;
           while (m > HARM_HI) m -= 12;
           while (m < HARM_LO) m += 12;
-          const lower = [bassNear((s.startBar + b) * TICKS_PER_BAR + t)];
-          if (inShadow(m, lower)) m = m + 12 <= HARM_HI ? m + 12 : m - 1;
           tracks.harmony.push({
             tick: (s.startBar + b) * TICKS_PER_BAR + t, dur: d, midi: m,
             vel: kind === 'pad' ? 0.5 : 0.66,

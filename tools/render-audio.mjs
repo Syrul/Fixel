@@ -449,17 +449,72 @@ function cmdControls() {
   for (const f of written) console.log(f);
 }
 
+/**
+ * DETERMINISM — the foundation, and until now it was only ever asserted.
+ *
+ * This command did not exist. The engine was DESCRIBED as deterministic in four
+ * files and no tool in the repo checked it, which is the same shape of defect as
+ * every silent-discard bug this project has shipped: a claim with no caller.
+ *
+ * Same seed, same bytes, ACROSS TWO SEPARATE PROCESSES — not two calls in one
+ * process, which would share a warm wavetable cache and a warm JIT and could
+ * agree while a cold start disagreed. Each child renders the mix and all five
+ * stems and prints their sha256; the parent compares.
+ */
+function cmdDeterminism() {
+  const seeds = (get('--seed') || 'fixel-0001,fixel-0002,fixel-0003,fixel-0004,fixel-0005,fixel-0006').split(',');
+  const seconds = Number(get('--seconds', '60'));
+  const child = `
+    import { createHash } from 'node:crypto';
+    import { composeSong, renderRange, SAMPLE_RATE, CHANNELS } from ${JSON.stringify(path.join(REPO, 'src/audio/index.js'))};
+    // NOT slice(2). Under \`node -e\` there is no script path, so argv is
+    // [execPath, ...args] and slice(2) silently drops the seed — which is
+    // exactly how the first version of this check passed 42/42 while hashing
+    // the empty string for every seed. The digest of "" is e3b0c442...
+    const [seed, seconds] = process.argv.slice(1);
+    if (!seed || !seconds) throw new Error('determinism child got no seed');
+    const opts = { seconds: Number(seconds) };
+    const song = composeSong(seed, opts);
+    const { mix, stems } = renderRange(song, 0, Math.round(Number(seconds) * SAMPLE_RATE), SAMPLE_RATE);
+    const h = x => createHash('sha256').update(Buffer.from(x.buffer, x.byteOffset, x.byteLength)).digest('hex').slice(0, 16);
+    const out = { mix: h(mix) };
+    for (const c of CHANNELS) out[c] = h(stems[c]);
+    out.song = createHash('sha256').update(JSON.stringify(song)).digest('hex').slice(0, 16);
+    console.log(JSON.stringify(out));
+  `;
+  const run = seed => JSON.parse(execFileSync('node',
+    ['--input-type=module', '-e', child, seed, String(seconds)],
+    { encoding: 'utf8', maxBuffer: 1 << 26 }));
+
+  console.log('determinism: same seed, same bytes, two separate node processes\n');
+  let bad = 0, checked = 0;
+  for (const seed of seeds) {
+    const a = run(seed), b = run(seed);
+    const keys = Object.keys(a);
+    const diff = keys.filter(k => a[k] !== b[k]);
+    checked += keys.length;
+    if (diff.length) bad += diff.length;
+    console.log(`  ${seed.padEnd(14)} ${diff.length ? 'DIFFERS: ' + diff.join(',') : 'identical'}   ` +
+      `song ${a.song}  mix ${a.mix}  ` + CHANNELS.map(c => `${c[0]}:${a[c].slice(0, 8)}`).join(' '));
+  }
+  console.log(`\n  ${checked - bad}/${checked} digests identical across processes ` +
+    `(${seeds.length} seeds x (1 song + 1 mix + ${CHANNELS.length} stems))`);
+  if (bad) process.exit(1);
+}
+
 function usage() {
   console.error(`usage:
   node tools/render-audio.mjs --seed <string> --out <file.wav> [--stems <dir>] [--seconds N]
   node tools/render-audio.mjs --dump-song --seed <string> [--seconds N] [--json]
   node tools/render-audio.mjs --latency [--seed a,b,c] [--seconds N]
+  node tools/render-audio.mjs --determinism [--seed a,b,c] [--seconds N]
   node tools/render-audio.mjs --duty-check
   node tools/render-audio.mjs --controls <dir> [--seed <string>] [--seconds N]`);
 }
 
 if (flag('--dump-song')) cmdDumpSong();
 else if (flag('--latency')) cmdLatency();
+else if (flag('--determinism')) cmdDeterminism();
 else if (flag('--duty-check')) cmdDutyCheck();
 else if (get('--controls')) cmdControls();
 else if (get('--seed') && get('--out')) cmdRender();
