@@ -247,7 +247,14 @@ export function pavementShade(iso, C, x0, y0, w, d, z, seedN, P, K, opt = {}) {
     const e = 0.5 * T.q;
     if (u < e || v < e || u > w - e || v > d - e) return INK;
     if (u < kerb || v < kerb || u > w - kerb || v > d - kerb) return P.t;
-    if (seam > 0 && ((u % seam) < 0.62 * T.q || (v % seam) < 0.62 * T.q)) return P.r;
+    // A PAVING JOINT IS INK, AND IT IS THE ONE PLACE A LATTICE OF STROKES IS
+    // THE RIGHT ANSWER: each joint CLOSES a slab. Drawn as a value step it
+    // divided nothing, and ink-enclosed cells are the metric that suffered
+    // most when the world doubled — a crop that held 370 closed cells holds
+    // 206-292 now, against the reference'''s 380, because there are a quarter as
+    // many objects to enclose. The pitch is per block and usually absent, and
+    // 44-104px is coarse enough that it is paving rather than a grid.
+    if (seam > 0 && ((u % seam) < 0.55 * T.q || (v % seam) < 0.55 * T.q)) return INK;
     // Large pale stains with hand-drawn contours. The boundary is a quadratic
     // form in (u, v), so it walks off the 2:1 lattice at every angle, and the
     // interior is a big flat region in a tone nothing else uses.

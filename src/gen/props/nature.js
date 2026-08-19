@@ -23,7 +23,7 @@
 
 import { drawSlab } from '../../core/iso.js';
 import { box } from '../draw.js';
-import { topFace } from '../faces.js';
+import { topFace, leftFace, rightFace } from '../faces.js';
 import { h3 } from '../palette.js';
 import { dep, projR } from '../view.js';
 
@@ -84,10 +84,17 @@ function blob(R, variant) {
       const d = Math.sqrt(i * i + jj * jj);
       const th = Math.atan2(jj, i);
       if (d > rad(th)) { line += '.'; continue; }
-      // light from the upper left, with clumped foliage breaking the ramp
-      const n = ((h3(i >> 1, j >> 1, 0x2f1b + variant) >>> 8) & 15) / 15 - 0.5;
-      const s = (i * 0.5 + jj * 0.86) / R + n * 0.42;
-      line += s < -0.30 ? 'l' : s < 0.40 ? 'm' : 'x';
+      // FOUR TONES, CLUMPED AT TWO SCALES. A canopy is 30-50px across now, and
+      // at three tones in big smooth bands it read as a green slab with one
+      // lighter patch — the same "large undetailed facet" failure the round is
+      // about, moved onto foliage. The ramp is the light; the two octaves of
+      // hash are the clumps of leaf that break it, one at 3px and one at 7px,
+      // so the mass has structure at both the size of a branch and the size of
+      // a leaf cluster.
+      const n1 = ((h3(i >> 1, j >> 1, 0x2f1b + variant) >>> 8) & 15) / 15 - 0.5;
+      const n2 = ((h3(i / 7 | 0, j / 7 | 0, 0x71c3 + variant) >>> 8) & 15) / 15 - 0.5;
+      const s = (i * 0.5 + jj * 0.86) / R + n1 * 0.34 + n2 * 0.40;
+      line += s < -0.52 ? 'a' : s < -0.06 ? 'l' : s < 0.44 ? 'm' : 'x';
     }
     core.push(line);
   }
@@ -181,7 +188,7 @@ function grow(rows, k) {
 
 const SMALL = CANOPY.map((r) => grow(r, 1));
 
-const leafMap = (C, g) => ({ d: C.black, x: g.k, m: g.l, l: g.t, '.': -1 });
+const leafMap = (C, g) => ({ d: C.black, x: g.k, m: g.r, l: g.l, a: g.t, '.': -1 });
 
 export function tree(cv, iso, C, st, x, y, z, big) {
   const g = st.pick([C.leaf, C.grass, C.grass, C.green]);
@@ -193,7 +200,7 @@ export function tree(cv, iso, C, st, x, y, z, big) {
   box(cv, iso, x, y, z, tw, tw, th, { top: tr.l, left: tr.l, right: tr.r });
   box(cv, iso, x - 0.2, y - 0.2, z, tw + 0.4, tw + 0.4, Math.max(0.5, th * 0.16),
     { top: tr.l, left: tr.k, right: tr.r });
-  const R = big ? st.int(11, 17) : st.int(7, 10);
+  const R = big ? st.int(9, 14) : st.int(6, 9);
   const rows = blob(R, st.int(0, 7));
   const p = projR(iso, x + tw * 0.5, y + tw * 0.5, z + th);
   cv.blit(p[0] - (rows[0].length >> 1), p[1] - rows.length + 2, rows,
@@ -231,13 +238,25 @@ export function hedge(cv, iso, C, st, x, y, z, w, d, h) {
   const g = st.pick([C.leaf, C.grass, C.green]);
   const F = topFace(iso, z + h, x, y);
   const seed = st.int(1, 9999);
+  const FL = leftFace(iso, y + d, x, z);
+  const FR = rightFace(iso, x + w, y, z);
+  // A clipped hedge is a solid with a shadow under its own overhang: the lower
+  // band of each side face takes the leaf's contour step, and the face carries
+  // the same two-scale clumping the canopies do. Left flat it was a 40x30px
+  // slab of one green.
+  const side = (Fx, lit, mid) => (sxp, syp) => {
+    const u = Fx.au * sxp + Fx.bu * syp + Fx.cu, v = Fx.av * sxp + Fx.bv * syp + Fx.cv;
+    if (v < h * 0.24) return g.k;
+    const k = h3(Math.floor(u / 1.1), Math.floor(v / 1.1), seed) & 7;
+    return k < 5 ? mid : lit;
+  };
   box(cv, iso, x, y, z, w, d, h, {
     top: (sxp, syp) => {
       const u = F.au * sxp + F.bu * syp + F.cu, v = F.av * sxp + F.bv * syp + F.cv;
       const k = h3(Math.floor(u / 1.4), Math.floor(v / 1.4), seed) & 7;
       return k < 6 ? g.l : g.t;
     },
-    left: g.l, right: g.r,
+    left: side(FL, g.t, g.l), right: side(FR, g.l, g.r),
   });
 }
 
