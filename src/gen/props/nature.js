@@ -96,6 +96,20 @@ const FROND_SWING_PX = 0;
  * frond, so either the frond changes colour or nothing does. There is no
  * amplitude between "no motion" and "one frond", by construction.
  *
+ * UP RATHER THAN DOWN, AND THE REASON IS STRUCTURAL RATHER THAN TASTE. Both
+ * directions were built and rendered. They move IDENTICAL PIXELS — six city
+ * seeds, 966-2819 moving px, 10.4-16.2% in specks, island p50 2-3, the same
+ * three figures to the digit — because which fronds change is not a function of
+ * what they change to. They do not look the same at all. One rung DOWN lands
+ * the frond core on `g.r`, which is the tone its own blade EDGES are already
+ * drawn in, so a lit frond loses its keyline, merges into its neighbours and
+ * reads as a frond going missing rather than one turning. One rung UP lands on
+ * `g.t`, which is in neither the core nor the edge, so the frond keeps all
+ * three of its tones and reads as a blade catching the sun — which is also the
+ * thing a palm frond actually does. Whole-frame craft cannot tell the two
+ * apart (every metric identical to 3 dp bar orphan 1px at 0.013 pp, which is
+ * noise); the picture can tell them apart instantly.
+ *
  * IT SATURATES AT ONE RUNG AND THAT IS HONEST. `stage.gain` multiplies it like
  * every other amplitude here, but the ladder has exactly one rung above the
  * frond core, so gain 1.8 and gain 3 buy the same tone. Above gain 1 the knob's
@@ -109,12 +123,31 @@ const FROND_LIT_STEPS = 1;
  * two or three of a palm's seven-to-nine fronds, so the thing that lights up is
  * a CLUMP rather than a frond doing something on its own.
  *
- * SET AT 0 IN THIS COMMIT, exactly as every other amplitude in this file was:
- * the plumbing lands first and is provably inert — no `L` is ever emitted, so
- * every crown table is byte-for-byte the one it was before — and the motion
- * lands on top of it once it has been swept.
+ * SWEPT 30 / 45 / 60 / 90, the palm rendering ALONE with the canopy and bush
+ * amplitudes zeroed — because `docs/BAR.md` records a component clearing the
+ * speck floor on its neighbours' coherence and not on its own, and that reading
+ * had to be thrown away. Six city seeds each; median moving pixels and the
+ * largest single moving island:
+ *
+ *   30 deg   1010 px   largest island  43-96      about ONE frond
+ *   45 deg   1337 px   largest island  56-112
+ *   60 deg   1447 px   largest island  75-112     two to three fronds
+ *   90 deg   1584 px   largest island  95-118     most of the crown at once
+ *
+ * The speck share is flat across all four at 10.0-16.9%, so coherence does not
+ * choose between them — the READING does, and the numbers say what the pictures
+ * say. At 30 the sector holds one frond and four of the eight frames are
+ * effectively still, so the crown blinks a blade instead of catching a gust. At
+ * 90 the largest island is nearly the whole crown's core and the palm pulses as
+ * a unit, which is the failure `GUST_COS` names on the canopy side. And the
+ * curve flattens after 45: widening past 60 buys 9% more motion and a whole
+ * frond's worth of coherence, which is the wrong trade.
+ *
+ * 60 is also, deliberately, the same wedge `GUST_COS` cuts out of a canopy rim.
+ * The two things that move in a city post should mean the same thing by "a
+ * clump", and now one number says so for both.
  */
-const FROND_GUST_DEG = 0;
+const FROND_GUST_DEG = 60;
 /**
  * The sector's quantisation, and its slot in the crown cache key. The half
  * angle is `FROND_GUST_DEG * wid / GUST_STEPS`, so `wid` is a whole number of
