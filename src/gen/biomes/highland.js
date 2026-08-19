@@ -315,6 +315,16 @@ export function paintHighland(stage) {
   const T = makeTerrain({ X0: A0, Y0: B0, X1: A1, Y1: B1, cell, step, height });
   stage.terrain = T;
 
+  // The stage's own `vis` projects at z = 0, which on a hundred-unit massif is
+  // out by four hundred pixels. This one takes the object's foot where it
+  // actually stands and its height above that.
+  const seen = (x, y, z, hh) => {
+    const p = iso.proj(x, y, z);
+    if (p[0] < -56 || p[0] > W + 56) return false;
+    if (p[1] < -24) return false;
+    return p[1] - 2 * S * hh <= H + 28;
+  };
+
   // ------------------------------------------------------------- the fields
   let sunx = ms.range(-1, 1), suny = ms.range(-1, 1);
   { const n = Math.sqrt(sunx * sunx + suny * suny) || 1; sunx /= n; suny /= n; }
@@ -508,6 +518,58 @@ export function paintHighland(stage) {
     tarnFam._L * ws.range(0.74, 0.88));
   cutTarns(T, F, ws, step, TL0, seedN);
 
+  // ---------------------------------------------------------------- the hero
+  // GENERATE THE MATRIX, AUTHOR THE FIGURE, LET THE MATRIX READ THE FIGURE.
+  //
+  // Everything else in this frame is admitted by the land: a tree stands where
+  // the elevation lets it, a wall follows a contour, scree lies where a cliff
+  // put it. The viaduct is the one thing that was DECIDED, and it is decided
+  // FIRST so the track can be routed to it and the scatter can yield to it.
+  //
+  // The site is searched, not sampled: hard vetoes and then a weighted score,
+  // with no minimum-suitability cutoff anywhere. What a viaduct needs is a
+  // GULLY — high ground at both ends, a deep sag between them, and the two
+  // abutments within a few units of each other — and none of that can be got
+  // by picking a point and hoping.
+  const hs = rng.stream('viaduct');
+  const hero = findViaduct(T, iso, W, H, S, A0, A1, B0, B1, hs);
+
+  // --------------------------------------------------------------- the track
+  // A road in a city is a decision; a track in a landscape is a CONSEQUENCE.
+  // `walkTrack` with a heavy climb cost takes the flattest heading available at
+  // every step, so it contours round a spur and doubles back where the ground
+  // shuts it out — a hill track, off the 2:1 lattice everywhere. It is walked
+  // out of the viaduct's western abutment in both directions so the crossing is
+  // ON the route rather than beside one.
+  const ts = rng.stream('track');
+  const climb = ts.range(1.8, 4.2);
+  const tw = ts.range(2.1, 3.0);
+  // IT STARTS IN THE MIDDLE OF THE FRAME AND IS WALKED BOTH WAYS.
+  //
+  // The first version started it at the viaduct's abutment, and since a hundred
+  // -unit viaduct spans the whole frame width its abutments are at the frame
+  // EDGES: the track left the picture in four steps and no seed had a visible
+  // route at all. The seed point is inverted from the centre pixel onto the
+  // terrain surface, and both walks are biased along world (1,1), which is the
+  // screen's long axis — a track that leaves sideways is out of frame in eighty
+  // pixels.
+  let tsx0 = 0, tsy0 = 0;
+  {
+    const u = (W * 0.5 - iso.ox) / (2 * S);
+    let p = [(u + (H * 0.5 - iso.oy) / S) / 2, ((H * 0.5 - iso.oy) / S - u) / 2];
+    for (let i = 0; i < 3; i++) {
+      const v = (H * 0.5 - iso.oy) / S + 2 * T.surfaceZ(p[0], p[1]);
+      p = [(v + u) / 2, (v - u) / 2];
+    }
+    tsx0 = p[0]; tsy0 = p[1];
+  }
+  const th = ts.range(-0.30, 0.30);
+  const tdx = 0.7071 - th * 0.7071, tdy = 0.7071 + th * 0.7071;
+  const tn = Math.sqrt(tdx * tdx + tdy * tdy);
+  const wa = { pts: walkLeg(T, ts, tsx0, tsy0, -tdx / tn, -tdy / tn, climb) };
+  const wb = { pts: walkLeg(T, ts, tsx0, tsy0, tdx / tn, tdy / tn, climb) };
+  const TRK = splatTrack([wa.pts.slice().reverse(), wb.pts], A0, B0, A1, B1);
+
   // -------------------------------------------------------------- the ground
   const gs = rng.stream('groundmix');
   const kSnowC = gs.range(7.0, 13.0);     // snow lies in hollows, not on ridges
@@ -547,6 +609,18 @@ export function paintHighland(stage) {
     const reg = regOf(F.ch(CH_RA), F.ch(CH_RB));
     const conc = F.ch(CH_CONC);
     const gh = F.grad(0);
+
+    // ---- the track, cut into whatever it crosses
+    const td = TRK.at(u, v);
+    if (td < tw + 1.1) {
+      if (td > tw + 0.35) return INK;             // the track's own closing line
+      const c = td / tw;
+      if (c < 0.30) return TN(M_TURF, reg, li).r; // the crown, still grassed
+      if (c > 0.74) return TN(M_SOIL, reg, li).k; // the rut, in its own dark
+      const SCq = TN(M_SCREE, reg, li);
+      const p = patch(u, v, 9, S1 + 211, 4);
+      return p === 2 ? SCq.l : p === 1 ? TN(M_SOIL, reg, li).l : SCq.t;
+    }
     // THE LIGHT ON THE MASSIF. Every top face in this projection is the same
     // plane, so nothing in the renderer knows which way a slope faces; the
     // aspect field is what turns fifteen flat terraces into a sunlit flank and
@@ -752,7 +826,39 @@ export function paintHighland(stage) {
   drawTerrain(cv, iso, T, { top: groundTop, side: groundSide, water: groundWater },
     { tagFor, ink: INK });
 
-  stage.highland = { T, F, TN, LI, regOf, step, TL0, SN0, A0, A1, B0, B1 };
+  // ------------------------------------------------------- drawing the hero
+  const vs = rng.stream('viaductdraw');
+  const mason = C.mk(C.stone._h + vs.range(-11, 11), C.stone._s * vs.range(0.55, 1.5),
+    Math.min(0.88, C.stone._L * vs.range(0.70, 0.96)));
+  const ballast = C.mk(C.roadD._h + vs.range(-12, 12), C.roadD._s * vs.range(0.5, 1.8),
+    Math.min(0.72, C.roadD._L * vs.range(0.82, 1.16)));
+  P.viaduct(cv, iso, C, vs, {
+    x0: hero.x0, y0: hero.y0, len: hero.len, wide: hero.wide, ax: hero.ax,
+    zDeck: hero.zDeck, rise: hero.rise, bays: hero.bays,
+    groundZ: (x, y) => T.surfaceZ(x, y), tone: mason, deck: ballast, tag,
+  });
+  // The abutment: a short masonry wing at each end so the deck runs INTO the
+  // hillside instead of stopping in mid-air. Two boxes, and they are what makes
+  // the crossing read as part of a line rather than as an ornament.
+  for (const e of [0, 1]) {
+    const t = e === 0 ? -9 : hero.len + 1;
+    const bx = hero.ax === 0 ? hero.x0 + t : hero.x0 - 1.4;
+    const by = hero.ax === 0 ? hero.y0 - 1.4 : hero.y0 + t;
+    const bw = hero.ax === 0 ? 8 : hero.wide + 2.8;
+    const bd = hero.ax === 0 ? hero.wide + 2.8 : 8;
+    const gz = T.surfaceZ(bx + bw * 0.5, by + bd * 0.5);
+    if (hero.zDeck + 1.4 - gz < 1) continue;
+    cv.t = tag();
+    box(cv, iso, bx, by, gz - 2, bw, bd, hero.zDeck + 1.4 - gz + 2,
+      { top: mason.t, left: mason.l, right: mason.r });
+  }
+
+  // --------------------------------------------------- the route's furniture
+  const fs = rng.stream('routefurniture');
+  const allPts = wa.pts.slice().reverse().concat(wb.pts);
+  routeFurniture(cv, iso, C, fs, T, F, allPts, hero, tag, tagRaw, seen, mason);
+
+  stage.highland = { T, F, TN, LI, regOf, step, TL0, SN0, A0, A1, B0, B1, TRK, hero, wa, wb, tw };
 }
 
 // ---------------------------------------------------------------------------
@@ -765,6 +871,217 @@ export function paintHighland(stage) {
 // wetness and level, nothing else — and `drawTerrain` then draws the water
 // shader on those cells and hangs the surrounding walls down to them, which is
 // exactly what the rim of a corrie does.
+
+// ---------------------------------------------------------------------------
+// WHERE THE VIADUCT GOES.
+//
+// Frostwind's rule for its single oasis — "a world with one water body cannot
+// leave its position to a jittered angle" — is the same case as this. So the
+// site is SEARCHED: eleven candidate midpoints by eleven, each tried in both
+// axes, hard vetoes first and a weighted score after, and no minimum-
+// suitability cutoff anywhere. All the discrimination lives in the ranking.
+//
+// The candidates are laid out in SCREEN space and dropped onto the terrain by
+// three rounds of fixed-point inversion, because "near the middle of the frame"
+// is a screen property and on a hundred-unit massif the world point under a
+// given pixel moves by two hundred units as the ground rises under it.
+
+function findViaduct(T, iso, W, H, S, A0, A1, B0, B1, st) {
+  const bays = st.int(4, 7);
+  const len = Math.round(st.range(66, 104));
+  const wide = st.range(8.0, 11.0);
+  const inv = (sx, sy, z) => {
+    const u = (sx - iso.ox) / (2 * S);
+    const v = (sy - iso.oy) / S + 2 * z;
+    return [(v + u) / 2, (v - u) / 2];
+  };
+  const site = (sx, sy) => {
+    let p = inv(sx, sy, 0);
+    for (let i = 0; i < 3; i++) p = inv(sx, sy, T.surfaceZ(p[0], p[1]));
+    return p;
+  };
+  const tsx = W * 0.5, tsy = H * 0.44;
+  let best = null, bestS = -1e9, fall = null, fallS = -1e9;
+  for (let a = -5; a <= 5; a++) {
+    for (let b = -5; b <= 5; b++) {
+      const sx = tsx + a * (W * 0.075), sy = tsy + b * (H * 0.055);
+      const m = site(sx, sy);
+      for (let ax = 0; ax < 2; ax++) {
+        const dx = ax === 0 ? 1 : 0, dy = ax === 0 ? 0 : 1;
+        const x0 = m[0] - dx * len * 0.5, y0 = m[1] - dy * len * 0.5;
+        const x1 = x0 + dx * len, y1 = y0 + dy * len;
+        if (x0 < A0 + 20 || x1 > A1 - 20 || y0 < B0 + 20 || y1 > B1 - 20) continue;
+        const z0 = T.surfaceZ(x0, y0), z1 = T.surfaceZ(x1, y1);
+        if (T.isWet(x0, y0) || T.isWet(x1, y1)) continue;      // not off a tarn
+        const drop = Math.abs(z0 - z1);
+        if (drop > 15) continue;                    // abutments must be a pair
+        const zDeck = Math.max(z0, z1) + 1.0;
+        let sag = 1e9;
+        for (let q = 2; q <= 8; q++) {
+          const t = q / 10;
+          sag = Math.min(sag, zDeck - T.surfaceZ(x0 + dx * len * t, y0 + dy * len * t));
+        }
+        const near = 1 - Math.sqrt(a * a * 1.0 + b * b * 1.0) / 8;
+        const sc = cl01(sag / 34) * 0.44 + near * 0.44 + (1 - cl01(drop / 15)) * 0.12;
+        if (sc > fallS) { fallS = sc; fall = { x0, y0, ax, zDeck, sag }; }
+        if (sag < 13) continue;                     // it must cross a real gully
+        if (sc > bestS) { bestS = sc; best = { x0, y0, ax, zDeck, sag }; }
+      }
+    }
+  }
+  const h = best || fall || { x0: A0 + 60, y0: B0 + 60, ax: 0, zDeck: 20, sag: 14 };
+  h.len = len; h.wide = wide; h.bays = bays;
+  h.rise = Math.min(h.sag * 0.42, len / bays * 0.46);
+  h.x = h.x0 + (h.ax === 0 ? len * 0.5 : 0);
+  h.y = h.y0 + (h.ax === 0 ? 0 : len * 0.5);
+  return h;
+}
+
+// ---------------------------------------------------------------------------
+// The track's distance field, splatted rather than solved.
+//
+// The ground shader needs "how far is this pixel from the track" three hundred
+// thousand times a frame, and the polyline has two hundred segments. Walking
+// the polyline once and stamping a bounded disc of minimum distances into a
+// two-unit grid costs about a hundred and sixty thousand operations TOTAL, and
+// bilinear sampling of the result is smooth enough that the track's edge is a
+// hand-drawn curve rather than a staircase.
+
+// A LEAST-COST WALK ON A CONE IS A CIRCLE, which is the one thing this track
+// must not be. `walkTrack` takes the flattest heading at every step, and the
+// authored massif is a cone, so a single 90-step walk came back after 455 units
+// of walking fourteen units from where it started — a closed loop round the
+// hill. Walking it in three legs and nudging the heading back toward the
+// screen's long axis between them keeps what the walk is FOR — the ground
+// decides the line, and a spur it cannot climb turns it — while making it a
+// traverse that crosses the frame instead of a spiral that leaves it empty.
+function walkLeg(T, st, x0, y0, dx, dy, climb) {
+  const pts = [[x0, y0]];
+  let cx = x0, cy = y0, cdx = dx, cdy = dy;
+  for (let s = 0; s < 4; s++) {
+    const w = walkTrack(T, st, {
+      x0: cx, y0: cy, dx: cdx, dy: cdy, steps: 26, len: 5.4, fan: 0.72, climb,
+    });
+    if (w.pts.length < 2) break;
+    for (let i = 1; i < w.pts.length; i++) pts.push(w.pts[i]);
+    const a = w.pts[w.pts.length - 1], b = w.pts[Math.max(0, w.pts.length - 3)];
+    let nx = (a[0] - b[0]) * 0.22 + dx * 0.78, ny = (a[1] - b[1]) * 0.22 + dy * 0.78;
+    const n = Math.sqrt(nx * nx + ny * ny) || 1;
+    cdx = nx / n; cdy = ny / n; cx = a[0]; cy = a[1];
+  }
+  return pts;
+}
+
+function splatTrack(polys, X0, Y0, X1, Y1) {
+  const cell = 2.0, R = 15;
+  const gx = Math.ceil((X1 - X0) / cell) + 2, gy = Math.ceil((Y1 - Y0) / cell) + 2;
+  const a = new Float32Array(gx * gy).fill(R + 4);
+  const rc = Math.ceil(R / cell);
+  for (const pts of polys) {
+    for (let i = 1; i < pts.length; i++) {
+      const [ax, ay] = pts[i - 1], [bx, by] = pts[i];
+      const dx = bx - ax, dy = by - ay;
+      const L = Math.sqrt(dx * dx + dy * dy);
+      const n = Math.max(1, Math.ceil(L / 1.6));
+      for (let q = 0; q <= n; q++) {
+        const x = ax + dx * (q / n), y = ay + dy * (q / n);
+        const ci = Math.round((x - X0) / cell), cj = Math.round((y - Y0) / cell);
+        for (let j = cj - rc; j <= cj + rc; j++) {
+          if (j < 0 || j >= gy) continue;
+          const py = Y0 + j * cell - y;
+          for (let k = ci - rc; k <= ci + rc; k++) {
+            if (k < 0 || k >= gx) continue;
+            const px = X0 + k * cell - x;
+            const d = Math.sqrt(px * px + py * py);
+            const o = j * gx + k;
+            if (d < a[o]) a[o] = d;
+          }
+        }
+      }
+    }
+  }
+  return {
+    at(x, y) {
+      const fx = (x - X0) / cell, fy = (y - Y0) / cell;
+      let i = Math.floor(fx), j = Math.floor(fy);
+      if (i < 0) i = 0; else if (i > gx - 2) i = gx - 2;
+      if (j < 0) j = 0; else if (j > gy - 2) j = gy - 2;
+      const tx = fx - i, ty = fy - j;
+      const o = j * gx + i;
+      const lo = a[o] + (a[o + 1] - a[o]) * tx;
+      const hi = a[o + gx] + (a[o + gx + 1] - a[o + gx]) * tx;
+      return lo + (hi - lo) * ty;
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// What stands beside the track.
+//
+// A route in this landscape is not a line, it is a line with things ALONG it,
+// and they are the things that say what the line is for: a cairn where it
+// crosses a shoulder, a marker post at a bend, a run of post-and-wire on the
+// pasture side, a fold where it passes a bench. Each is admitted by the ground
+// under it and discarded — not relocated — when the ground refuses.
+
+function routeFurniture(cv, iso, C, st, T, F, pts, hero, tag, tagRaw, seen, mason) {
+  const g = C.mk(C.stone._h + st.range(-10, 10), C.stone._s * st.range(0.6, 1.5),
+    Math.min(0.86, C.stone._L * st.range(0.62, 0.90)));
+  const w = C.mk(C.wood._h + st.range(-10, 10), C.wood._s * st.range(0.6, 1.2),
+    C.wood._L * st.range(0.7, 1.0));
+  let d = 0;
+  for (let i = 4; i < pts.length - 4; i++) {
+    const [x, y] = pts[i];
+    const [px, py] = pts[i - 1];
+    d += Math.sqrt((x - px) * (x - px) + (y - py) * (y - py));
+    if (d < st.range(26, 62)) continue;
+    d = 0;
+    const z = T.surfaceZ(x, y);
+    if (T.isWet(x, y)) continue;
+    // A cairn wants a shoulder — convex ground with a view — and a marker post
+    // is what you put where the cairn would not be seen.
+    const conc = F.one(x, y, CH_CONC);
+    const nx = -(pts[i + 1][1] - py), ny = pts[i + 1][0] - px;
+    const nn = Math.sqrt(nx * nx + ny * ny) || 1;
+    const ox = (nx / nn) * st.range(3.4, 5.2), oy = (ny / nn) * st.range(3.4, 5.2);
+    if (!seen(x + ox, y + oy, z, 6)) continue;
+    if (conc < -0.06 && st.bool(0.62)) {
+      cv.t = tag();
+      P.cairn(cv, iso, C, st, x + ox, y + oy, T.surfaceZ(x + ox, y + oy),
+        { tone: g, R: st.range(1.5, 2.4) });
+    } else {
+      cv.t = tag();
+      const zz = T.surfaceZ(x + ox, y + oy);
+      box(cv, iso, x + ox, y + oy, zz - 0.4, 0.9, 0.9, st.range(3.6, 5.4),
+        { top: w.t, left: w.l, right: w.k });
+      cv.t = tag();
+      box(cv, iso, x + ox - 0.3, y + oy - 0.3, zz - 0.4 + 4.2, 1.5, 1.5, 0.7,
+        { top: mason.t, left: mason.l, right: mason.r });
+    }
+  }
+  // POST AND WIRE ALONG ONE SIDE, in lengths, because a fence that runs the
+  // whole track is a stroke that encloses nothing. Culled per post against the
+  // frame, so the ones behind the camera cost a projection and no pixels.
+  let i = st.int(6, 16);
+  while (i < pts.length - 12) {
+    const n = st.int(9, 22);
+    const run = pts.slice(i, Math.min(pts.length - 2, i + n));
+    if (run.length > 3) {
+      cv.t = tag();
+      const s = st.bool(0.5) ? 1 : -1;
+      const off = run.map(([x, y], k) => {
+        const q = run[Math.min(run.length - 1, k + 1)];
+        const dx = q[0] - x, dy = q[1] - y;
+        const L = Math.sqrt(dx * dx + dy * dy) || 1;
+        return [x - s * (dy / L) * 4.0, y + s * (dx / L) * 4.0];
+      });
+      P.postWire(cv, iso, C, st, off, (x, y) => T.surfaceZ(x, y),
+        { tone: w, h: st.range(2.4, 3.2), pitch: st.range(4.0, 5.4),
+          cull: (x, y) => seen(x, y, T.surfaceZ(x, y), 4) });
+    }
+    i += n + st.int(10, 30);
+  }
+}
 
 function cutTarns(T, F, st, step, TL0, seedN) {
   const { X0, Y0, X1, Y1, cell, gx, gy, raw, lvl, wet } = T;
