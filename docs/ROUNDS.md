@@ -505,3 +505,124 @@ judgement alone — an assumption, not a checked property.
   number from fewer than about six seeds now carries its range or does not
   appear. And the statistic must match how the artefact is judged: the duel shows
   crops, so a whole-image mean is the wrong summary.
+
+---
+
+## r5 — biomes. A BUILD round with NO DUEL, and it must not be read as a win.
+
+Tree `c14c58b3341ff5ff`. `verify.mjs --seeds 8`: **8/8 byte-identical across processes, 8/8
+distinct seeds distinct.**
+
+**There was no duel this round and therefore there is no result.** Every number below is a
+floor or a diagnostic, and `docs/DIFF.md` §3 and `docs/BAR.md` are unambiguous that no count
+here can rank anything inside the craft family. The win-loss record is unchanged at
+**r1 LOSS, r2 LOSS 0-4, r3 LOSS 0-4.**
+
+### What was built
+
+The layout driver is no longer welded to the city. `src/gen/stage.js` holds what is true of
+every post — projection, tagged canvas, silhouette sweep, contour ladder, per-neighbourhood
+colour commitment — and `scene.js` dispatches to a biome module that owns its layout end to
+end. `world.js` supplies analytic height fields; `terrain.js` terraces one onto a cell grid,
+draws it as flat tops with exposed walls tagged **one tag per terrace level** so the sweep
+inks contour breaks and never the cell grid, and provides affordance readouts and a
+least-cost track walk.
+
+Four biomes: **city** (unchanged), **shore**, **desert**, **highland**. Each has its own
+placement axis, which is the test of whether four biomes are one biome:
+
+| biome | admits on |
+|---|---|
+| city | parcel land-use type |
+| shore | wave exposure — signed cross-shore distance |
+| desert | ground mobility — the sand-supply envelope |
+| highland | an elevation ceiling for woody growth that itself varies with terrain form |
+
+**The city is byte-identical across the refactor**, 4/4 on the city seeds of ten.
+
+### Measured, 6 seeds each at 440x900, city as same-size control
+
+| | city | shore | desert | highland | bar |
+|---|---|---|---|---|---|
+| distinct colours | 741-1015 | 1624-2161 | 916-1287 | 563-709 | >= 600 |
+| largest flat region | 1.18-2.88% | 0.80-1.71% | 0.83-1.16% | 0.65-1.37% | <= 2.8% |
+| `flat5x5` | .148-.201 | .222-.291 | .178-.214 | .168-.229 | .10-.28 |
+| `darkShare` | 12.7-23.7% | 6.7-13.1% | 11.9-18.7% | 9.8-21.9% | 10-19% |
+| orphan 1px | 1.85-2.43% | 1.29-1.84% | 2.26-2.67% | 1.57-3.14% | <= 2.4% |
+| render | 191-220ms | 193-204ms | 206-243ms | 234-258ms | <= 300 |
+
+### THE HONEST HEADLINE: the biomes REGRESS the one metric that passes the ordering test
+
+Ink closure is the only diagnostic in this repo that has ever ordered genuine work above the
+generator correctly (`docs/CRAFT.md`). Median of 9 crops, 6 seeds per biome, 1600x1100:
+
+| | ink closure | range |
+|---|---|---|
+| **LA reference** | **3.23** | — |
+| **Lufthansa** — genuine, same family | **4.95** | — |
+| city, pre-biome baseline | 5.94 | 5.23-7.02 |
+| **city, now** | **5.80** | 5.28-6.68 |
+| **shore** | **6.33** | 5.57-11.89 |
+| **desert** | **6.50** | 5.35-9.76 |
+| **highland** | **8.40** | 6.69-11.85 |
+
+**The city is unchanged. All three landscape biomes are worse, and their spread is two to
+three times wider.** Highland's median is 45% above the city's and its worst seed is nearly
+four times the reference. A terraced landscape produces many flat fields per closed loop —
+that is what the metric measures and it is measuring it correctly. **This is the largest
+open defect of the round and it was not chased.**
+
+### What the round taught the process
+
+- **A threshold does not travel between frame sizes.** The lead's first acceptance table was
+  derived at 1600x1100 and applied at 440x900, and **the pre-biome city failed two of its own
+  thresholds** (673-1223 distinct colours against a floor of 2,000; largest region 0.85-2.78%
+  against a ceiling of 0.55%). Same shape as the tempo estimator returning the centre of its
+  own search window. Re-derived at the size it is applied.
+- **A colour floor with no coherence constraint is bought with hue randomisation.** It turned
+  the highland into camouflage — lime, olive, blue, purple and teal blobs with no rationale —
+  which is `OWNERSHIP.md` rule 5 exactly. The floor was also 3x too high. Both halves are now
+  in the measurement script, with the line that the numbers are not the picture.
+- **`flat5x5` must be accepted at the GROUND STAGE, before props.** Unlike `darkShare` and
+  colour count it does not arrive with the objects. See `docs/CRAFT.md`.
+- **A number in band on four seeds does not mean the picture is right on the fifth.** Rule 8's
+  converse. The desert passed every gate on four seeds while one seed rendered an edge-to-edge
+  strip mine.
+- **Three builders died mid-driver with everything uncommitted**, one losing a finished
+  driver. The re-dispatch mandated staged commits — ground, hero, organising line, scatter —
+  and no work was lost thereafter.
+
+### Bugs found and fixed, each of which was silent
+
+1. **Terrain cells must tile the screen exactly.** A cell whose projected width `2*s*cell` is
+   fractional makes `fillPoly` round two neighbouring diamonds the same way, leaving unwritten
+   pixels — and `Canvas.idx` is zero-filled while palette index 0 is the shared **true black**.
+   Two biomes were shipping ~1,300px per frame of black chevron on a regular lattice, which no
+   gate can see: it is not an outline so the ink metrics count it as material. Holes by cell:
+   1.10 -> 3.65%, 2.60 -> 0.43%, 2.30 -> 0.38%, 3.10 -> 0.34%; every quantised value -> 0.
+   Guard added in `drawTerrain`, which throws rather than snapping.
+2. **The content law had a hole in WHERE the filter ran.** Signs truncate to fit their panel
+   and both filters tested the untruncated word, so every displayed prefix was unguarded.
+   Measured: exact brand collisions 1 in 948, **truncated-prefix collisions 1 in 394**. Fixed,
+   and the residual re-measured on a HOLDOUT of 147 marks not added to the list: **1 in 2,020**.
+   Not zero and cannot be made zero this way. See `docs/CRAFT.md`.
+3. **The long-horizontal-run "projection bug" is not a projection bug** — 83% of runs >=40px
+   sit in a contiguous vertical stack, so they are unarticulated faces, not lines.
+
+### Open, and blocking any future round
+
+1. **Ink closure regressed on all three landscapes** (above). The largest defect of the round.
+2. **`darkShare` is out of band at both ends now**: shore 6.7% at the floor, city 23.7% and
+   highland 21.9% over the 19% ceiling. It was an over-ink regression in r3; it is now a
+   two-sided one.
+3. **Orphan 1px islands over on desert (3 of 6 seeds) and highland**, from 1px prop keylines
+   whose ring dilation is corner-touching by construction.
+4. **One composer for four biomes.** A beach and a mountain play the same city chiptune. The
+   knobs exist (`compose.js:68` tempo, `:73-78` tonic and mode) and were deliberately NOT
+   touched: `src/audio/**` is the one subsystem with a formal measured band and a separate
+   owner by design, and changing it unmeasured to fix an aesthetic mismatch is the failure
+   those rules exist to prevent.
+5. **Only the city can be duelled.** Measured on the bar itself: it contains **no water and no
+   beach** — largest single-colour region 8,780px of pale cream, biggest two blues ~3,200px,
+   which is signage scale. `tools/duel.mjs` now redraws the post seed until the seed's own
+   biome is a city, rather than forcing a biome, and records how many seeds it passed over.
