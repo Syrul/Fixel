@@ -28,9 +28,25 @@ const h = parseInt(arg('h', '1100'), 10);
 // Left off, this file behaves as it always has.
 const biome = arg('biome', undefined);
 
+// --frame / --frames: WHICH picture of the loop, and how many there are.
+//
+// Left off, `frames` is 1 and the animation path is provably inert — no
+// recorder, no allocation, not a branch inside a shader — so every digest,
+// every metric run and every duel crop this repo has ever recorded still
+// renders the same bytes. `docs/OWNERSHIP.md` rule 2 depends on that: a metric
+// without a tree digest is not evidence, and a tree whose default output moved
+// under a feature nobody asked to enable would invalidate all of them at once.
+const frames = parseInt(arg('frames', '1'), 10);
+const frame = parseInt(arg('frame', '0'), 10);
+
 const t0 = Date.now();
-const cv = renderScene(seed, biome ? { w, h, biome } : { w, h });
+const cv = renderScene(seed, {
+  w, h, frames, frame,
+  ...(biome ? { biome } : {}),
+});
 const ms = Date.now() - t0;
 mkdirSync(dirname(out), { recursive: true });
 writePNG(out, cv.w, cv.h, cv.toRGBA());
-process.stderr.write(`seed=${seed}${biome ? ` biome=${biome}` : ''} ${cv.w}x${cv.h} palette=${cv.pal.size} ${ms}ms -> ${out}\n`);
+process.stderr.write(
+  `seed=${seed}${biome ? ` biome=${biome}` : ''} ${cv.w}x${cv.h} palette=${cv.pal.size}` +
+  `${frames > 1 ? ` frame=${frame}/${frames} anim=${cv.anim ? cv.anim.n : 0}px` : ''} ${ms}ms -> ${out}\n`);

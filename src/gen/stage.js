@@ -18,6 +18,7 @@
 
 import { Rng } from '../core/rng.js';
 import { Canvas } from '../core/canvas.js';
+import { AnimRec } from '../core/anim.js';
 import { View, SCALE } from './view.js';
 import { setInk } from './draw.js';
 import { buildPalette } from './palette.js';
@@ -186,12 +187,40 @@ export function makeStage(seed, opts = {}) {
     return true;
   };
 
+  // THE FRAME INDEX IS A NUMBER THE STAGE CARRIES, NEVER A CLOCK IT READS.
+  //
+  // `frame` is which single picture of the loop this render is. `frames` is how
+  // many there are. A biome that animates reads `stage.frame` for its own pose
+  // and hands `stage.anim` the whole loop's worth of values for a pixel it is
+  // already shading — see `src/core/anim.js` for why those are two different
+  // jobs.
+  //
+  // WITH `frames` AT 1 THE ANIMATION PATH COSTS NOTHING AND CHANGES NOTHING.
+  // `AnimRec` allocates no buffers and `push` returns on its first line, so
+  // every existing measurement — every digest in `docs/`, `tools/metrics.mjs`,
+  // the duel — renders exactly the bytes it always rendered. That is the
+  // invariant this whole change is staged around: the machinery lands first and
+  // is provably inert, then the motion lands on top of it.
+  const frames = Math.max(1, opts.frames || 1);
+  const frame = ((opts.frame | 0) % frames + frames) % frames;
+  const anim = new AnimRec(frames, frames > 1);
+
   return {
     W, H, S, rng, pal, C, cv, iso, ox, oy, X0, X1, Y0, Y1, seedN,
     tag, tagRaw, vis,
+    frame, frames, anim,
     get tagN() { return tagN; },
     finish(o = {}) {
       if (o.outline !== false) outlinePass(cv, C.black, noOutline, tagN);
+      // AFTER the sweep, deliberately. The sweep is the last thing that writes
+      // a pixel, and a pixel it blackened is a pixel that must not animate: ink
+      // that moved would be ink redistributed, and ink closure is the one
+      // diagnostic in this repo that has ever ordered genuine work above ours
+      // correctly. The filter in `AnimRec.finish` drops those pixels because
+      // their index no longer matches what was recorded, which makes "the
+      // outlines hold still" a consequence of the arithmetic rather than a rule
+      // somebody has to remember.
+      if (frames > 1) cv.anim = anim.finish(cv);
       return cv;
     },
   };
