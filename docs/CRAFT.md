@@ -209,3 +209,68 @@ completely different absolutes. So for radius of gyration **only the ratio to
 the reference travels between agents** — quote the reference measured by the
 same script in the same breath, or the number means nothing. Two digest
 conventions already cost us a round of confusion; do not repeat it with metrics.
+
+---
+
+## Round 3, verified by the lead at frozen digest a9f2180f82d62760
+
+Median of 9 seeded 320px crops, `tools/colour.mjs`:
+
+| | ink closure | rg (pixel-weighted) |
+|---|---:|---:|
+| LA reference — the bar | **3.23** | 59.96 |
+| Lufthansa — genuine, same family | **4.95** | 87.69 |
+| **Fixel round 3** | **4.94** | 111.03 |
+| Fixel round 2 | 8.98 | 117.32 |
+
+**Ink closure 8.98 -> 4.94, which is Lufthansa's 4.95 to two decimal places.**
+On the one diagnostic that passes the ordering test — the test the 60-metric
+band failed — Fixel now sits level with a genuine eBoy Pixorama and behind only
+the bar itself. That is the first time anything in this project has reached
+genuine-work level on a discriminating metric.
+
+Radius of gyration barely moved (117.32 -> 111.03) and remains ~1.85x the
+reference. It is a floor metric only, so this is not a verdict, but it says the
+palette localisation work is not done.
+
+### Confirmed open regression: ink is now OVER budget
+
+`outline.darkShare` **0.1975** against a band ceiling of **0.1956** — FAIL, and
+the reference is 0.1626. Round 2's brief said "redistribute, do not add"; ink
+went from slightly under, through correct, to over. Redistribution became
+addition somewhere. This belongs in the verdict as an open regression, not
+buried in a metric table.
+
+`flat.frac5x5` also slipped from 0.1190 to **0.1134** against a floor of 0.1228.
+
+### Two metrics that must NOT be read at face value
+
+- **`edge.fracAA` 0.0350 (+1.63), labelled "ANTIALIASED / scaled / resampled".
+  That label is wrong here.** Nothing in the renderer blends — there is no
+  filtering path in the codebase at all. It is our own three-step luma ladder
+  appearing as consecutive 1px rows on objects too small to carry a ladder. It
+  is the SCALE defect measured a second way, not an independent failure, and
+  reporting it as antialiasing would send a builder hunting a bug that does not
+  exist.
+- **`palette.top1Share` 0.1901 (+0.89) reads backwards.** Our top colour is the
+  single shared ink at ~19% of the crop; the reference's top is a sand tone at
+  6.45% *because its black is fragmented into many near-blacks* — a rasterisation
+  artefact of the file. **This is the fourth metric contaminated by the
+  reference's file history rather than its craft**, after the near-black count,
+  the colour-ghost fraction and edge fringe. Judge brief v3's caution 4 already
+  covers it ("how concentrated the single most-used colour is" is named
+  explicitly), so no fifth proxy is needed — but the metric itself should be
+  treated as non-discriminating.
+
+### Live bug, disclosed and deliberately not fixed this round
+
+`src/gen/scene.js:104` — `tagN = (tagN % 65534) + 1` into a `Uint16Array` tag
+buffer. The worst of eight variety seeds already reaches 53,515 at 1600x1100:
+**18% headroom.** On a denser seed or a larger frame it wraps silently and two
+adjacent objects sharing a tag lose the keyline between them.
+
+The builder disclosed it and deliberately left it, because fixing it would have
+moved the digest after the gates had run. That was the right call for a round
+that could not be re-validated, and it is the wrong state to begin round 4 in.
+**Fix it before anything increases density or frame size** — which is exactly
+what round 4 (scale) will do.

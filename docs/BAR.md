@@ -512,3 +512,66 @@ best-control-vs-worst-real improved from 2 to 3.
 constrains how fast the music is — a synth may emit a crawl or a blur unnoticed provided `onsetRate`
 stays in 4.58–9.59/s. Restoring it requires an accent-aware beat tracker that passes the resampling
 self-consistency test **before** it is given a gate.
+
+---
+
+# The audio fail-count is not a score either — and here the proof is arithmetic
+
+The pixel band was retired empirically: it ranked a generator above genuine eBoy work. The audio band
+fails for a reason that needs no experiment at all.
+
+**Only 5 of the 14 gating metrics can respond to verbatim repetition** — `repeatStrength`,
+`novelFraction`, `noveltyPerSecond`, `chromaChangeRate`, `beatStrength`. **The budget is 5.**
+
+> A perfect loop cannot exceed the budget even if every development-sensitive metric fires.
+
+Measured, with every control played through the *same* engine and master chain and mastered onto the
+corpus loudness centre (best variant taken, giving the adversary its best shot):
+
+| control | fails of 14 | verdict |
+|---|---|---|
+| 1 bar of real music, repeated verbatim for 60 s | 3 | **PASS** |
+| 8 bars repeated verbatim | 3 | **PASS** |
+| uniformly-random note walk | 3 | **PASS** |
+| strict uniform (random pitch *and* rhythm, no sections) | 4 | **PASS** |
+| sustained drone | 10 | FAIL |
+
+A one-bar loop ties or beats **10 of 38** genuine chiptunes. The strict-uniform control beats **6 of 38**.
+
+**Why the bar's own controls scored 9–13 and these score 3–4:** the original controls were caught by a
+**timbre floor**, not by structure — polyphony 1.000–1.627 and centroid 5983–6561 Hz, both out of band.
+Every control here sits *in band* on polyphony (3.0–4.5) and centroid (2485–2806). **Give a fake a
+correct band-limited chip timbre and four voices, and the structural metrics catch almost nothing.**
+The bar was testing whether something sounds like a chip, never whether it is music.
+
+And the same homogeneity signature as the pixel side: the synth's mean of **1.50 ranks above genuine
+chiptune's LOO mean of 1.89**. Read that as centrality, not quality.
+
+**The audio bar is a floor that rejects a drone.** The duel is the bar.
+
+## What the audio work does establish
+
+- **Duty cycle is exactly recoverable from a solo stem, and only from a solo stem.** 12.5% → 12.50%,
+  25% → 25.00%, 50% → 50.00%, all at MSE 0.00000 — including from a *mastered* stem with the master
+  LPF divided out. A three-voice mixture returns MSE 0.01275, worse than a pure sine's 0.00887: the
+  mixture is not a pulse by the only criterion available, whatever number it reports. The solo-stem
+  requirement is fully vindicated.
+- **The identities hold.** `sum(stems) − mix` max error 1.35e-7 (float32 accumulation only), and a
+  first-0.5 s render is bit-identical to that span of the 60 s render, because phase integrates from
+  each note's own onset.
+- **Determinism and latency are real.** Two processes, identical SHA-256 on the mix and all five
+  stems. Cold start 26.32 ms, warm median 5.95 ms, a 60 s render in 243 ms — 247× realtime.
+
+## Two disclosures the builder made unprompted, both correct to disclose
+
+`HARMONIC_SHADOW` in `theory.js` avoids voicing notes at +12/19/24/28/31/34/36 semitones above a lower
+voice **because the analyser's salience grid suppresses them there**. It is also ordinary voicing
+practice — but it exists because of the analyser, and is labelled as such in the source. The 10.5 kHz
+master lowpass is likewise a real choice with a real effect on `spectralCentroidMean` (a raw pulse
+stack measures ~5.5 kHz against a corpus p95 of 4671), fixed rather than a per-seed knob, disclosed in
+`render.js`.
+
+**Standing rule, from a real incident:** commit path-scoped, never `git add -A`, while more than one
+builder is writing. Commit `4d59427` is titled "audio: first working chiptune engine" and contains
+only another builder's `src/gen/props/vehicles.js`. Nothing was lost and the history is not being
+rewritten while builders hold working state — but the message and the content disagree permanently.
