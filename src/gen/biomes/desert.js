@@ -376,7 +376,7 @@ export function paintDesert(stage) {
   // a pan is a CLOSED low, not "anywhere without dunes", and one seed came out
   // with half its frame in crust polygons.
   const [panBias] = qOf((x, y) => fbm(x * 0.0072, y * 0.0072, S0 + 1301, 3),
-    [es.range(0.72, 0.84)]);
+    [es.range(0.80, 0.90)]);
   const panDepth = es.range(2.6, 4.2);
 
   // --------------------------------------------------------------- plateaus
@@ -540,10 +540,10 @@ export function paintDesert(stage) {
   // different scenes while sand stays inside 26-55 degrees, rock inside 12-47 and
   // varnish inside 4-33.
   const pull = (fam, home, k) => home + (fam._h - home) * k;
-  const SAND_H = pull(C.sandy, 41, 0.42);
-  const ROCK_H = pull(C.taupe, 29, 0.40);
-  const VARN_H = pull(C.terra, 17, 0.44);
-  const CRUST_H = pull(C.cream, 45, 0.40);
+  const SAND_H = pull(C.sandy, 40, 0.34);
+  const ROCK_H = pull(C.taupe, 26, 0.34);
+  const VARN_H = pull(C.terra, 15, 0.38);
+  const CRUST_H = pull(C.cream, 44, 0.36);
 
   const mkReg = (gi, gj) => {
     const u = (k) => (h3(gi, gj, S0 ^ k) >>> 8) / 16777216;
@@ -581,7 +581,11 @@ export function paintDesert(stage) {
       ]);
     }
     const kh = ROCK_H + (u(0x41) - 0.5) * 26;
-    const ks = C.taupe._s * (0.70 + u(0x43) * 1.50);
+    // A saturation FLOOR as well as a hue band. The neutral families take as
+    // little as 0.30x of saturation, and at the bottom of that a reg at hue 46 is
+    // not warm stone, it is olive grey — three seeds of six came back reading as
+    // landfill rather than as desert.
+    const ks = Math.max(0.085, C.taupe._s * (0.85 + u(0x43) * 1.55));
     // A LAG PAVEMENT IS DARK, and this is where a desert's ink honestly lives.
     // Measured at 4-9% of the frame under luma 50 against a 10-19% band, and the
     // project's whole record says the fix is never more black strokes. The reg
@@ -729,8 +733,14 @@ export function paintDesert(stage) {
         }
       }
       const K = R.crust[best & 3];
-      if (d2 - d1 < 0.28) return K.k;
-      if (d2 - d1 < 0.60) return ((best >>> 5) & 1) ? K.l : K.r;
+      // THE CRACK HAS TO BE TWO PIXELS. At 0.28 world units it came out just
+      // under one screen pixel, and a sub-pixel line on a diagonal rasterises to
+      // a chain of pixels that touch only at their corners — every one of them
+      // 4-isolated, so the whole crust net counted as orphan islands and read as
+      // a dotted line rather than a crack. `orphan1px` was 2.6-3.7% against a
+      // 2.4% ceiling and the playa was most of it.
+      if (d2 - d1 < 0.52) return K.k;
+      if (d2 - d1 < 0.95) return ((best >>> 5) & 1) ? K.l : K.r;
       return ((best >>> 6) & 3) === 0 ? K.l : K.t;
     }
 
@@ -739,8 +749,13 @@ export function paintDesert(stage) {
     // it is the loop that closes the largest two fields in the frame off each
     // other. Width is normalised by the gradient so it stays one pixel wherever
     // the field is steep or slack.
+    // Width is normalised by the gradient so the line stays the same thickness
+    // wherever the field is steep or slack — and it is 0.19 rather than 0.05,
+    // because 0.05 gives a tenth of a world unit, which is 0.4 of a screen pixel:
+    // a line that is mostly not drawn, and where it is drawn is a diagonal chain
+    // of corner-touching pixels.
     const gs = MF.grad(u, v, 0);
-    if (sc > HAM - 0.05 * gs && sc < HAM + 0.05 * gs) return C.black;
+    if (sc > HAM - 0.19 * gs && sc < HAM + 0.19 * gs) return C.black;
     // The dune's own phase, for everything that is about the FOLD rather than
     // about the material: two operations rather than a seventh field channel.
     const ffp = tri(fold);
@@ -764,7 +779,7 @@ export function paintDesert(stage) {
         const SD = R.sandLv[(li + 4) % 6][1];
         return (e > -ge * 0.34 && e < ge * 0.34) ? SD.t : SD.l;
       }
-      const pv = patch(u, v, R.pw1, S1 + 11, 3);
+      const pv = patch(u, v, R.pw1, S1 + 11, 4);
       if (pv) return pv === 1 ? R.varn.t : R.varn.l;
       const pg = patch(u, v, R.pw2, S1 + 23, 3);
       if (pg) return pg === 1 ? R.grit.t : R.grit.l;
@@ -909,7 +924,13 @@ export function paintDesert(stage) {
     return t;
   };
   drawTerrain(cv, iso, T, { top: groundTop, side: groundSide, water: groundTop },
-    { tagFor, ink: C.black });
+    // NO SPUR ARRIS. `drawTerrain` draws a vertical stroke wherever a cell stands
+    // two terraces proud of both near neighbours, which is right for a promontory
+    // and wrong for a butte: on a cliff every cell qualifies, and the flank came
+    // out as a comb of vertical black bars — a picket fence, on three seeds. The
+    // terrace break is already inked by the silhouette sweep at every level
+    // change, and this biome's steep faces are all cliffs rather than spurs.
+    { tagFor, ink: 0 });
 
   // ---------------------------------------------------------------- the hero
   // "A world with one water body cannot leave its position to a jittered angle."
@@ -1366,7 +1387,7 @@ export function paintDesert(stage) {
   const stand = (x, y, f, salt) => fbm(x * f, y * f, S0 + salt, 2);
 
   // stones — the workhorse of reg density, in fields rather than evenly
-  scatter(4.4, 0.86, 0x1a37, (x, y, gi, gj) => {
+  scatter(5.0, 0.86, 0x1a37, (x, y, gi, gj) => {
     const sc = MF.one(x, y, 0);
     if (sc > HAM * 0.94) return;
     if (MF.one(x, y, 1) > 0.30) return;
@@ -1378,7 +1399,7 @@ export function paintDesert(stage) {
     cv.t = tagRaw();
     P.stone(cv, iso, C, ns, x, y, T.surfaceZ(x, y),
       regOf(x, y).rock[(h3(gi, gj, S0 ^ 0x1a45) >>> 3) % 3],
-      3 + (hR & 3) + ((hR >>> 4) & 1) * 3);
+      4 + (hR & 3) + ((hR >>> 4) & 1) * 3);
   });
 
   // STONES HALF-BURIED IN THE SAND, each with the tail the wind has combed out
@@ -1402,7 +1423,7 @@ export function paintDesert(stage) {
       5 + ((h3(gi, gj, S0 ^ 0x1b61) >>> 6) & 7), 2.2, R.drift);
     cv.t = tagRaw();
     P.stone(cv, iso, C, ns, x, y, z, R.rock[(h3(gi, gj, S0 ^ 0x1b59) >>> 3) % 3],
-      3 + ((h3(gi, gj, S0 ^ 0x1b5d) >>> 5) & 3));
+      4 + ((h3(gi, gj, S0 ^ 0x1b5d) >>> 5) & 3));
   });
 
   // boulders — bigger, rarer, with a drift tail behind each
@@ -1422,17 +1443,17 @@ export function paintDesert(stage) {
   });
 
   // bunchgrass — NEVER on mobile sand, and in stands rather than evenly
-  scatter(6.6, 0.9, 0x3c21, (x, y, gi, gj) => {
+  scatter(7.6, 0.9, 0x3c21, (x, y, gi, gj) => {
     const sc = MF.one(x, y, 0);
     if (sc > 0.36) return;
     if (MF.one(x, y, 1) > 0.42) return;
-    if ((h3(gi, gj, S0 ^ 0x3c25) & 255) > 24 + stand(x, y, 0.024, 417) * 300) return;
+    if ((h3(gi, gj, S0 ^ 0x3c25) & 255) > 10 + stand(x, y, 0.024, 417) * 240) return;
     if (nearBuilt(x, y)) return;
     if (!vis(x - 4, y - 4, x + 4, y + 4, 6)) return;
     cv.t = tagRaw();
     P.tussock(cv, iso, C, ns, x, y, T.surfaceZ(x, y),
       SCRUB[(h3(gi, gj, S0 ^ 0x3c29) >>> 4) % 3],
-      5 + ((h3(gi, gj, S0 ^ 0x3c2b) >>> 6) & 3));
+      7 + ((h3(gi, gj, S0 ^ 0x3c2b) >>> 6) & 3));
   });
 
   // nebkha — the MARGIN species, and the one made of the axis itself. A shrub
@@ -1461,13 +1482,13 @@ export function paintDesert(stage) {
     const pn = MF.one(x, y, 1);
     if (sc > 0.24) return;
     if (pn > 0.55) return;
-    if ((h3(gi, gj, S0 ^ 0x5e45) & 255) > 40 + pn * 200 + stand(x, y, 0.022, 429) * 190) return;
+    if ((h3(gi, gj, S0 ^ 0x5e45) & 255) > 20 + pn * 170 + stand(x, y, 0.022, 429) * 160) return;
     if (nearBuilt(x, y)) return;
     if (!vis(x - 4, y - 4, x + 4, y + 4, 5)) return;
     cv.t = tagRaw();
     P.saltbush(cv, iso, C, ns, x, y, T.surfaceZ(x, y),
       SCRUB[(h3(gi, gj, S0 ^ 0x5e49) >>> 4) % 3],
-      4 + ((h3(gi, gj, S0 ^ 0x5e4b) >>> 6) & 2));
+      6 + ((h3(gi, gj, S0 ^ 0x5e4b) >>> 6) & 3));
   });
 
   // bones, tyres and litter — rare, and always where something walked. The
