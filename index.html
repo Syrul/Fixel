@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0c0d10">
+<title>Fixel</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%230c0d10'/><rect x='3' y='7' width='4' height='4' fill='%23e8a33d'/><rect x='9' y='4' width='4' height='7' fill='%235ec269'/></svg>">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#0c0d10;overflow:hidden;
+    font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;color:#e8e6e1;
+    -webkit-font-smoothing:antialiased;overscroll-behavior:none}
+  #feed{height:100dvh;overflow-y:scroll;scroll-snap-type:y mandatory;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  #feed::-webkit-scrollbar{display:none}
+  .post{height:100dvh;scroll-snap-align:start;scroll-snap-stop:always;
+    position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .post canvas{
+    /* Integer nearest-neighbour only. The generator writes native pixels and
+       nothing in this project is ever resampled; the browser must not either. */
+    image-rendering:pixelated;image-rendering:crisp-edges;
+    width:100%;height:100%;object-fit:cover;display:block}
+  .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:#3a3d45;letter-spacing:.18em;font-size:11px}
+  /* A scrim, not a heavier text-shadow. The scene is edge-to-edge dense by
+     design, so there is no quiet corner to put type on — over a busy crop the
+     seed line was simply unreadable. A short bottom gradient buys legibility
+     without covering the picture. */
+  .post::after{content:'';position:absolute;left:0;right:0;bottom:0;height:132px;
+    z-index:2;pointer-events:none;
+    background:linear-gradient(to top,#0009 0%,#0006 38%,transparent 100%)}
+  .meta{position:absolute;left:14px;bottom:calc(14px + env(safe-area-inset-bottom));
+    z-index:3;text-shadow:0 1px 4px #000e;pointer-events:none}
+  .meta .seed{font-size:12px;color:#fff;opacity:.92}
+  .meta .sub{font-size:11px;color:#fff;opacity:.55;margin-top:2px}
+  .rail{position:absolute;right:12px;bottom:calc(16px + env(safe-area-inset-bottom));
+    z-index:3;display:flex;flex-direction:column;gap:14px;align-items:center}
+  .rail button{background:none;border:0;color:#fff;opacity:.8;font-size:19px;
+    cursor:pointer;text-shadow:0 1px 3px #000c;padding:2px}
+  .rail button:active{transform:scale(.88)}
+  #start{position:fixed;inset:0;z-index:20;background:#0c0d10ee;backdrop-filter:blur(3px);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+  #start h1{font-size:15px;letter-spacing:.42em;font-weight:500;color:#e8a33d}
+  #start p{font-size:11px;color:#7c7f88;max-width:250px;text-align:center;line-height:1.6}
+  #start button{margin-top:6px;background:#e8a33d;color:#0c0d10;border:0;padding:11px 26px;
+    border-radius:2px;font:inherit;font-weight:600;letter-spacing:.1em;cursor:pointer}
+  #hud{position:fixed;top:calc(8px + env(safe-area-inset-top));left:0;right:0;z-index:10;
+    text-align:center;font-size:10px;color:#6a6d75;letter-spacing:.14em;pointer-events:none}
+</style>
+</head>
+<body>
+  <div id="feed"></div>
+  <div id="hud">FIXEL</div>
+  <div id="start">
+    <h1>F I X E L</h1>
+    <p>An endless feed of isometric scenes. Every post — the picture and its chiptune — is generated from one number.</p>
+    <button id="go">START</button>
+  </div>
+  <script type="module" src="/src/app/main.js"></script>
+</body>
+</html>

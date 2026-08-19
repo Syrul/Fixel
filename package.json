@@ -10,6 +10,7 @@
     "dev": "vite --port 5177 --strictPort"
   },
   "devDependencies": {
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "vite": "^8.2.1"
   }
 }
