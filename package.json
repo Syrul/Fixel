@@ -7,7 +7,9 @@
     "render": "node tools/render.mjs",
     "metrics": "node tools/metrics.mjs",
     "duel": "node tools/duel.mjs",
-    "dev": "vite --port 5177 --strictPort"
+    "dev": "vite --port 5177 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --port 5199 --strictPort"
   },
   "devDependencies": {
     "pngjs": "^7.0.0",

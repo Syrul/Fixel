@@ -1,0 +1,14 @@
+# Third-party reference artwork — copyrighted, local comparison material only.
+# This must never reach a public URL.
+refs/
+
+# CC0 chiptune corpus and synthetic controls — bulky, harness-only.
+corpus/
+
+# Measurement harness, docs and generated artefacts — not part of the app.
+tools/
+docs/
+out/
+web/
+node_modules/
+.claude/
