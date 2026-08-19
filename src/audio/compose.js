@@ -176,11 +176,55 @@ export function composeSong(seed, opts = {}) {
       barVoices.set(s.startBar + b, voiceSet(opening.plan[Math.min(b, opening.plan.length - 1)]));
     }
   }
+  // ---- rest ---------------------------------------------------------------
+  // SPACE WAS NOT A PARAMETER IN THIS COMPOSER, IT WAS AN ABSENCE. Measured
+  // over 24 seeds x 60 s before this block existed: zero seconds of total
+  // silence in 24 of 24; three or more voices sounding for 53.5-56.9 s of every
+  // 60; the quietest moment in a whole minute about a fifth of a second long;
+  // and the bass sounding 87.2-98.7% of the time with no rest mechanism of any
+  // kind. A listener reads relentlessness as annoyance long before they read
+  // any harmonic detail, and this is the half of "annoying" that is structural.
+  //
+  // Three mechanisms, all per section, all from that section's own stream:
+  //   BREATH      one bar stops early and the next downbeat arrives into it.
+  //               This is the only one that makes real silence.
+  //   THIN PATCH  two consecutive bars with one or two voices taken out.
+  //   BASS REST   whole bars where the bass simply does not play.
+  const ALL_VOICES = ['lead', 'harmony', 'arp', 'bass', 'drums'];
+  const barHole = new Map();       // absolute bar -> tick from which it is silent
+  const dropFrom = (b, drop) => {
+    const cur = barVoices.get(b) || new Set(ALL_VOICES);
+    barVoices.set(b, new Set([...cur].filter(v => !drop.has(v))));
+  };
+  for (const s of sections) {
+    // The opening is the hook and is already thinned by its entry plan.
+    if (s.kind === 'intro' || s.bars < 4) continue;
+    const rst = rng.stream(`audio.rest.${s.index}`);
+    if (rst.bool(0.78)) {
+      const at = s.startBar + (rst.bool(0.45) ? Math.min(3, s.bars - 1) : s.bars - 1);
+      barHole.set(at, [8, 10, 12][rst.int(0, 2)]);
+    }
+    const nDrop = rst.weighted([[0, 20], [1, 44], [2, 36]]);
+    if (nDrop) {
+      const at = s.startBar + 2 * rst.int(0, Math.floor(s.bars / 2) - 1);
+      const drop = new Set(rst.sample(ALL_VOICES, nDrop));
+      for (let b = at; b < Math.min(at + 2, s.startBar + s.bars); b++) dropFrom(b, drop);
+    }
+    const bassOff = rst.weighted([[0, 26], [1, 40], [2, 34]]);
+    for (let k = 0; k < bassOff; k++) {
+      dropFrom(s.startBar + rst.int(0, s.bars - 1), new Set(['bass']));
+    }
+  }
+
   /** Does `track` sound in absolute bar `b`? */
   const sounds = (track, b) => {
     const set = barVoices.get(b);
     return set ? set.has(track) : true;
   };
+  /** The tick from which bar `b` is silent, or 16 if it plays out. */
+  const holeAt = b => barHole.get(b) ?? TICKS_PER_BAR;
+  /** Clip a note to the bar's hole; returns 0 when the note is inside it. */
+  const clip = (t, d, hole) => (t >= hole ? 0 : Math.min(d, hole - t));
 
   // ---- harmony ----------------------------------------------------------
   // One chord per bar. Chord-per-bar is the harmonic rhythm the novelty
@@ -256,11 +300,14 @@ export function composeSong(seed, opts = {}) {
       let rootMidi = BASS_LO + (((ch.rootPc - BASS_LO) % 12) + 12) % 12;
       while (rootMidi < BASS_LO) rootMidi += 12;
       while (rootMidi > BASS_HI - 5) rootMidi -= 12;
+      const hole = holeAt(s.startBar + b);
       for (const [t, d, ti] of fig) {
+        const dd = clip(t, d, hole);
+        if (!dd) continue;
         const iv = ti < 0 ? -12 : ch.intervals[Math.min(ti, ch.intervals.length - 1)];
         tracks.bass.push({
           tick: (s.startBar + b) * TICKS_PER_BAR + t,
-          dur: d, midi: rootMidi + iv, vel: t === 0 ? 1 : 0.82,
+          dur: dd, midi: rootMidi + iv, vel: t === 0 ? 1 : 0.82,
         });
       }
     }
@@ -289,8 +336,9 @@ export function composeSong(seed, opts = {}) {
       if (!sounds('arp', s.startBar + b)) continue;
       const ch = chordAt(s.startBar + b);
       const msk = (b % 4 === 3) ? maskB : mask;
+      const hole = holeAt(s.startBar + b);
       for (let t = 0, i = 0; t < TICKS_PER_BAR; t += step, i++) {
-        if (!msk[i]) continue;
+        if (!msk[i] || t >= hole) continue;
         const k = shape[(t / step) % shape.length];
         const iv = ch.intervals[k % ch.intervals.length];
         let m = ARP_LO + (((ch.rootPc - ARP_LO) % 12) + 12) % 12 + iv;
@@ -322,7 +370,10 @@ export function composeSong(seed, opts = {}) {
         : kind === 'counter'
           ? [[0, 4], [6, 2], [8, 4], [12, 4]]
           : [[2, 2], [6, 2], [10, 2], [14, 2]];
+      const hole = holeAt(s.startBar + b);
       for (const [t, d] of events) {
+        const dd = clip(t, d, hole);
+        if (!dd) continue;
         for (const iv of picks) {
           // The chord tone, played. Nothing is nudged off it to satisfy an
           // analyser — see the deleted-constant note in theory.js for the
@@ -331,7 +382,7 @@ export function composeSong(seed, opts = {}) {
           while (m > HARM_HI) m -= 12;
           while (m < HARM_LO) m += 12;
           tracks.harmony.push({
-            tick: (s.startBar + b) * TICKS_PER_BAR + t, dur: d, midi: m,
+            tick: (s.startBar + b) * TICKS_PER_BAR + t, dur: dd, midi: m,
             vel: kind === 'pad' ? 0.5 : 0.66,
           });
         }
@@ -399,6 +450,7 @@ export function composeSong(seed, opts = {}) {
         const globalBar = gBar0 + bg;
         if (globalBar >= s.startBar + s.bars) break;
         const leadSounds = sounds('lead', globalBar);
+        const hole = holeAt(globalBar);
         const ch = chordAt(globalBar);
         const cell = cells[bg];
         const n = cell.length;
@@ -434,13 +486,13 @@ export function composeSong(seed, opts = {}) {
           if (next < LEAD_LO) next = degreeStep(LEAD_LO, 1, tonicPc, scale);
           // `cur` still advances through a silent bar, so the line picks up
           // where it would have been rather than restarting on the anchor.
-          if (leadSounds && !(d0.rest && t !== 0)) {
+          const dd = clip(t, Math.max(1, dur - (dur >= 4 ? 1 : 0)), hole);
+          if (leadSounds && dd && !(d0.rest && t !== 0)) {
             tracks.lead.push({
-              tick: globalBar * TICKS_PER_BAR + t,
-              dur: Math.max(1, dur - (dur >= 4 ? 1 : 0)),
+              tick: globalBar * TICKS_PER_BAR + t, dur: dd,
               midi: next, vel: t === 0 ? 1 : 0.85,
             });
-            if (dur >= 6 && d0.orna) {
+            if (dur >= 6 && d0.orna && t + dur - 1 < hole) {
               tracks.lead.push({
                 tick: globalBar * TICKS_PER_BAR + t + dur - 1, dur: 1,
                 midi: degreeStep(next, d0.dir, tonicPc, scale), vel: 0.7,
@@ -465,7 +517,14 @@ export function composeSong(seed, opts = {}) {
       if (!sounds('drums', s.startBar + b)) continue;
       const t0 = (s.startBar + b) * TICKS_PER_BAR;
       const fill = b % 4 === 3 && dens !== 'light' && st.bool(0.6);
-      for (let t = 0; t < TICKS_PER_BAR; t++) {
+      // Drums stop a tick EARLY into a hole. A kick is 0.15 s of audio from a
+      // 1-tick event, so gating it at the hole itself leaves the kick ringing
+      // into the silence the hole exists to create. `-1` only where there IS a
+      // hole: applying it unconditionally would silently drop tick 15 of every
+      // bar in the piece, which is how a rest mechanism becomes a groove bug.
+      const raw = holeAt(s.startBar + b);
+      const hole = raw < TICKS_PER_BAR ? Math.max(0, raw - 1) : TICKS_PER_BAR;
+      for (let t = 0; t < hole; t++) {
         if (kick[t] && dens !== 'light') tracks.drums.push({ tick: t0 + t, dur: 3, kind: 'kick', vel: kick[t] / 3 });
         else if (kick[t] && t % 8 === 0) tracks.drums.push({ tick: t0 + t, dur: 3, kind: 'kick', vel: kick[t] / 3 });
         if (snare[t] && dens !== 'light') tracks.drums.push({ tick: t0 + t, dur: 2, kind: 'snare', vel: snare[t] / 3 });

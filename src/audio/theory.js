@@ -174,6 +174,17 @@ export const BASS_FIGURES = [
   [[0, 2, 0], [4, 2, 0], [6, 2, 2], [8, 2, 0], [11, 2, 0], [14, 2, 2]],
   [[0, 4, 0], [4, 2, 2], [6, 2, 1], [8, 4, 0], [12, 2, 2], [15, 1, 0]],
   [[0, 12, 0], [12, 4, 2]],
+  // ---- figures with HOLES IN THEM ---------------------------------------
+  // Every row above this line covers all sixteen ticks with no gap, which is
+  // why the bass sounded 87.2-98.7% of a 60 s post: there was nowhere in the
+  // vocabulary for it to stop. These leave 4 to 9 ticks of the bar empty.
+  [[0, 3, 0], [6, 2, 2], [8, 3, 0], [14, 2, 0]],
+  [[0, 6, 0], [8, 4, 0]],
+  [[0, 2, 0], [4, 2, 0], [8, 2, 0], [12, 2, 2]],
+  [[0, 4, 0], [6, 2, 2], [10, 2, 0]],
+  [[2, 2, 0], [6, 2, 2], [10, 2, 0], [14, 2, 1]],
+  [[0, 3, 0], [3, 1, 2], [8, 3, 0], [11, 1, 2]],
+  [[0, 7, 0], [10, 2, 2], [13, 2, 0]],
 ];
 
 // Arpeggio figures. Lengths 8 and 16, deliberately not 4: a four-slot arp on a
