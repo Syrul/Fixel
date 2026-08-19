@@ -862,17 +862,20 @@ export function paintShore(stage) {
     + SET_JIT * MF.one(Ox + (u - Ox) * SET_WARP, Oy + (v - Oy) * SET_WARP, 1);
 
   /**
-   * The surge, anchored so that FRAME 0 IS THE STILL PICTURE.
+   * The foam's own set: the SAME swell, arriving later and broken into shorter
+   * stretches of beach.
    *
-   * `triPhase(k, off)` is periodic with period 1 in `phase(k)` and has no kick
-   * at the wrap, so frame FRAMES is frame 0 by construction. Subtracting its
-   * value AT FRAME 0 does not change either property — it is a constant in k —
-   * and it buys something worth having: the frame-0 render is byte-identical to
-   * the still render, so every craft number ever measured on this biome, and
-   * ink closure above all, is provably unmoved by the animation rather than
-   * merely measured to be. The excursion is unchanged; only its zero moves.
+   * Locking the swash to the crest phase would make the foam a readout of the
+   * swell rather than a second thing happening, and a shoreline that pumps in
+   * one piece is the same defect as a sea that throbs in one piece. The wave
+   * that runs up the sand is the crest that arrived a moment ago, so this is a
+   * LAG on the same field rather than an unrelated one, plus a second, shorter
+   * alongshore ramp. Combined with `SET_LEN` the foam's alongshore cycle is one
+   * per 127 world units = 470-660 screen pixels, which is two or three stretches
+   * of shoreline across a frame — each far longer than the foam band is wide.
    */
-  const surge = (k, off) => triPhase(k, off) - triPhase(0, off);
+  const FOAM_LAG = 0.31;
+  const FOAM_LEN = 210;
 
   const waterTop = (u, v, z, q, sx, sy) => {
     MF.at(u, v, buf);
@@ -946,8 +949,22 @@ export function paintShore(stage) {
     // already returns on its first line, but K frames computed and thrown away
     // would still be K frames computed.
     if (K < 2) return tone(0, 0);
+    // ANCHORED SO THAT FRAME 0 IS THE STILL PICTURE. `triPhase(k, off)` is
+    // periodic with period 1 in `phase(k)` and has no kick at the wrap, so
+    // frame FRAMES is frame 0 by construction. Subtracting its value AT FRAME 0
+    // is a constant in k, so it changes neither property — and it makes the
+    // frame-0 render byte-identical to the still render, which is what makes
+    // every craft number on this biome, ink closure above all, provably unmoved
+    // by the animation rather than merely measured to be. The excursion is
+    // unchanged; only its zero moves.
     const off = offsetAt(u, v);
-    for (let k = 0; k < K; k++) vals[k] = tone(0, SWELL_AMP * surge(k, off));
+    const offF = off + FOAM_LAG + (u * cxu + v * cyu) / FOAM_LEN;
+    const b = triPhase(0, off), bF = triPhase(0, offF);
+    for (let k = 0; k < K; k++) {
+      vals[k] = tone(
+        FOAM_AMP * (triPhase(k, offF) - bF),
+        SWELL_AMP * (triPhase(k, off) - b));
+    }
     stage.anim.push(sy * cv.w + sx, cv.t, vals);
     return vals[FR];
   };
