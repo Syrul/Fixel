@@ -1,7 +1,10 @@
 # Ownership — who may write what
 
-**There is no version control in this repo. Concurrent writers clobber each
-other silently and irrecoverably.** This file exists because that happened.
+**Git now exists** (local commits only — do not push). Commit before any
+destructive edit; that is the undo. This file exists because for the first two
+rounds there was no version control and concurrent writers clobbered each other
+irrecoverably. The ownership rules stay: git makes a clobber *recoverable*, it
+does not make concurrent writes to one file *correct*.
 
 ## The incident
 
@@ -33,13 +36,27 @@ cost us twice.
 | `tools/metrics.mjs`, `tools/budget.mjs`, `tools/variety.mjs`, `docs/band-*.json`, `docs/budget-*.json` | **the metrics builder** | a band that moves under a measurement is the bug we are fixing |
 | `tools/duel.mjs`, `tools/page.mjs`, `tools/treehash.mjs`, `tools/crop.mjs`, `tools/verify.mjs` | the lead | the harness must not be edited by anyone it judges |
 | `docs/ROUNDS.md`, `docs/HARNESS.md`, `docs/JUDGE-PROMPT.md`, `docs/DIFF.md`, `docs/CRAFT.md`, `docs/OWNERSHIP.md` | the lead | the record of what happened |
-| `corpus/**`, `tools/audio-metrics.mjs`, `docs/AUDIO-MEASURED.md`, `docs/band-audio-v1.json` | the audio builder | |
+| `src/audio/**` | **the synth builder** | the engine. May NOT touch the bar it is measured against |
+| `corpus/**`, `tools/audio-metrics.mjs`, `tools/calibrate-audio-band.mjs`, `docs/AUDIO-MEASURED.md`, `docs/band-audio-v1.json` | **the audio-bar owner** | the bar. Frozen while a synth is being measured against it |
 
 A builder needing a change outside its own files messages the lead with the
 exact change. It does not make it "just this once".
 
 Critics and judges write **only** to their own scratch directory. They never
 write into the repo.
+
+## The two audio domains are deliberately separate
+
+`src/audio/**` (the synth) and the audio bar (`tools/audio-metrics.mjs`,
+`docs/band-audio-v1.json`, `corpus/**`) have **different owners, and the synth
+builder may not write the bar.** This is not bureaucracy. A builder that can
+edit the metric it is judged by will eventually widen a band rather than fix a
+tune, and it will do so honestly, believing the band was wrong. The pixel side
+already lost a whole scoring framework to a subtler version of this — see
+`docs/DIFF.md` section 3, where a generator tuned against a band ended up beating
+a genuine artwork on it.
+
+`src/gen/**` and `src/audio/**` are independent and may run in parallel.
 
 ## The rules that came out of it
 
