@@ -32,9 +32,19 @@ export function setInk(i) { INK = i; }
 function unsliver(w, d, mat) {
   const thinL = w < 1.05, thinR = d < 1.05;
   if (!thinL && !thinR) return mat;
-  if (thinL && thinR) return { top: mat.top, left: mat.left, right: mat.left };
-  if (thinR) return { top: mat.top, left: mat.left, right: mat.left };
-  return { top: mat.top, left: mat.right, right: mat.right };
+  const fn = (v) => typeof v === 'function';
+  // A long thin box — a parapet, a rail, a sign panel — also presents a TOP
+  // face one or two pixels across, and the AA map showed that strip lit along
+  // the top of every parapet and cornice in the frame: a 1px band of the LEFT
+  // step between the roof above and the RIGHT step below is a textbook
+  // antialiased triple. The cap takes the front face's value unless the front
+  // is a shade callback, in which case its face coordinates are meaningless on
+  // the top plane and it is left alone.
+  const side = thinR ? mat.left : mat.right;
+  const top = fn(side) ? mat.top : side;
+  if (thinL && thinR) return { top, left: mat.left, right: mat.left };
+  if (thinR) return { top, left: mat.left, right: mat.left };
+  return { top, left: mat.right, right: mat.right };
 }
 
 export function box(cv, iso, x, y, z, w, d, h, mat, tag) {

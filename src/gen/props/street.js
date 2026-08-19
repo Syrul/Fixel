@@ -7,7 +7,7 @@ import { drawSlab } from '../../core/iso.js';
 import { box, gable } from '../draw.js';
 import { leftFace, rightFace, topFace, blitFace, textPanel } from '../faces.js';
 import { h3 } from '../palette.js';
-import { textBitmap, scaleBitmap } from '../font.js';
+import { textBitmap, scaleBitmap, signInk } from '../font.js';
 
 const M = (f) => ({ top: f.t, left: f.l, right: f.r });
 const MD = (f) => ({ top: f.l, left: f.r, right: f.d });
@@ -338,8 +338,10 @@ export function pylonSign(cv, iso, C, st, x, y, z, word, ax) {
   const post = st.pick([C.slate, C.metal, C.steel, C.concrete]);
   const panel = st.weighted([[st.pick(C.accents), 8], [C.white, 3], [C.cream, 2], [C.tar, 2]]);
   const ink = st.pick([...C.accents, C.white, C.tar]);
-  const inkC = (ink === panel) ? (panel === C.tar ? C.white.t : C.ink)
-    : (panel === C.tar ? ink.t : ink.r);
+  // Lettering takes the ladder step that CONTRASTS with its ground: the dark
+  // step on a pale panel, the lit step on a dark one. Picking the middle step
+  // regardless put tan letters on a white board — legible at 5x, mud at 1:1.
+  const inkC = signInk(C, panel, ink);
   const cx = x + (ax === 0 ? pw * 0.5 - 0.55 : 0);
   const cy = y + (ax === 0 ? 0 : pw * 0.5 - 0.55);
   box(cv, iso, cx, cy, z, 1.1, 1.1, poleH + 1.6, MD(post));
@@ -351,7 +353,7 @@ export function pylonSign(cv, iso, C, st, x, y, z, word, ax) {
     tu: ax === 0 ? 1.4 : pw - 1.4, tv: ph - 1.4,
   });
   box(cv, iso, x, y, z + poleH, w, d, ph, {
-    top: panel.l,
+    top: panel.t,
     left: ax === 0 ? face : panel.l,
     right: ax === 0 ? panel.r : face,
   });
@@ -372,7 +374,7 @@ export function billboard(cv, iso, C, st, x, y, z, word, ax) {
   const panel = st.weighted([[C.white, 4], [C.cream, 3], [st.pick(C.accents), 6]]);
   const band = st.pick(C.accents);
   const ink = st.pick([...C.accents, C.tar]);
-  const inkC = ink === panel ? C.ink : ink.r;
+  const inkC = signInk(C, panel, ink);
   for (const t of [0.12, 0.72]) {
     const lx = x + (ax === 0 ? t * pw : 0);
     const ly = y + (ax === 0 ? 0 : t * pw);
@@ -387,7 +389,7 @@ export function billboard(cv, iso, C, st, x, y, z, word, ax) {
     tu: ax === 0 ? 1.5 : pw - 1.5, tv: ph - 1.3,
   });
   box(cv, iso, x, y, z + legH, w, d, ph, {
-    top: panel.l,
+    top: panel.t,
     left: ax === 0 ? face : panel.l,
     right: ax === 0 ? panel.r : face,
   });

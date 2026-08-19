@@ -95,13 +95,20 @@ export function buildPalette(rng) {
   const DARK = RIGHT * r.range(0.66, 0.90);
 
   // ---- this scene's hue policy -------------------------------------------
-  // HUEK is how far a shadow step drifts in hue; the SIGN is per family, so
-  // some pigments cool and others warm and the scene has no net rotation. That
-  // is the measured reference behaviour: `hueRotAbsMedian` up to 5.6 degrees
-  // while `hueRotMedian` is nil. A scene-wide rotation is the classic
-  // procedural-shader tell and this must never do it — the small negative bias
-  // below is the reference's own, not a drift toward blue.
-  const HUEK = r.range(0, 7.5);
+  // TWO SEPARATE KNOBS, and the separation is the whole point.
+  //
+  // HUE0 is the scene's SYSTEMATIC shadow drift and it is what
+  // `shade.hueRotMedian` reads. It is confined to [-2.6, +0.05], which is the
+  // reference's own measured interval, and it never goes warm. "Shadows do not
+  // rotate hue" is the property procedural shaders always get wrong and this
+  // one has right; it must vary across seeds without ever becoming a drift.
+  //
+  // HUEJ is a per-PIGMENT jitter with a random sign, so it cancels in the
+  // median and shows up only in `shade.hueRotAbsMedian`. The first attempt used
+  // one signed knob for both and produced medians from -4.7 to +6.1 — a seed
+  // whose shadows rotated six degrees warm, which is exactly the tell.
+  const HUE0 = r.range(-2.6, 0.05);
+  const HUEJ = r.range(0, 7.0);
   const SATK = r.range(0.90, 1.32);
 
   // ---- this scene's palette resolution -----------------------------------
@@ -123,10 +130,16 @@ export function buildPalette(rng) {
     // so the signed median lands just below zero where the reference's is,
     // rather than exactly on zero where it is one sample from either side.
     const q = (Math.imul(key ^ 0x9e3779b9, 2654435761) >>> 0) % 100;
-    const sgn = q < 60 ? -1 : 1;
+    // Jitter only bites on pigments that HAVE a hue. On a near-neutral the hue
+    // angle is ill-conditioned and rotating it is noise in the measurement
+    // rather than a decision in the picture, and neutrals are 59% of the frame.
+    const jit = s > 0.16 ? (q < 50 ? -HUEJ : HUEJ) : 0;
+    const dh = HUE0 + jit;
     const step = (k, t) => {
-      if (HUEK <= 0.02) return pal.add(b[0] * k, b[1] * k, b[2] * k);
-      const c = hsl(h + sgn * HUEK * t, Math.min(1, s * (1 + (SATK - 1) * t)), l);
+      if (Math.abs(dh) <= 0.02 && Math.abs(SATK - 1) <= 0.01) {
+        return pal.add(b[0] * k, b[1] * k, b[2] * k);
+      }
+      const c = hsl(h + dh * t, Math.min(1, s * (1 + (SATK - 1) * t)), l);
       const cl = rec601(c);
       // rescale so the luma ratio is EXACTLY k: hue is the pigment's business,
       // the ladder is the light's, and the two must vary independently
@@ -160,7 +173,7 @@ export function buildPalette(rng) {
       s * (neutral ? neutralSat : satMul),
       Math.min(0.98, l * (neutral ? litMul : 1 + (litMul - 1) * 0.4)));
   }
-  C.light = { LEFT, RIGHT, DARK, HUEK, SATK };
+  C.light = { LEFT, RIGHT, DARK, HUE0, HUEJ, SATK };
   C.tar = C.slate;
 
   C.skin = [

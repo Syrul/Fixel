@@ -128,3 +128,24 @@ export function coinTag(st) {
   if (mode === 2) return st.pick(ONSET).slice(0, 1) + '-' + st.int(1, 9);
   return coinWord(st).slice(0, 3);
 }
+
+/**
+ * Lettering colour for a sign, chosen against the panel it sits on.
+ * A pale panel takes the pigment's DARK step, a dark panel its LIT step, and a
+ * pigment too close to its own ground is replaced by ink or white outright.
+ */
+export function signInk(C, panel, ink) {
+  const pl = panel._L === undefined ? 0.9 : panel._L;
+  const light = pl > 0.55;
+  if (ink._L === undefined) return light ? C.ink : C.white.t;
+  // Minted, NOT taken off the shading ladder. The ladder is per scene now, and
+  // in a scene with a shallow one the darkest step of a warm pigment is still
+  // a mid tan — which is what put tan lettering on a white board. A sign's job
+  // is to be read; its ink is chosen against its ground, not against the light.
+  if (light) {
+    return C.mk(ink._h, Math.min(1, ink._s * 1.05),
+      Math.max(0.09, Math.min(0.30, ink._L * 0.36)));
+  }
+  return C.mk(ink._h, Math.min(1, ink._s * 0.85),
+    Math.max(0.62, Math.min(0.95, ink._L * 1.75)));
+}

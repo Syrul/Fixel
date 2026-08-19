@@ -131,8 +131,8 @@ export function renderScene(seed, opts = {}) {
     seamPitch: () => ds.range(11, 26),
     dash: ds.range(16, 34),
     kerbBand: ds.range(1.2, 3.4),
-    patchShift: ds.int(5, 6),           // asphalt patch size, 32-64 world units
-    patchRate: ds.int(1, 3),
+    patchShift: ds.int(4, 6),           // asphalt patch size, 16-64 world units
+    patchRate: ds.int(3, 5),
     roofSign: ds.range(0.12, 0.5),
     heroSign: ds.range(0.35, 1.0),
     lotTrees: ds.bool(0.5),
@@ -175,10 +175,16 @@ export function renderScene(seed, opts = {}) {
     // pool shared by the whole frame: a pooled tone recurs in six places a
     // crop apart, which is a colour that means nothing and a radius of
     // gyration the size of the picture. One tone, one block.
-    const pv = C.mk(C.pave._h + cs.range(-11, 11), C.pave._s * cs.range(0.5, 1.6),
-      Math.min(0.97, C.pave._L * cs.range(0.93, 1.07)));
-    const kb = C.mk(C.concrete._h + cs.range(-11, 11), C.concrete._s * cs.range(0.5, 1.6),
-      Math.min(0.97, C.concrete._L * cs.range(0.9, 1.08)));
+    // The jitter has to be WIDER THAN THE PALETTE'S OWN QUANTISATION or it does
+    // nothing: tones are cached on a rounded (h, s, l) key whose lightness step
+    // is as coarse as 1/18, and a ±7% wobble on a pale grey does not clear one
+    // step. Every block was drawing the same pavement colour, which is what
+    // `palette.top1Share` was reading at 16% against a band topping out at
+    // 12.7%. Local commitment that lands back on the shared tone is not local.
+    const pv = C.mk(C.pave._h + cs.range(-16, 16), C.pave._s * cs.range(0.35, 1.9),
+      Math.min(0.97, C.pave._L * cs.range(0.84, 1.13)));
+    const kb = C.mk(C.concrete._h + cs.range(-16, 16), C.concrete._s * cs.range(0.35, 1.9),
+      Math.min(0.97, C.concrete._L * cs.range(0.82, 1.14)));
     const seam = cs.bool(D.seamRate) ? D.seamPitch() : 0;
 
     // THE KERB IS INKED. It used to be tagged no-outline, so nothing separated

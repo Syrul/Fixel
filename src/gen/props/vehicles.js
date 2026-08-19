@@ -60,6 +60,7 @@ function sideShade(F, o) {
       // also gives the hub its own enclosed cell, which is the whole point.
       if (r2 < o.hubR * o.hubR) return o.hub;
       if (r2 < o.archR * o.archR) return K;
+      if (r2 < (o.archR + 0.55) * (o.archR + 0.55) && v > 0.2) return o.arch;
     }
     if (v > o.waist - PX && v < o.waist + PX) return K;
     for (let i = 0; i < o.seams.length; i++) {
@@ -153,13 +154,13 @@ export function drawVehicle(cv, iso, C, st, x, y, z, ax, kind, mkTag) {
   // reference's car is 78x62px against our 27x21 — this does not close that
   // gap, it makes the difference between detail and no detail.
   const spec = {
-    car:    [10.5, 4.8, 2.35, 3.0, 4.6, 1.95, 1.55, 2],
-    taxi:   [10.8, 4.8, 2.35, 3.1, 4.7, 2.05, 1.55, 2],
-    pickup: [11.4, 5.0, 2.55, 1.8, 3.6, 2.05, 1.65, 1],
-    van:    [12.8, 5.2, 2.60, 1.3, 8.0, 2.70, 1.60, 2],
-    truck:  [15.8, 5.6, 2.80, 0.9, 4.4, 3.10, 1.75, 1],
-    bus:    [19.4, 5.6, 2.45, 0.7, 17.6, 3.40, 1.65, 4],
-  }[kind] || [10.5, 4.8, 2.35, 3.0, 4.6, 1.95, 1.55, 2];
+    car:    [13.0, 4.9, 3.10, 3.6, 5.6, 2.50, 2.00, 2],
+    taxi:   [13.4, 4.9, 3.10, 3.7, 5.8, 2.60, 2.00, 2],
+    pickup: [14.0, 5.1, 3.35, 2.1, 4.4, 2.65, 2.10, 1],
+    van:    [15.4, 5.2, 3.45, 1.5, 9.8, 3.40, 2.05, 2],
+    truck:  [18.5, 5.6, 3.60, 1.0, 5.2, 3.90, 2.25, 1],
+    bus:    [23.0, 5.6, 3.20, 0.8, 21.0, 4.30, 2.10, 4],
+  }[kind] || [13.0, 4.9, 3.10, 3.6, 5.6, 2.50, 2.00, 2];
   let [L, W, H, cf, cl, ch, wr, nSeam] = spec;
   const grow = st.range(0.92, 1.12);
   L *= grow; W *= st.range(0.96, 1.06); cf *= grow; cl *= grow;
@@ -171,9 +172,14 @@ export function drawVehicle(cv, iso, C, st, x, y, z, ax, kind, mkTag) {
   for (let i = 1; i <= nSeam; i++) seams.push(L * (i / (nSeam + 1)));
 
   const sideOpts = {
-    ink: K, L, axles, archR: wr, hubR: wr * 0.56,
-    hub: st.bool(0.5) ? C.white.t : C.metal.t,
-    waist: H * 0.58, seams,
+    ink: K, L, axles, archR: wr * 0.78, hubR: wr * 0.48,
+    // The hub is a fixed mid grey, not a coin-flip between white and metal:
+    // half the fleet paints its bodies white, and a white hub inside a black
+    // tyre on a white car is an invisible wheel. It has to differ from BOTH
+    // the tyre and the paint or it is not a wheel, it is a hole.
+    hub: C.metal.l,
+    arch: body.d,
+    waist: H * 0.56, seams,
     upper: null, lower: null,
   };
   const endOpts = {
@@ -187,9 +193,12 @@ export function drawVehicle(cv, iso, C, st, x, y, z, ax, kind, mkTag) {
   // the two axle blocks that carry the tyre down to the road. The tyres proper
   // are cut into the side faces above, so this stays under a pixel of ink per
   // scanline instead of being a slab.
-  sub();
-  box(cv, iso, ax, x + 0.7, y + 0.30, z, L - 1.4, W - 0.60, 0.30,
-    { top: null, left: K, right: K });
+  // No underbody slab. The version that had one drew a black face nine screen
+  // pixels wide under every vehicle, and `outline.run12Share` — the share of
+  // horizontal dark runs that are one or two pixels — read the fleet of them as
+  // fat outlines at -0.51 bandwidths. The body's own silhouette keyline already
+  // separates the car from the road; the tyres are cut into the side faces.
+  void sub;
 
   // -------------------------------------------------------------------- body
   cv.t = own;

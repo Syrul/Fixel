@@ -136,8 +136,13 @@ export function roadShade(iso, C, plan, seedN, tones, opt = {}) {
     // change-rate and lose the flat interiors the reference actually has.
     const si = (ax >= 0 ? ix.id[i] : 0) + (ay >= 0 ? iy.id[j] * 7 : 0);
     const A = TN[(si >>> 0) % TN.length], T = TD[(si >>> 0) % TD.length];
+    // THREE tones per street, in patches tens of units across. Two tones left
+    // one asphalt grey holding 15-16% of a crop against the reference's
+    // 5.5-12.7% band, and the largest single flat region at nearly double what
+    // the reference's crops carry. A resurfaced road is patchy; it is not one
+    // grey with occasional bruises.
     const patch = h3(wx >> PSH, wy >> PSH, seedN + 7) & 15;
-    const base = patch < PRATE ? A.l : A.t;
+    const base = patch < PRATE ? A.l : patch < PRATE * 2 ? T.t : A.t;
 
     const inter = ax >= 0 && ay >= 0;
 

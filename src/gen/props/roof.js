@@ -5,7 +5,7 @@ import { drawSlab } from '../../core/iso.js';
 import { box } from '../draw.js';
 import { topFace, leftFace, rightFace, blitFace, textPanel } from '../faces.js';
 import { h3 } from '../palette.js';
-import { textBitmap, scaleBitmap } from '../font.js';
+import { textBitmap, scaleBitmap, signInk } from '../font.js';
 
 const M = (f) => ({ top: f.t, left: f.l, right: f.r });
 const MD = (f) => ({ top: f.l, left: f.r, right: f.d });
@@ -136,8 +136,7 @@ export function roofSign(cv, iso, C, st, x, y, z, word, ax = 0) {
   const panel = st.weighted([[C.white, 3], [C.cream, 2], [C.tar, 3],
     [st.pick(C.accents), 7]]);
   const ink = st.pick([...C.accents, C.white, C.tar]);
-  const inkC = (ink === panel) ? (panel === C.tar ? C.white.t : C.ink)
-    : (panel === C.tar ? ink.t : ink.r);
+  const inkC = signInk(C, panel, ink);
   const legH = st.range(1.2, 4.0);
   const w = ax === 0 ? need : 0.32, d = ax === 0 ? 0.32 : need;
   for (const t of [0, 1]) {
@@ -152,7 +151,7 @@ export function roofSign(cv, iso, C, st, x, y, z, word, ax = 0) {
     tu: ax === 0 ? 1.5 : need - 1.5, tv: h - 1.4,
   });
   box(cv, iso, x, y, z + legH, w, d, h, {
-    top: panel.l,
+    top: panel.t,
     left: ax === 0 ? face : panel.l,
     right: ax === 0 ? panel.r : face,
   });

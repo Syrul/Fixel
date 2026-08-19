@@ -17,12 +17,19 @@ import { drawSlab, asShade } from '../core/iso.js';
 import { box, gable } from './draw.js';
 import { leftFace, rightFace, topFace, blitFace, textPanel } from './faces.js';
 import { h3 } from './palette.js';
-import { textBitmap, scaleBitmap, coinWord, coinTag } from './font.js';
+import { textBitmap, scaleBitmap, coinWord, coinTag, signInk } from './font.js';
 import * as R from './props/roof.js';
 import * as S from './props/street.js';
 
 const M = (f) => ({ top: f.t, left: f.l, right: f.r });
 const MD = (f) => ({ top: f.l, left: f.r, right: f.d });
+
+/** Cast panels a couple of bays by a few floors, in the wall's own two steps. */
+function panelTone(o, bay, fl) {
+  if (o.panelSpan <= 0) return o.wall;
+  const k = h3(o.seed + 7, (bay / o.panelSpan) | 0, (fl / o.panelRun) | 0) & 15;
+  return k < o.panelRate ? o.wallD : o.wall;
+}
 
 function facade(F, o) {
   const { au, cu, av, bv, cv } = F;
@@ -71,24 +78,32 @@ function facade(F, o) {
     const bay = Math.floor(u / o.bayU);
     const fu = u - bay * o.bayU;
 
+    // A BLANK FLANK IS STILL PANELLED.
+    //
+    // The largest connected same-colour region in a 320px crop was 11.45% of it
+    // — one unbroken tower flank — against the reference's largest at 2.07%,
+    // and 36.3% of the canvas sat inside ink-free fields over 10,000px against
+    // its 20.8%. The wall is now cast in PANELS a couple of bays by a few
+    // floors, in the wall's own two steps, plus its banded courses. That breaks
+    // the region without spending ink, which matters because ink is at budget
+    // and because `slope.corrDx0Share` has no headroom left for more verticals.
     if (o.blank) {
-      // a plain flank wall: expansion joints and one banded course, nothing else
       if (o.jointEvery > 0 && (bay % o.jointEvery) === 0 && fu < 0.5) return K;
       if (o.bandEvery > 0 && (fl % o.bandEvery) === 0 && fv < 1.4) return o.band;
-      return o.wall;
+      return panelTone(o, bay, fl);
     }
 
     const rowOn = (fl % o.rowPeriod) < o.rowCount;
     const colOn = (bay % o.colPeriod) < o.colCount;
     if (!rowOn || !colOn) {
       if (o.bandEvery > 0 && (fl % o.bandEvery) === 0 && fv < 1.4) return o.band;
-      return o.wall;
+      return panelTone(o, bay, fl);
     }
     const wy0 = o.spandrel, wy1 = o.floorH - o.head;
     const wx0 = o.mull, wx1 = o.bayU - o.mull;
     if (fv < wy0 || fv > wy1 || fu < wx0 || fu > wx1) {
       if (o.bandEvery > 0 && (fl % o.bandEvery) === 0 && fv < 1.4) return o.band;
-      return o.wall;
+      return panelTone(o, bay, fl);
     }
     // A CLOSED FRAME, ALL FOUR SIDES.
     //
@@ -119,6 +134,8 @@ function facadeOpts(C, st, wall, W, H, seed, style, blank) {
   const o = {
     W, H, seed, black: C.black, blank,
     wall: wall.l, wallD: wall.r, quoin: wall.r,
+    panelSpan: st.weighted([[1, 4], [2, 6], [3, 3]]),
+    panelRun: st.int(2, 5), panelRate: st.int(3, 7),
     plinth: wall.r, cornice: trim.l,
     band: acc.l, bandEvery: st.weighted([[0, 6], [3, 2], [4, 2], [5, 1]]),
     jointEvery: st.weighted([[0, 3], [2, 2], [3, 2]]),
@@ -249,11 +266,17 @@ export function drawBuilding(cv, iso, C, st, x, y, z, w, d, opt) {
     }
     R.roofDeck(cv, iso, C, st, mx, my, rz, mw, md, wall);
     const pc = st.bool(0.4) ? wall : st.bool(0.55) ? st.pick(C.accents) : C.concrete;
-    const ph = st.range(0.9, 2.0);
-    box(cv, iso, mx, my, rz, mw, 0.7, ph, MD(pc));
-    box(cv, iso, mx, my, rz, 0.7, md, ph, MD(pc));
-    box(cv, iso, mx, my + md - 0.7, rz, mw, 0.7, ph, MD(pc));
-    box(cv, iso, mx + mw - 0.7, my, rz, 0.7, md, ph, MD(pc));
+    // A parapet is 1.2 units thick, not 0.7. At 0.7 its top face is a strip
+    // 1.4px across holding the middle of the shading ladder, flanked by the
+    // roof above and the parapet's own shadow face below — which is exactly
+    // what `edge.fracAA` calls antialiasing, and the AA map showed it lit along
+    // every parapet in the frame. A wall with thickness reads better anyway.
+    const ph = st.range(1.0, 2.2);
+    const pt = st.range(1.2, 1.7);
+    box(cv, iso, mx, my, rz, mw, pt, ph, MD(pc));
+    box(cv, iso, mx, my, rz, pt, md, ph, MD(pc));
+    box(cv, iso, mx, my + md - pt, rz, mw, pt, ph, MD(pc));
+    box(cv, iso, mx + mw - pt, my, rz, pt, md, ph, MD(pc));
 
     if (st.bool(0.45)) {
       R.railing(cv, iso, C, st, mx + 0.9, my + md - 1.6, rz + ph, mw - 1.8, 0, st.range(2.0, 3.2));
@@ -292,7 +315,7 @@ export function drawBuilding(cv, iso, C, st, x, y, z, w, d, opt) {
     R.roofSign(cv, iso, C, st, top[0] + 1.5, top[1] + 1.5, top[2] + top[5] + 1.4,
       coinWord(sg), ax);
   }
-  if (sg && st.bool(0.16 * (D.heroSign === undefined ? 1 : D.heroSign))) {
+  if (sg && st.bool(0.30 * (D.heroSign === undefined ? 1 : D.heroSign))) {
     wallSign(cv, iso, C, st, x, y, z, w, d, tall, coinWord(sg), opt);
   }
   return tall;
@@ -322,8 +345,7 @@ function wallSign(cv, iso, C, st, x, y, z, w, d, tall, word, opt) {
   if (span < pw + 2.0 || tall < ph + 9) return;
   const panel = st.weighted([[st.pick(C.accents), 7], [C.white, 3], [C.cream, 2], [C.tar, 3]]);
   const ink = st.pick([...C.accents, C.white, C.tar]);
-  const inkC = (ink === panel) ? (panel === C.tar ? C.white.t : C.ink)
-    : (panel === C.tar ? ink.t : ink.r);
+  const inkC = signInk(C, panel, ink);
   const off = st.range(0.8, Math.max(0.9, span - pw - 0.8));
   const zz = z + st.range(7.5, Math.max(7.6, tall - ph - 1.2));
   cv.t = opt.tag();
@@ -337,7 +359,7 @@ function wallSign(cv, iso, C, st, x, y, z, w, d, tall, word, opt) {
     tu: ax === 0 ? 1.4 : pw - 1.4, tv: ph - 1.4,
   });
   box(cv, iso, bx, by, zz, bw, bd, ph, {
-    top: panel.l,
+    top: panel.t,
     left: ax === 0 ? face : panel.l,
     right: ax === 0 ? panel.r : face,
   });
