@@ -300,7 +300,14 @@ export function paintDesert(stage) {
   // CONTRAST IS THE DUNE FORM — wide pale bands on the windward side, a tight
   // stack of four risers at the brink. Equal bands everywhere is corduroy, and
   // corduroy is what six bands produced.
-  const cell = es.range(2.8, 3.3);
+  // QUANTISED TO A QUARTER UNIT. `drawTerrain` now throws unless the cell
+  // projects to a whole number of screen pixels, and it is right to: a
+  // fractional cell leaves unwritten pixels between adjacent slabs which render
+  // as the cleared canvas, i.e. TRUE BLACK. That is what the small dark wedges
+  // scattered over every tread were — I spent a long time looking for the sprite
+  // that was drawing them and there was no sprite. At scale 2 the quantum is
+  // 0.25 world units.
+  const cell = Math.round(es.range(2.75, 3.5) * 4) / 4;
   const tgtSlope = es.range(0.115, 0.150);
   const bands = es.range(2.5, 3.3);
 
