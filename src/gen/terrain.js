@@ -222,6 +222,41 @@ export function walkTrack(T, st, o = {}) {
  */
 export function drawTerrain(cv, iso, T, mats, o) {
   const { X0, Y0, cell, step, gx, gy, lvl, wet } = T;
+  // THE CELL MUST TILE THE SCREEN EXACTLY, AND THE FAILURE IS INVISIBLE.
+  //
+  // A cell's top face projects to a diamond `2*s*cell` screen pixels wide.
+  // `Canvas.fillPoly` spans each scanline with ceil/floor against the polygon
+  // edges, so when that width is fractional two neighbouring diamonds round
+  // the same way and leave a one-pixel gap at every four-cell meeting point.
+  // Nothing writes those pixels, `Canvas.idx` is zero-filled, and palette
+  // index 0 is the shared TRUE BLACK — so the frame comes out stippled with a
+  // black chevron on a lattice, which is simultaneously the worst thing this
+  // generator can draw and invisible to every gate in the harness. It is not
+  // an outline, so the ink metrics read it as material; it is periodic, so it
+  // is the exact defect the aperiodicity work exists to prevent.
+  //
+  // Found by the highland builder, which reported the rule as "cell a multiple
+  // of 0.5 and step a multiple of 0.25". Re-measured here: `step` does not
+  // matter at all (0.30, 0.70, 1.40 and 2.60 all tile cleanly, because a wall
+  // covers the vertical gap), and the cell condition is one notch looser than
+  // reported — 2.75 and 1.75 tile fine. The true rule is that the projected
+  // WIDTH is an integer. Measured holes as a share of interior pixels:
+  // cell 2.13 -> 0.33%, 2.30 -> 0.38%, 2.60 -> 0.43%, 3.10 -> 0.34%,
+  // 1.10 -> 3.65%. Every quantised value tested -> exactly 0.
+  //
+  // Thrown rather than snapped. Silently rounding the caller's cell would be a
+  // fix that makes the number look right while the biome renders at a size it
+  // did not ask for, and this project has a standing rule about that.
+  {
+    const sc = iso.s === undefined ? 1 : iso.s;
+    const wpx = 2 * sc * cell;
+    if (Math.abs(wpx - Math.round(wpx)) > 1e-9) {
+      throw new Error(
+        `terrain cell ${cell} projects to ${wpx}px wide at scale ${sc}; it must be a whole ` +
+        `number of screen pixels or fillPoly leaves unwritten holes that render as true ` +
+        `black. Use a cell that is a multiple of ${1 / (2 * sc)}.`);
+    }
+  }
   const tagFor = o.tagFor;
   const W = cv.w, H = cv.h;
   const s = iso.s === undefined ? 1 : iso.s;
