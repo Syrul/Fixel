@@ -521,3 +521,50 @@ Restoring a tempo gate requires an accent-aware beat tracker that passes the
 **resampling self-consistency test** — transform by a known factor, confirm the
 reading scales — *before* it is given a gate. The previous attempt passed every
 plausibility check and still failed that one at 6 of 24.
+
+## The inversion failure, confirmed analytically by the lead
+
+The synth builder reported that its adversarial controls PASS — including one
+bar repeated verbatim for 60 seconds — and gave the arithmetic: too few of the
+14 gating metrics can respond to verbatim repetition for a loop to exceed a
+budget of 5.
+
+I tested it and initially appeared to contradict it, then found my own
+instrument was contaminating the result. Both halves are worth recording.
+
+**My test:** spliced a 1.4545 s bar out of the synth's own 165 BPM output with
+ffmpeg and concatenated it 42 times. Result: **FAIL at 6** — caught, but by one.
+
+**Why that was wrong:** the splice manufactures a hard transient every 1.45 s.
+Metric-by-metric against the unlooped synth:
+
+| metric | synth | loop | delta |
+|---|---:|---:|---:|
+| `repeatStrength` | 0.425 | 0.984 | **+131.5%** |
+| `novelFraction` | 0.716 | 0.011 | **-98.5%** |
+| `noveltyPerSecond` | 0.329 | 0.077 | **-76.6%** |
+| `stepFrac` | 0.254 | 0.118 | -53.5% |
+| `spectralCentroidCV` | 0.213 | 0.134 | -37.1% |
+| `leapFrac` | 0.590 | 0.764 | +29.5% |
+| `beatStrength` | 0.773 | 0.867 | **+12.2%  <- my splice** |
+| `polyphony` | 4.608 | 4.633 | +0.5% |
+| `silenceFraction` | 0.000 | 0.000 | 0.0% |
+
+`beatStrength` is the sixth out-of-band metric and it moved because a periodic
+splice discontinuity *is* a periodic onset. **Remove the splice artefact and a
+verbatim loop lands at exactly 5 against a budget of 5 — it passes, with zero
+margin.** The builder's symbolically-generated loop, which has no splice, is the
+clean test and its PASS stands.
+
+**Conclusion: the audio fail-count does not discriminate music from a verbatim
+loop of music.** Only three metrics respond to repetition with real force, and
+the budget is 5. It rejects a drone and a random walk; that is a floor, not a
+score. The synth's own 1.50 mean must not be reported as a pass — it ranks
+*above* genuine chiptune's 1.89, which is the same centrality signature that
+retired the pixel band: a generator sitting near the middle of every interval
+scores well precisely by being unremarkable.
+
+**Third instrument-contamination catch in this project**, after WSOLA
+manufacturing transients in the resampling test and the duty fit querying
+harmonics the band-limiter never rendered. In all three the agent caught its own
+instrument instead of shipping the number.
