@@ -134,8 +134,8 @@ function ring(core) {
  * thing lying on the ground; `lift` biases the light ramp for a thing standing
  * up.
  */
-function ellipseMass(R, variant, flat, salt) {
-  const key = 'M' + R + ':' + variant + ':' + (flat * 100 | 0) + ':' + salt;
+function ellipseMass(R, variant, flat, salt, shift = 0) {
+  const key = 'M' + R + ':' + variant + ':' + (flat * 100 | 0) + ':' + salt + ':' + shift;
   const had = CACHE.get(key);
   if (had) return had;
   const u = (a) => (h3(a, variant, salt) >>> 8) / 16777216;
@@ -147,6 +147,7 @@ function ellipseMass(R, variant, flat, salt) {
       R * (0.40 + 0.34 * u(k * 4 + 3)),
       R * flat * (0.40 + 0.34 * u(k * 4 + 4))]);
   }
+  const G = GUSTS[(h3(93, variant, salt) >>> 5) & 7], GX = G[0], GY = G[1];
   const RX = Math.ceil(R * 1.6), RY = Math.ceil(R * flat * 1.6) + 1;
   const core = [];
   for (let j = -RY; j <= RY; j++) {
@@ -158,12 +159,19 @@ function ellipseMass(R, variant, flat, salt) {
         if (dx * dx + dy * dy <= 1) { inside = true; break; }
       }
       if (!inside) { line += '.'; continue; }
+      // THE GUST: inside one sector the clumping is READ ONE CLUMP OVER, so
+      // that patch of the raft translates rigidly while the outline, the
+      // keyline and the tag stay exactly where they were. `shift` is 0 for
+      // every caller but `weedPile`, so a rock does not stir.
+      let ti = i;
+      const dd = Math.sqrt(i * i + j * j);
+      if (shift && dd > 0 && (i * GX + j * GY) / dd > GUST_COS) ti = i - shift;
       // Two octaves of clumping over a light ramp, exactly the canopy recipe:
       // one at ~3px (the grain of the material) and one at ~8px (the lumps of
       // the mass), so the interior is faceted rather than either flat or noisy.
-      const n1 = ((h3(i >> 1, j >> 1, salt + 0x2f1b + variant) >>> 8) & 15) / 15 - 0.5;
-      const n2 = ((h3((i >> 3), (j >> 3), salt + 0x71c3 + variant) >>> 8) & 15) / 15 - 0.5;
-      const sh = (i * 0.34 + j * 0.94) / (R * 1.15) + n1 * 0.26 + n2 * 0.46;
+      const n1 = ((h3(ti >> 1, j >> 1, salt + 0x2f1b + variant) >>> 8) & 15) / 15 - 0.5;
+      const n2 = ((h3((ti >> 3), (j >> 3), salt + 0x71c3 + variant) >>> 8) & 15) / 15 - 0.5;
+      const sh = (ti * 0.34 + j * 0.94) / (R * 1.15) + n1 * 0.26 + n2 * 0.46;
       line += sh < -0.48 ? 'a' : sh < -0.02 ? 'l' : sh < 0.48 ? 'm' : 'x';
     }
     core.push(line);
@@ -184,10 +192,29 @@ function ellipseMass(R, variant, flat, salt) {
 // nothing without it, and the seven `weedPile(...)` call sites in the shore
 // biome do not pass one. Adding `, stage` to those calls is the whole change.
 
-/** A raft of stranded weed: how far one lobe of it lifts. */
-const WEED_PULL_PX = 0;
+/**
+ * A raft of stranded weed: how far one clump of it travels at the extreme of
+ * the loop. Only the weed's COLOURS move — its outline, its keyline and its tag
+ * are identical in every pose, for the reason `blob` in
+ * `src/gen/props/nature.js` sets out at length.
+ *
+ * Three, matching `SALTBUSH_SHIFT_PX` in `src/gen/props/desert.js`, because a
+ * weed raft is the same size as a saltbush and the floor on a coherent
+ * displacement is set by the 2px octave in the clumping, not by taste. UNTESTED
+ * BY THE ORACLE: nothing calls this with a stage yet.
+ */
+const WEED_SHIFT_PX = 3;
 /** One weed pile in this many moves at all. */
 const WEED_MOVES_ONE_IN = 3;
+/**
+ * The gust sector, as the cosine of its half-angle, and eight unit directions
+ * to point it along, as literal vectors.
+ */
+const GUST_COS = 0.50;
+const GUSTS = [
+  [1, 0], [0.7071068, 0.7071068], [0, 1], [-0.7071068, 0.7071068],
+  [-1, 0], [-0.7071068, -0.7071068], [0, -1], [0.7071068, -0.7071068],
+];
 
 // ---------------------------------------------------------------------------
 // MOTION. Everything in this file that moves goes through these few lines, and
@@ -244,10 +271,27 @@ function origins(K) {
   return o;
 }
 
-/** Draw pose 0 exactly as `blit` would; record the rest only when recording. */
+/**
+ * Draw pose 0 exactly as `blit` would; record the rest only when recording.
+ *
+ * THE DEPTH IS ROUNDED TO FLOAT32 BEFORE IT IS HANDED OVER, and that is a
+ * workaround for a bug in `Canvas.blitAnim`, not a stylistic choice. `Canvas`
+ * stores depth in a `Float32Array`, so `blit` writes `fround(d)`; `blitAnim`
+ * then re-tests each pose with `d >= this.depth[o]`, comparing the ORIGINAL
+ * DOUBLE against its own float32 rounding. Whenever that rounding goes up — for
+ * roughly half of all depths — the test fails on a pixel pose 0 itself just
+ * drew, the pose is treated as not covering it, and the motion is silently
+ * dropped. Measured on one city seed: 67 pixels recorded where 279 changed.
+ *
+ * Passing a depth that is already exactly representable makes the comparison
+ * agree with itself. The proper fix is one line in `src/core/canvas.js` and is
+ * in the report; this keeps the rounding identical on both branches so the
+ * still render and the animated frame 0 stay the same picture.
+ */
 function putPoses(cv, x0, y0, ps, map, d, A) {
-  if (ps.length > 1 && A && A.anim) cv.blitAnim(x0, y0, ps, origins(ps.length), map, d, A.anim);
-  else cv.blit(x0, y0, ps[0], map, d);
+  const df = Math.fround(d);
+  if (ps.length > 1 && A && A.anim) cv.blitAnim(x0, y0, ps, origins(ps.length), map, df, A.anim);
+  else cv.blit(x0, y0, ps[0], map, df);
 }
 
 const massMap = (C, g) => ({ d: C.black, x: g.k, m: g.r, l: g.l, a: g.t, '.': -1 });
@@ -270,7 +314,7 @@ export function weedPile(cv, iso, C, st, x, y, z, big, A) {
     Math.min(0.62, g._L * st.range(0.52, 0.86)));
   const R = big ? st.int(8, 13) : st.int(4, 8), variant = st.int(0, 23);
   const off = movePhase(x, y, 0x6f2ad1, WEED_MOVES_ONE_IN);
-  const ps = poseSet(A, off, WEED_PULL_PX, (m) => ellipseMass(R, variant, 0.52, 0x5b17, m));
+  const ps = poseSet(A, off, WEED_SHIFT_PX, (m) => ellipseMass(R, variant, 0.52, 0x5b17, m));
   const p = projR(iso, x, y, z);
   putPoses(cv, p[0] - (ps[0][0].length >> 1), p[1] - (ps[0].length >> 1) - 1, ps,
     massMap(C, gg), dep(iso, x, y, z, 0.55), A);

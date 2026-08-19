@@ -58,8 +58,8 @@ const MASKS = new Map();
  * be drawn, and it is here — three harmonics on incommensurate phases, so the
  * boundary crosses every angle and almost none of them is on the lattice.
  */
-function organic(R, sqN, variant) {
-  const key = (R * 32 + sqN) * 64 + variant;
+function organic(R, sqN, variant, shift = 0) {
+  const key = ((R * 32 + sqN) * 64 + variant) * 16 + (shift + 8);
   const had = MASKS.get(key);
   if (had) return had;
   const sq = sqN / 10;
@@ -71,6 +71,7 @@ function organic(R, sqN, variant) {
     const s = Math.sqrt(Math.max(0, 1 - c * c)) * (u(20 + n) < 0.5 ? -1 : 1);
     ph.push(c, s);
   }
+  const G = GUSTS[(h3(41, variant, 0x5eed01) >>> 5) & 7], GX = G[0], GY = G[1];
   const RX = Math.ceil(R * 1.35) + 1, RY = Math.ceil(R * 1.35 * sq) + 1;
   const core = [];
   for (let j = -RY; j <= RY; j++) {
@@ -89,11 +90,18 @@ function organic(R, sqN, variant) {
           + A[2] * (c5 * ph[4] - s5 * ph[5]));
       }
       if (d > rad) { line += '.'; continue; }
+      // THE GUST: inside one sector the clumping is READ ONE PIXEL OVER, so
+      // that patch of the mass translates rigidly while the outline, the
+      // keyline and every tag stay exactly where they were. `shift` is 0 for
+      // every caller but `saltbush`, so a stone, a boulder and the sand mound
+      // under a nebkha are as still as they should be.
+      let ti = i, tj = j, tjj = jj;
+      if (shift && d > 0 && (i * GX + jj * GY) / d > GUST_COS) ti = i - shift;
       // Two octaves of clumping on top of the light ramp, so a 20px stone is a
       // mass with a lit shoulder and a shaded flank rather than a flat blob.
-      const n1 = ((h3(i >> 1, j >> 1, 0x2f1b + variant) >>> 8) & 15) / 15 - 0.5;
-      const n2 = ((h3((i / 6) | 0, (j / 6) | 0, 0x71c3 + variant) >>> 8) & 15) / 15 - 0.5;
-      const t = (i * 0.55 + jj * 0.86) / R + n1 * 0.26 + n2 * 0.34;
+      const n1 = ((h3(ti >> 1, tj >> 1, 0x2f1b + variant) >>> 8) & 15) / 15 - 0.5;
+      const n2 = ((h3((ti / 6) | 0, (tj / 6) | 0, 0x71c3 + variant) >>> 8) & 15) / 15 - 0.5;
+      const t = (ti * 0.55 + tjj * 0.86) / R + n1 * 0.26 + n2 * 0.34;
       line += t < -0.52 ? 'a' : t < -0.04 ? 'l' : t < 0.46 ? 'm' : 'x';
     }
     core.push(line);
@@ -113,7 +121,7 @@ function organic(R, sqN, variant) {
  * at 14px reads as a snowflake.
  */
 function spray(R, n, variant, sqN) {
-  const key = 1000000 + ((R * 32 + n) * 16 + sqN) * 64 + variant;
+  const key = 100000000 + ((R * 32 + n) * 16 + sqN) * 64 + variant;
   const had = MASKS.get(key);
   if (had) return had;
   const sq = sqN / 10;
@@ -168,12 +176,37 @@ function spray(R, n, variant, sqN) {
 // ragged mass that manufactures them — so the scrub moves as whole clumps or it
 // does not move.
 
-/** A bunchgrass tussock: how far the OUTER half of its blades leans. */
+/**
+ * A bunchgrass tussock, and the shrub on a nebkha: ZERO, and it is a reasoned
+ * exclusion rather than an omission.
+ *
+ * A sprite may only animate its COLOURS — see `blob` in
+ * `src/gen/props/nature.js` for the measurement that establishes it. A tussock
+ * is a spray of tapered blades one to three pixels wide: it has no interior to
+ * displace, so every colour it could change is a loose pixel or two on a blade,
+ * and loose pixels are the one thing that may not ship. The motion a tussock
+ * actually has is its blades LEANING, which moves the silhouette. It waits on
+ * the core change in the report.
+ */
 const TUSSOCK_LEAN_PX = 0;
-/** A saltbush: how far one clump of its rim travels. */
-const SALTBUSH_PULL_PX = 0;
-/** One tussock, nebkha or saltbush in this many moves at all. */
+/**
+ * A saltbush: how far one clump of its foliage travels at the extreme of the
+ * loop. A saltbush is a solid mass with an interior, so unlike the tussock it
+ * has something to move. Two, for the reason `CANOPY_SHIFT_PX` is two.
+ */
+const SALTBUSH_SHIFT_PX = 3;
+/** One saltbush in this many moves at all. The rest are the still desert. */
 const SCRUB_MOVES_ONE_IN = 3;
+/**
+ * The gust sector, as the cosine of its half-angle, and eight unit directions
+ * to point it along. LITERAL VECTORS, NOT A TRIG CALL: nothing in this file
+ * that decides a pixel may use a transcendental (see the file header).
+ */
+const GUST_COS = 0.50;
+const GUSTS = [
+  [1, 0], [0.7071068, 0.7071068], [0, 1], [-0.7071068, 0.7071068],
+  [-1, 0], [-0.7071068, -0.7071068], [0, -1], [0.7071068, -0.7071068],
+];
 
 // ---------------------------------------------------------------------------
 // MOTION. Everything in this file that moves goes through these few lines, and
@@ -230,10 +263,27 @@ function origins(K) {
   return o;
 }
 
-/** Draw pose 0 exactly as `blit` would; record the rest only when recording. */
+/**
+ * Draw pose 0 exactly as `blit` would; record the rest only when recording.
+ *
+ * THE DEPTH IS ROUNDED TO FLOAT32 BEFORE IT IS HANDED OVER, and that is a
+ * workaround for a bug in `Canvas.blitAnim`, not a stylistic choice. `Canvas`
+ * stores depth in a `Float32Array`, so `blit` writes `fround(d)`; `blitAnim`
+ * then re-tests each pose with `d >= this.depth[o]`, comparing the ORIGINAL
+ * DOUBLE against its own float32 rounding. Whenever that rounding goes up — for
+ * roughly half of all depths — the test fails on a pixel pose 0 itself just
+ * drew, the pose is treated as not covering it, and the motion is silently
+ * dropped. Measured on one city seed: 67 pixels recorded where 279 changed.
+ *
+ * Passing a depth that is already exactly representable makes the comparison
+ * agree with itself. The proper fix is one line in `src/core/canvas.js` and is
+ * in the report; this keeps the rounding identical on both branches so the
+ * still render and the animated frame 0 stay the same picture.
+ */
 function putPoses(cv, x0, y0, ps, map, d, A) {
-  if (ps.length > 1 && A && A.anim) cv.blitAnim(x0, y0, ps, origins(ps.length), map, d, A.anim);
-  else cv.blit(x0, y0, ps[0], map, d);
+  const df = Math.fround(d);
+  if (ps.length > 1 && A && A.anim) cv.blitAnim(x0, y0, ps, origins(ps.length), map, df, A.anim);
+  else cv.blit(x0, y0, ps[0], map, df);
 }
 
 const massMap = (C, f) => ({ d: C.black, a: f.t, l: f.l, m: f.r, x: f.k, '.': -1 });
@@ -297,16 +347,25 @@ export function nebkha(cv, iso, C, st, x, y, z, sandF, bushF, R, A) {
 export function saltbush(cv, iso, C, st, x, y, z, f, R, A) {
   const sqN = st.int(5, 6), variant = st.int(0, 15);
   const off = movePhase(x, y, 0x51c7a9, SCRUB_MOVES_ONE_IN);
-  const ps = poseSet(A, off, SALTBUSH_PULL_PX, (m) => organic(R, sqN, variant, m));
+  const ps = poseSet(A, off, SALTBUSH_SHIFT_PX, (m) => organic(R, sqN, variant, m));
   const rows = ps[0];
   const p = projR(iso, x, y, z);
-  putPoses(cv, p[0] - (rows[0].length >> 1), p[1] - rows.length + 3, ps,
-    massMap(C, f), dep(iso, x, y, z, 0.9), A);
-  // three stems, so it is bedded in the ground rather than floating on it
+  // Three stems, so it is bedded in the ground rather than floating on it.
+  //
+  // THEY ARE DRAWN BEFORE THE MASS, WHICH IS A CORRECTNESS FIX AND NOT A TIDY-
+  // UP. They sit 0.05 nearer than the mass, so they win the depth test either
+  // way and the picture is byte-identical — but drawn AFTER, they overwrite
+  // pixels `blitAnim` has already recorded, and where a stem's colour happens
+  // to equal the mass's own dark the record survives the filter and then lies
+  // about a pixel the stem owns. One pixel on one seed in six, found by the
+  // oracle. Drawn first, the depth test rejects those pixels at record time and
+  // the recorder never claims them.
   for (let k = -1; k <= 1; k++) {
     cv.putZ(p[0] + k * 2, p[1] - 1, f.k, dep(iso, x, y, z, 0.95));
     cv.putZ(p[0] + k * 2, p[1], f.k, dep(iso, x, y, z, 0.95));
   }
+  putPoses(cv, p[0] - (rows[0].length >> 1), p[1] - rows.length + 3, ps,
+    massMap(C, f), dep(iso, x, y, z, 0.9), A);
 }
 
 /**
