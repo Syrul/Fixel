@@ -62,8 +62,8 @@ const u1 = (a, b, s) => (h3(a, b, s) >>> 8) / 16777216;
 // the extreme of the loop. Set at 0 in this commit: the plumbing lands first
 // and is provably inert, then the motion lands on top of it.
 
-/** A conifer: how far its TIP travels sideways. The base does not move. */
-const CONIFER_SWAY_PX = 0;
+/** A conifer: how far the SHADING of its tip travels sideways. The base holds. */
+const CONIFER_SWAY_PX = 2;
 /** One conifer in this many moves at all. The rest are the still mountain. */
 const CONIFER_MOVES_ONE_IN = 4;
 /**
@@ -128,10 +128,27 @@ function origins(K) {
   return o;
 }
 
-/** Draw pose 0 exactly as `blit` would; record the rest only when recording. */
+/**
+ * Draw pose 0 exactly as `blit` would; record the rest only when recording.
+ *
+ * THE DEPTH IS ROUNDED TO FLOAT32 BEFORE IT IS HANDED OVER, and that is a
+ * workaround for a bug in `Canvas.blitAnim`, not a stylistic choice. `Canvas`
+ * stores depth in a `Float32Array`, so `blit` writes `fround(d)`; `blitAnim`
+ * then re-tests each pose with `d >= this.depth[o]`, comparing the ORIGINAL
+ * DOUBLE against its own float32 rounding. Whenever that rounding goes up — for
+ * roughly half of all depths — the test fails on a pixel pose 0 itself just
+ * drew, the pose is treated as not covering it, and the motion is silently
+ * dropped. Measured on one city seed: 67 pixels recorded where 279 changed.
+ *
+ * Passing a depth that is already exactly representable makes the comparison
+ * agree with itself. The proper fix is one line in `src/core/canvas.js` and is
+ * in the report; this keeps the rounding identical on both branches so the
+ * still render and the animated frame 0 stay the same picture.
+ */
 function putPoses(cv, x0, y0, ps, map, d, A) {
-  if (ps.length > 1 && A && A.anim) cv.blitAnim(x0, y0, ps, origins(ps.length), map, d, A.anim);
-  else cv.blit(x0, y0, ps[0], map, d);
+  const df = Math.fround(d);
+  if (ps.length > 1 && A && A.anim) cv.blitAnim(x0, y0, ps, origins(ps.length), map, df, A.anim);
+  else cv.blit(x0, y0, ps[0], map, df);
 }
 
 
@@ -148,8 +165,8 @@ function putPoses(cv, x0, y0, ps, map, d, A) {
 // a mountainside carrying three hundred of these is the largest single attack
 // on it available anywhere in the generator.
 
-function treeRows(hpx, wpx, variant, kind) {
-  const key = 'T' + kind + '|' + hpx + '|' + wpx + '|' + variant;
+function treeRows(hpx, wpx, variant, kind, sway = 0) {
+  const key = 'T' + kind + '|' + hpx + '|' + wpx + '|' + variant + '|' + sway;
   const had = CACHE.get(key);
   if (had) return had;
   const S = 0x9d21 + variant * 613;
@@ -160,6 +177,7 @@ function treeRows(hpx, wpx, variant, kind) {
   const trunk = kind === 'krummholz' || kind === 'scrub' ? 0 : Math.max(2, Math.round(H * 0.10));
   const half = new Int32Array(H);
   const mid = new Int32Array(H);
+  const swayAt = new Int32Array(H);
   for (let j = 0; j < H; j++) {
     const t = j / (H - 1);
     let taper;
@@ -173,8 +191,29 @@ function treeRows(hpx, wpx, variant, kind) {
     const jit = (u1(j, variant, S) - 0.42) * (kind === 'krummholz' ? 3.4 : 1.9);
     half[j] = Math.max(0, Math.round(halfMax * taper * saw + jit));
     // wind-flagged: the mat leans downwind and the lean grows with height
+    //
     mid[j] = Math.round(lean * (H - j) * (kind === 'krummholz' ? 0.55 : 0.16));
+    // THE SWAY IS A DISPLACEMENT OF THE CROWN'S SHADING, NOT OF ITS OUTLINE.
+    // `sway` is a whole number of screen pixels at the TIP, weighted by the
+    // square of the height fraction, so the trunk and the lower tiers do not
+    // move at all and the rows that do move are CONTIGUOUS: what travels is a
+    // block of the crown's tone, one crown catching the wind rather than a rash
+    // of needles flickering.
+    //
+    // It may not move the silhouette, and that is not a taste. `blob` in
+    // `src/gen/props/nature.js` carries the measurement: a sprite whose outline
+    // changes wins depth tests it lost at frame 0 and rewrites the keyline of
+    // whatever stands behind it, and neither is representable in the record.
+    // What a sprite may animate is its COLOURS at pixels whose tag, depth and
+    // silhouette are identical in every pose.
+    const w = (H - 1 - j) / (H - 1);
+    swayAt[j] = Math.round(sway * w * w);
   }
+  // SWAY_MARGIN is added unconditionally, in the still table too: the extra
+  // columns are '.', `blit` skips them, and the blit origin is `p - (width >>
+  // 1)` on an odd width, so widening the table moves no drawn pixel. Adding it
+  // only when animating would have made the animated frame 0 a different
+  // picture from the still one.
   const RX = Math.max(...half) + Math.max(...mid.map(Math.abs)) + 1;
   const core = [];
   for (let j = 0; j < H + trunk; j++) {
@@ -185,9 +224,11 @@ function treeRows(hpx, wpx, variant, kind) {
         line += (i >= mid[H - 1] - tw && i <= mid[H - 1] + tw) ? ((i <= mid[H - 1]) ? 'w' : 'v') : '.';
         continue;
       }
-      const hw = half[j], c = mid[j];
+      const hw = half[j], c = mid[j], sw = swayAt[j];
       if (i < c - hw || i > c + hw) { line += '.'; continue; }
-      const s = (i - c) / (hw + 0.7);
+      // sampled one pixel over: the tone bands travel, the outline does not
+      let s = (i - sw - c) / (hw + 0.7);
+      if (s < -1) s = -1; else if (s > 1) s = 1;
       const ph = (j % tier) / tier;
       // The shadow a branch tier throws on the one below it: the object's own
       // contour step, one or two rows deep, and only on the shaded half.

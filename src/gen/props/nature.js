@@ -38,12 +38,45 @@ import { FRAMES, triPhase } from '../../core/frame.js';
 // They are set at 0 in this commit: the plumbing lands first and is provably
 // inert, then the motion lands on top of it.
 
-/** A street or park canopy: how far one clump of its rim travels. */
-const CANOPY_PULL_PX = 0;
-/** A bush: the whole canopy IS one clump at this size, so it moves as one. */
-const BUSH_PULL_PX = 0;
-/** A palm: how far the outer half of a frond swings sideways. */
+/**
+ * A street or park canopy: how far one clump of its foliage travels, at the
+ * extreme of the loop. The silhouette never moves — see `blob`.
+ *
+ * TWO IS THE FLOOR, NOT A PREFERENCE, and the sweep says so. At 1 the canopy's
+ * tone field is noisy at the 2px octave, so a one-pixel displacement flips a
+ * scatter of pixels along every contour instead of moving a contour: 22.3-38.8%
+ * of the motion lands in 1-2px islands across three city seeds and
+ * `tools/animcheck.mjs` rejects it as a twinkle. At 2 the same seeds read
+ * 5.6-15.9% with island p50 3-6. Shrinking the constant does not make the
+ * motion subtler, it makes it noise.
+ */
+const CANOPY_SHIFT_PX = 2;
+/** A bush: the whole canopy IS about one clump at this size. */
+const BUSH_SHIFT_PX = 2;
+/**
+ * A palm: ZERO, and this is a reasoned exclusion rather than an omission.
+ *
+ * `Canvas.blitAnim` can only represent a pose whose silhouette CONTAINS pose
+ * 0's (see `blob`), so the only motions available are ones that add pixels. A
+ * frond is a tapered arc one to five pixels wide; every additive motion it has
+ * — a longer tip, a fatter blade — adds one or two loose pixels at a time, and
+ * loose pixels are the one thing that may not ship. Swinging it, which is what
+ * a palm actually does, is a TRANSLATION and needs the core change noted in the
+ * report. Until then the palms are part of the still world.
+ */
 const FROND_SWING_PX = 0;
+/**
+ * How wide the gust sector is, as the cosine of its half-angle: 0.50 is +/-60
+ * degrees, a third of the rim. Not an amplitude — it is what makes the moving
+ * thing a CLUMP. Widen it and the whole canopy pulses; narrow it far enough and
+ * the arc gets too short to stay one connected island.
+ */
+const GUST_COS = 0.50;
+/**
+ * Spare columns each side of a palm crown, inert in the still table. Kept
+ * because `frondCrown` still takes a displacement it does not currently use.
+ */
+const FROND_MARGIN = 3;
 
 /** One canopy in this many moves at all. The rest are the still world. */
 const CANOPY_MOVES_ONE_IN = 3;
@@ -107,10 +140,27 @@ function origins(K) {
   return o;
 }
 
-/** Draw pose 0 exactly as `blit` would; record the rest only when recording. */
+/**
+ * Draw pose 0 exactly as `blit` would; record the rest only when recording.
+ *
+ * THE DEPTH IS ROUNDED TO FLOAT32 BEFORE IT IS HANDED OVER, and that is a
+ * workaround for a bug in `Canvas.blitAnim`, not a stylistic choice. `Canvas`
+ * stores depth in a `Float32Array`, so `blit` writes `fround(d)`; `blitAnim`
+ * then re-tests each pose with `d >= this.depth[o]`, comparing the ORIGINAL
+ * DOUBLE against its own float32 rounding. Whenever that rounding goes up — for
+ * roughly half of all depths — the test fails on a pixel pose 0 itself just
+ * drew, the pose is treated as not covering it, and the motion is silently
+ * dropped. Measured on one city seed: 67 pixels recorded where 279 changed.
+ *
+ * Passing a depth that is already exactly representable makes the comparison
+ * agree with itself. The proper fix is one line in `src/core/canvas.js` and is
+ * in the report; this keeps the rounding identical on both branches so the
+ * still render and the animated frame 0 stay the same picture.
+ */
 function putPoses(cv, x0, y0, ps, map, d, A) {
-  if (ps.length > 1 && A && A.anim) cv.blitAnim(x0, y0, ps, origins(ps.length), map, d, A.anim);
-  else cv.blit(x0, y0, ps[0], map, d);
+  const df = Math.fround(d);
+  if (ps.length > 1 && A && A.anim) cv.blitAnim(x0, y0, ps, origins(ps.length), map, df, A.anim);
+  else cv.blit(x0, y0, ps[0], map, df);
 }
 
 const CANOPY = [
@@ -151,8 +201,8 @@ const FROND = [
  * a mass with a lit side rather than as a flat blob — and the shadow side is
  * the leaf's OWN dark, `g.k`, not the shared ink.
  */
-function blob(R, variant) {
-  const key = R * 16 + variant;
+function blob(R, variant, shift = 0) {
+  const key = (R * 16 + variant) * 16 + (shift + 8);
   const had = BLOB_CACHE.get(key);
   if (had) return had;
   const h = (a, b) => (h3(a, b, 0x51ed + variant * 977) >>> 0) / 4294967296;
@@ -161,6 +211,44 @@ function blob(R, variant) {
   const SQ = 0.78;                       // vertical squash
   const rad = (th) => R * (1 + A[0] * Math.sin(3 * th + P[0])
     + A[1] * Math.sin(5 * th + P[1]) + A[2] * Math.sin(7 * th + P[2]));
+  // THE GUST SECTOR, AND WHAT IS ALLOWED TO MOVE INSIDE IT.
+  //
+  // `shift` is a whole number of screen pixels by which the canopy's INTERIOR
+  // is rigidly displaced inside one stretch of the crown — a third of it, from
+  // `GUST_COS` — while the silhouette, the keyline and every tag stay exactly
+  // where they are. Its sign picks the direction; which stretch is fixed per
+  // variant, so a tree always stirs in the same part of its crown.
+  //
+  // WHY THE SILHOUETTE MAY NOT MOVE, WHICH IS THE FINDING OF THIS ROUND AND
+  // COST THE MOST TO GET. A canopy that gains a pixel at its rim is the exact
+  // motion `Canvas.blitAnim` was written for, and `tools/animcheck.mjs` fails
+  // it — measured on city seeds, 289 pixels per seed change in the full render
+  // that the recorder never claimed, and another 290 that it claimed and had to
+  // drop. Two causes, both structural and neither fixable from this file:
+  //
+  //   * a grown silhouette WINS DEPTH TESTS IT LOST AT FRAME 0 against objects
+  //     drawn after it, and those pixels are filtered out at finish because
+  //     frame 0's canvas disagrees with what the recorder saw;
+  //   * a grown silhouette CHANGES TAG ADJACENCY, and `outlinePass` decides
+  //     every keyline from tag adjacency and depth. A canopy reaching one pixel
+  //     further un-blackens a pixel of the BUILDING BEHIND IT — a pixel no
+  //     sprite ever touched and no recorder ever saw.
+  //
+  // So the contract is narrower than its own doc comment claims: what a sprite
+  // may animate is its COLOURS, at pixels whose tag, depth and silhouette are
+  // identical in every pose. Everything below obeys that, and it is why the
+  // motion here is a clump of foliage stirring inside a crown that holds its
+  // shape rather than a crown that changes shape.
+  //
+  // IT IS STILL A TRANSLATION, WHICH IS THE PROPERTY THAT MATTERS. The tone
+  // field is SAMPLED at a displaced point, so an entire region of leaf detail
+  // moves rigidly by one pixel — not a scatter of pixels each deciding for
+  // itself. A sub-pixel perturbation would flip only those pixels that happened
+  // to sit near a tone threshold, scattered everywhere: that is per-pixel
+  // substitution, it reads as dithering, `docs/BAR.md` records dithering as
+  // absent from every reference, and `animcheck` fails a seed whose motion sits
+  // in 1-2px islands.
+  const GA = h(7, 0) * 6.283, GX = Math.cos(GA), GY = Math.sin(GA);
   const RX = Math.ceil(R * 1.4), RY = Math.ceil(R * 1.4 * SQ);
   const core = [];
   for (let j = -RY; j <= RY; j++) {
@@ -170,6 +258,12 @@ function blob(R, variant) {
       const d = Math.sqrt(i * i + jj * jj);
       const th = Math.atan2(jj, i);
       if (d > rad(th)) { line += '.'; continue; }
+      // The gust: inside the sector the tone field is read one pixel over, so
+      // that whole patch of leaf detail translates as a piece.
+      let ti = i, tjj = jj, tj = j;
+      if (shift && d > 0 && (i * GX + jj * GY) / d > GUST_COS) {
+        ti = i - shift; tj = j; tjj = jj;
+      }
       // FOUR TONES, CLUMPED AT TWO SCALES. A canopy is 30-50px across now, and
       // at three tones in big smooth bands it read as a green slab with one
       // lighter patch — the same "large undetailed facet" failure the round is
@@ -177,9 +271,9 @@ function blob(R, variant) {
       // hash are the clumps of leaf that break it, one at 3px and one at 7px,
       // so the mass has structure at both the size of a branch and the size of
       // a leaf cluster.
-      const n1 = ((h3(i >> 1, j >> 1, 0x2f1b + variant) >>> 8) & 15) / 15 - 0.5;
-      const n2 = ((h3(i / 7 | 0, j / 7 | 0, 0x71c3 + variant) >>> 8) & 15) / 15 - 0.5;
-      const s = (i * 0.5 + jj * 0.86) / R + n1 * 0.34 + n2 * 0.40;
+      const n1 = ((h3(ti >> 1, tj >> 1, 0x2f1b + variant) >>> 8) & 15) / 15 - 0.5;
+      const n2 = ((h3(ti / 7 | 0, tj / 7 | 0, 0x71c3 + variant) >>> 8) & 15) / 15 - 0.5;
+      const s = (ti * 0.5 + tjj * 0.86) / R + n1 * 0.34 + n2 * 0.40;
       line += s < -0.52 ? 'a' : s < -0.06 ? 'l' : s < 0.44 ? 'm' : 'x';
     }
     core.push(line);
@@ -198,14 +292,20 @@ const BLOB_CACHE = new Map();
  * most off-lattice object a street can legitimately contain, and the reference
  * uses them for exactly that.
  */
-function frondCrown(R, variant) {
-  const key = 100000 + R * 16 + variant;
+function frondCrown(R, variant, swingPx = 0) {
+  const key = 100000 + (R * 16 + variant) * 16 + (swingPx + 8);
   const had = BLOB_CACHE.get(key);
   if (had) return had;
   const rnd = (a) => (h3(a, variant, 0x77c1) >>> 0) / 4294967296;
   const n = 7 + (h3(1, variant, 0x31) & 3);
   const SQ = 0.62;
-  const RX = R + 3, RY = Math.ceil(R * SQ) + 4;
+  // FROND_MARGIN is added to the half-width UNCONDITIONALLY, including in the
+  // still table, and that is deliberate. The extra columns are all '.', which
+  // `blit` skips, and the blit origin is `p - (width >> 1)` on an odd width, so
+  // widening the table does not move a single drawn pixel. Adding it only when
+  // animating would have made the animated frame 0 a different picture from the
+  // still one.
+  const RX = R + 3 + FROND_MARGIN, RY = Math.ceil(R * SQ) + 4;
   const g = [];
   for (let j = 0; j < 2 * RY + 1; j++) g.push(new Array(2 * RX + 1).fill('.'));
   const put = (i, j, c) => {
@@ -220,7 +320,11 @@ function frondCrown(R, variant) {
     for (let t = 0; t <= 1.0001; t += 0.045) {
       const rr = len * t;
       const a = a0 + t * t * 0.55 * (Math.cos(a0) >= 0 ? 1 : -1);
-      const px = Math.round(Math.cos(a) * rr);
+      // The outer half of every frond swings together — one coherent piece of
+      // the crown, weighted by t*t so the fronds are still where they leave the
+      // trunk. All fronds go the same way: a crown that streams is one clump,
+      // a crown whose fronds each did their own thing is a twinkle.
+      const px = Math.round(Math.cos(a) * rr) + Math.round(swingPx * t * t);
       const py = Math.round((Math.sin(a) * rr + t * t * droop * R * 0.45) * SQ);
       const wdt = Math.max(0, Math.round(2.2 * (1 - t * 0.85)));
       for (let q = -wdt; q <= wdt; q++) {
@@ -289,7 +393,7 @@ export function tree(cv, iso, C, st, x, y, z, big, A) {
   const R = big ? st.int(9, 14) : st.int(6, 9);
   const variant = st.int(0, 7);
   const off = movePhase(x, y, 0x1f3a5b, CANOPY_MOVES_ONE_IN);
-  const ps = poseSet(A, off, CANOPY_PULL_PX, (m) => blob(R, variant, m));
+  const ps = poseSet(A, off, CANOPY_SHIFT_PX, (m) => blob(R, variant, m));
   const p = projR(iso, x + tw * 0.5, y + tw * 0.5, z + th);
   putPoses(cv, p[0] - (ps[0][0].length >> 1), p[1] - ps[0].length + 2, ps,
     leafMap(C, g), dep(iso, x, y, z + th, 1.2), A);
@@ -354,7 +458,7 @@ export function bush(cv, iso, C, st, x, y, z, A) {
   const g = st.pick([C.leaf, C.grass, C.grass, C.green]);
   const R = st.int(5, 8), variant = st.int(0, 7);
   const off = movePhase(x, y, 0x63b0e5, BUSH_MOVES_ONE_IN);
-  const ps = poseSet(A, off, BUSH_PULL_PX, (m) => blob(R, variant, m));
+  const ps = poseSet(A, off, BUSH_SHIFT_PX, (m) => blob(R, variant, m));
   const p = projR(iso, x, y, z);
   putPoses(cv, p[0] - (ps[0][0].length >> 1), p[1] - ps[0].length + 2, ps,
     leafMap(C, g), dep(iso, x, y, z, 0.9), A);
