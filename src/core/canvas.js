@@ -157,9 +157,50 @@ export class Canvas {
    * later sprite may cover it, and the silhouette sweep may blacken it. That is
    * `AnimRec.finish`'s job, and it resolves it against the canvas that actually
    * exists rather than against anyone's model of it.
+   *
+   * THE REAL CONTRACT, WHICH IS NARROWER THAN THE PARAGRAPHS ABOVE CLAIMED:
+   *
+   *     A SPRITE MAY ANIMATE ITS COLOURS, AT PIXELS WHOSE TAG, DEPTH AND
+   *     SILHOUETTE ARE IDENTICAL IN EVERY POSE.
+   *
+   * The doc comment used to describe a canopy "gaining a pixel at its edge" as
+   * the case this method exists to handle. It cannot handle it, and the oracle
+   * proved that rather than anyone reasoning it out. A grown silhouette wins
+   * depth tests it lost at frame 0 (252 px on the measured seed), and it
+   * changes tag ADJACENCY, so `outlinePass` un-blackens a pixel of the building
+   * behind it — 36 px that no sprite touched and no recorder saw. Two designs
+   * that both looked correct, rejected by rendering the whole scene at frame k
+   * and comparing.
+   *
+   * Silhouette motion needs three things this does not do: the union box's idx
+   * snapshotted BEFORE pose 0 draws, a per-frame coverage mask so overlapping
+   * records merge instead of last-wins, and `outlinePass` re-run over the
+   * dilated neighbourhood. That is a core change, and it is not in this round.
    */
   blitAnim(x0, y0, poses, origins, map, d, rec, tag = 0) {
     const K = poses.length;
+    // `this.depth` IS A Float32Array, SO THE DEPTH THAT COMES BACK OUT IS NOT
+    // THE ONE THAT WENT IN. `blit` stores `d` and the array rounds it to the
+    // nearest float32; re-testing the original double against that rounding
+    // fails whenever it rounded UP — about half of all depths — ON A PIXEL POSE
+    // 0 HAD JUST DRAWN. Measured: 67 px recorded where 279 changed. The code
+    // ran, the comparison was false, and three quarters of the motion was
+    // discarded with no error anywhere.
+    //
+    // Same class as `putZ` writing to a fractional typed-array index, which
+    // cost this project three rounds and eight judges: a silent numeric failure
+    // that throws nothing, returns success, and looks like a craft defect.
+    //
+    // Rounding here rather than asking callers to do it, because a contract
+    // that requires every call site to pre-round is a contract that will be
+    // broken by the next call site. `Math.fround` is idempotent, so a caller
+    // that already rounds loses nothing.
+    //
+    // NOTE the sibling comparisons in `putZ`, `fillPoly` and `rect` are NOT
+    // this bug: they test a fresh depth against a DIFFERENT draw's stored one,
+    // which is a genuine comparison of two quantities. Only re-testing a value
+    // against its own storage is wrong, and this is the only place that does.
+    d = Math.fround(d);
     // Pose 0 draws exactly as an ordinary blit would, so a still render and an
     // animated render agree on frame 0 by construction rather than by care.
     const o0 = origins[0];

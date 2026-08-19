@@ -1192,7 +1192,7 @@ function scatter(stage, SH, PIER, PROM) {
     const k = u8(h, 8);
     cv.t = tagRaw();
     if (k < 0.80) P.marram(cv, iso, C, ds, x, y, z);
-    else if (k < 0.92) P.weedPile(cv, iso, C, ds, x, y, z, false);
+    else if (k < 0.92) P.weedPile(cv, iso, C, ds, x, y, z, false, stage);
     else P.rock(cv, iso, C, ds, x, y, z, false);
   });
 
@@ -1217,7 +1217,7 @@ function scatter(stage, SH, PIER, PROM) {
     const k = u8(h, 16) * 0.55 + sw * 0.45;
     cv.t = tagRaw();
     if (k < 0.46) P.marram(cv, iso, C, ds, x, y, z);
-    else if (k < 0.82) P.weedPile(cv, iso, C, ds, x, y, z, u8(h, 24) < 0.35);
+    else if (k < 0.82) P.weedPile(cv, iso, C, ds, x, y, z, u8(h, 24) < 0.35, stage);
     else if (k < 0.95) P.rock(cv, iso, C, ds, x, y, z, u8(h, 24) < 0.22);
     else { cv.t = tag(); P.shorePost(cv, iso, CB, ds, x, y, z, (h >>> 3) % 3); }
   });
@@ -1305,7 +1305,7 @@ function scatter(stage, SH, PIER, PROM) {
     const z = T.surfaceZ(x, y);
     const k = u8(h, 0);
     cv.t = tagRaw();
-    if (k < 0.34) P.weedPile(cv, iso, C, ss, x, y, z, u8(h, 8) < 0.3);
+    if (k < 0.34) P.weedPile(cv, iso, C, ss, x, y, z, u8(h, 8) < 0.3, stage);
     else if (k < 0.62) P.driftwood(cv, iso, C, ss, x, y, z);
     else if (k < 0.86) P.rock(cv, iso, C, ss, x, y, z, u8(h, 8) < 0.25);
     else P.gull(cv, iso, C, ss, x, y, z, false);
@@ -1333,7 +1333,7 @@ function scatter(stage, SH, PIER, PROM) {
     if (k < 0.585 * busy + 0.03) { cv.t = tag(); P.surfboard(cv, iso, CB, ss, x, y, z); return; }
     if (k < 0.62 * busy + 0.07) { cv.t = tag(); S.parasol(cv, iso, CB, ss, x, y, z); return; }
     if (k < 0.72) { cv.t = tagRaw(); P.driftwood(cv, iso, C, ss, x, y, z); return; }
-    if (k < 0.84) { cv.t = tagRaw(); P.weedPile(cv, iso, C, ss, x, y, z, false); return; }
+    if (k < 0.84) { cv.t = tagRaw(); P.weedPile(cv, iso, C, ss, x, y, z, false, stage); return; }
     if (k < 0.93) { cv.t = tagRaw(); P.gull(cv, iso, C, ss, x, y, z, false); return; }
     cv.t = tagRaw(); P.rock(cv, iso, C, ss, x, y, z, false);
   });
@@ -1349,7 +1349,7 @@ function scatter(stage, SH, PIER, PROM) {
     if (u8(h, 24) > 1 - sm((near - 18) / 110) * 0.62) return;
     const z = T.isWet(x, y) ? T.seaZ : T.surfaceZ(x, y);
     cv.t = tagRaw();
-    drawPerson(cv, iso, CB, fs, x, y, z);
+    drawPerson(cv, iso, CB, fs, x, y, z, undefined, stage);
   });
 
   // ---- 7. THE WET SAND AND THE SWASH. Nothing built, ever: this ground was
@@ -1363,7 +1363,7 @@ function scatter(stage, SH, PIER, PROM) {
     const k = u8(h, 0);
     cv.t = tagRaw();
     if (k < 0.40) P.gull(cv, iso, C, ss, x, y, z, false);
-    else if (k < 0.68) P.weedPile(cv, iso, C, ss, x, y, z, u8(h, 8) < 0.3);
+    else if (k < 0.68) P.weedPile(cv, iso, C, ss, x, y, z, u8(h, 8) < 0.3, stage);
     else if (k < 0.86) P.rock(cv, iso, C, ss, x, y, z, false);
     else P.driftwood(cv, iso, C, ss, x, y, z);
   });
@@ -1399,7 +1399,7 @@ function scatter(stage, SH, PIER, PROM) {
       return;
     }
     if (k < (deep ? 0.42 : 0.30)) { cv.t = tag(); P.buoy(cv, iso, CW, ws, x, y, T.seaZ); return; }
-    if (k < 0.60) { cv.t = tagRaw(); P.weedPile(cv, iso, C, ws, x, y, T.seaZ, u8(h, 8) < 0.4); return; }
+    if (k < 0.60) { cv.t = tagRaw(); P.weedPile(cv, iso, C, ws, x, y, T.seaZ, u8(h, 8) < 0.4, stage); return; }
     if (k < 0.70 && !deep) { cv.t = tagRaw(); P.rock(cv, iso, C, ws, x, y, T.seaZ, u8(h, 8) < 0.3); return; }
     // A GULL ON THE WING IS EXPENSIVE AT THIS SCALE. Twenty-eight pixels of
     // white lying over flat water with nothing under it reads as debris, not as
@@ -1424,7 +1424,7 @@ function scatter(stage, SH, PIER, PROM) {
     const k = u8(h, 0);
     if (k > 0.46) return;
     cv.t = tagRaw();
-    if (k < 0.24) P.weedPile(cv, iso, C, ws, x, y, T.seaZ, u8(h, 8) < 0.3);
+    if (k < 0.24) P.weedPile(cv, iso, C, ws, x, y, T.seaZ, u8(h, 8) < 0.3, stage);
     else if (k < 0.36) P.rock(cv, iso, C, ws, x, y, T.seaZ, false);
     else P.driftwood(cv, iso, C, ws, x, y, T.seaZ);
   });
@@ -1678,7 +1678,7 @@ function promenade(stage, SH, PIER) {
       const w = st.weighted([['person', 22], ['lamp', 10], ['bench', 10], ['bin', 6],
         ['post', 6], ['parasol', 5], ['kiosk', 3], ['rock', 3]]);
       cv.t = w === 'person' ? tagRaw() : tag();
-      if (w === 'person') drawPerson(cv, iso, CB, fs, px, py, promZ);
+      if (w === 'person') drawPerson(cv, iso, CB, fs, px, py, promZ, undefined, stage);
       else if (w === 'lamp') S.lampPost(cv, iso, CB, st, px, py, promZ, st.int(0, 1));
       else if (w === 'bench') S.bench(cv, iso, CB, st, px, py, promZ, st.int(0, 1));
       else if (w === 'bin') S.bin(cv, iso, CB, st, px, py, promZ);
@@ -1987,10 +1987,10 @@ function pier(stage, SH) {
     else if (k === 2) S.bin(cv, iso, CP, ps, x, y, deckZ);
     else {
       cv.t = tagRaw();
-      drawPerson(cv, iso, CP, pes, x, y, deckZ);
+      drawPerson(cv, iso, CP, pes, x, y, deckZ, undefined, stage);
       if (ps.bool(0.5)) {
         cv.t = tagRaw();
-        drawPerson(cv, iso, CP, pes, x + ps.range(-1.6, 1.6), y + ps.range(-1.6, 1.6), deckZ);
+        drawPerson(cv, iso, CP, pes, x + ps.range(-1.6, 1.6), y + ps.range(-1.6, 1.6), deckZ, undefined, stage);
       }
     }
   }
