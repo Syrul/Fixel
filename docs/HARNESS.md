@@ -473,6 +473,32 @@ travel: k-means closed at K=64, its median cut at K<=64, this median cut at
 K<=24, and now the asymmetry sign differs too. **Assert inside the real
 pipeline, never inherit a threshold.**
 
+### The normaliser CREATED a leak while trying to close one — demonstrated, not projected
+
+A verification control run against the normalised pairs recovered the partition
+perfectly again, on four statistics, two of which work on a **single image**
+without needing the pair. Three of the four turned out to be artefacts of the
+normaliser itself. Measured on RAW output, tree `fc6eeb818b719f1c`:
+
+| | min | max | reaches 255 | reaches 0 |
+|---|---|---|---|---|
+| eBoy LA reference | 0 | 255 | yes | yes |
+| Fixel raw, seed 1 | 0 | 255 | **yes** | yes |
+| **Fixel NORMALISED crop** | 0 | **253** | **no** | yes |
+| eBoy NORMALISED crop | 0 | **255** | **yes** | yes |
+
+**Our raw renders reach both 0 and 255. After joint quantisation ours no longer
+reaches 255 and the reference still does.** Median cut allocates slots by pixel
+mass: our sparse extreme highlights carry little mass and get merged away, while
+eBoy's extremes carry 67,160 px and survive as their own slots. So the
+normaliser destroyed OUR data preferentially and manufactured a brand-new
+single-image fingerprint.
+
+That is a **second and stronger reason to keep it retired** than the fidelity
+argument, because it is a demonstrated harm rather than a projected one. It also
+means "max channel 255" and "extreme share" must NOT be sent to the generator as
+defects — they are measurement artefacts.
+
 ### Two acceptance criteria, if the normaliser is ever revived
 
 Not optional, and neither is "does the leak close":

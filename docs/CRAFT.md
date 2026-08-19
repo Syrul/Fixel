@@ -413,3 +413,47 @@ third of the scale, below the threshold where any of it reads.
 **Round 4 is scale, and only scale.** The builder judged that re-tuning every
 world dimension at once was too large to gamble inside a round it could not
 re-validate. That judgement was right, and it is the whole of the next round.
+
+
+---
+
+## Dark vocabulary: one ink for a whole city
+
+The leak battery kept finding the same root cause from three different angles,
+and the third measurement is the starkest. Distinct colours by luma band, whole
+frame:
+
+| band | eBoy reference | Fixel PRE-P2 | Fixel POST-P2 s1 | POST-P2 s4 |
+|---|---:|---:|---:|---:|
+| 0-16 (near-black) | **200 cols**, 14.34% | **1 col**, 18.84% | **1 col**, 11.31% | **1 col**, 9.11% |
+| 16-40 | 103 cols | 49 | 24 | 5 |
+| 40-70 | 286 cols | 395 | 185 | 106 |
+| 70-110 | 627 cols | 706 | 286 | 252 |
+| total distinct | 3021 | 2172 | 945 | 713 |
+
+**We have exactly ONE colour below luma 16. eBoy has two hundred.**
+
+This is a craft finding before it is a fingerprint. One dark colour for an entire
+city is precisely why judges report "form signalled only by black outline plus
+flat facet fill" and "no interior-contour technique anywhere". eBoy's ~200 darks
+are what a light model on solids produces: every material's own shadow tone is a
+different dark.
+
+### What P2 did and did not do
+
+**Ink MASS: fixed, and possibly overshot.** darkShare 18.84% -> 11.31% (seed 1)
+and 17.77% -> 9.11% (seed 4), against the reference's 14.34%. We went from over
+the ceiling to under the reference. Seed 4 in particular may now be under-inked.
+
+**Dark VOCABULARY: not fixed, and it went the wrong way.** Distinct near-blacks
+is still exactly **1**. Worse, every dark band got *narrower*: 16-40 fell 49 ->
+24 -> 5 colours, 40-70 fell 395 -> 185 -> 106, and total distinct fell 2172 ->
+945 -> 713.
+
+So "the object's own darker tone for interior form" has reduced the palette
+rather than diversified it. Whatever landed, it is not yet producing many
+distinct darks. **This is the one real generator invariant the leak battery
+found, it is unchanged, and it is the same work as the craft fix.**
+
+Target the reference's order of magnitude, not its exact count: tens to hundreds
+of distinct darks, not one.
