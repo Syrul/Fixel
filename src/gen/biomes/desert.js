@@ -539,7 +539,17 @@ export function paintDesert(stage) {
   // about two-fifths, which keeps a desert noon and a desert dusk visibly
   // different scenes while sand stays inside 26-55 degrees, rock inside 12-47 and
   // varnish inside 4-33.
-  const pull = (fam, home, k) => home + (fam._h - home) * k;
+  //
+  // THE DIFFERENCE HAS TO BE THE SIGNED ONE, MODULO 360. `mk` wraps its hue into
+  // [0, 360) before storing `_h`, so a family the scene has drifted to -13
+  // degrees comes back as 347 — and pulling 347 four tenths of the way toward 26
+  // lands on 135, which is GREEN. Measured: 0.65% of one frame was a flat
+  // sea-green ground field with stones lying on it, on a biome whose entire
+  // colour argument is that a tone must mean something.
+  const pull = (fam, home, k) => {
+    const d = ((fam._h - home + 540) % 360) - 180;
+    return home + d * k;
+  };
   const SAND_H = pull(C.sandy, 40, 0.34);
   const ROCK_H = pull(C.taupe, 26, 0.34);
   const VARN_H = pull(C.terra, 15, 0.38);
