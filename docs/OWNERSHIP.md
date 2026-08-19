@@ -131,7 +131,22 @@ a genuine artwork on it.
    ceiling, while per-crop it reaches 20.43% and 29.24%. Averaging over the
    frame dilutes precisely the local concentration a judge sees.
 
-9. **Never report a PASS count as progress.** Leave-one-out shows an all-pass
+9. **TEST INDEPENDENCE BEFORE TREATING SHARED STRUCTURE AS EVIDENCE.** Sits
+   next to "plausibility is not evidence" and has the same shape.
+
+   The leak control's strongest argument was "36 exact RGB triples shared across
+   all four images, carrying 29-53% of pixels" — overwhelming evidence of a
+   fixed palette *if the four images are independent artworks*. They were four
+   crops of one file, where it is a tautology. The assumption was never stated
+   and never tested, and it was load-bearing.
+
+   The disconfirming evidence was already in hand and got read as noise: that
+   side's pairwise palette intersections were wildly uneven (170, 74, 76, 90,
+   128, 81) with reuse spanning 31.7-65.8% — the signature of crops covering
+   different regions of one picture, not a generator emitting from a stable
+   palette. A stable-palette generator would show *flat* intersections.
+
+10. **Never report a PASS count as progress.** Leave-one-out shows an all-pass
    gate rejects 84% of the reference's own crops, and seven of the sixty metrics
    correlate at r=1.0000. 36 vs 35 PASS is noise; the direction of a specific
    hard fail is the signal.

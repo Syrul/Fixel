@@ -222,7 +222,29 @@ async function main() {
     // it backwards. Perfect recovery means provenance rides in the colour
     // multiset; the inverted sign means no instruction to a judge can suppress
     // it. See tools/normalise.mjs for the two fingerprints this removes.
-    const NORM = args.raw ? 0 : Number(args.normalise ?? 192);
+    // OFF BY DEFAULT. I shipped this on-by-default at K=192 before sweeping it,
+    // and a sweep of this very pipeline shows K=192 SEPARATES the sides 4/4 on
+    // top-1 colour share — so as deployed it did not close the leak it was
+    // built for. Worse, the failure runs counter-intuitively: a FINER palette
+    // is LEAKIER, because a coarse shared palette merges the reference's
+    // fragmented near-black cloud into one slot and lifts its top-1 share to
+    // meet ours, while a fine palette keeps our single exact ink in a slot of
+    // its own with its full ~0.18 mass intact.
+    //
+    //   K:        16     24     32     48     64     96    128    192
+    //   result: over-  over-  SEP    SEP    SEP    SEP    SEP    SEP
+    //           laps   laps   4/4    4/4    4/4    4/4    4/4    4/4
+    //
+    // And the ordering was wrong anyway. The strongest surviving separator is
+    // our own generator invariant — one exact ink at a fixed high mass share —
+    // and the darkShare regression fix is already a round-4 prerequisite. If
+    // that brings our ink share into the reference's 0.05-0.10 band, the
+    // separator dies at source and no normaliser is needed at all. Tuning K now
+    // means tuning against a number that is about to move.
+    //
+    // Enable explicitly with --normalise K once the ink fix has landed and the
+    // leak has been re-measured on post-fix output.
+    const NORM = args.normalise ? Number(args.normalise) : 0;
     let dataRef = refC.data, dataOur = otherC.data;
     if (NORM) {
       const n = normalisePair(refC.data, otherC.data, NORM);
@@ -323,7 +345,7 @@ async function main() {
   ].join('\n'));
 
   console.log(JSON.stringify({ out: OUT, pairs: PAIRS, size: SIZE, control: CONTROL,
-    normalise: args.raw ? false : Number(args.normalise ?? 192) }, null, 2));
+    normalise: args.normalise ? Number(args.normalise) : false }, null, 2));
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
