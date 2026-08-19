@@ -24,6 +24,156 @@ import * as S from './props/street.js';
 const M = (f) => ({ top: f.t, left: f.l, right: f.r });
 const MD = (f) => ({ top: f.l, left: f.r, right: f.d });
 
+// ---------------------------------------------------------------------------
+// LIT WINDOWS AT NIGHT
+//
+// A lit window that is simply a brighter rectangle reads as a sticker stuck on
+// the building. In the reference a lit window is A VALUE STEP IN THE FACADE'S
+// OWN FAMILY with the frame still reading — the same law the contour step `k`
+// implements, run in the other direction. `k` is the rung BELOW the lit face
+// for a shadow the light does not reach; a lit window is the rung ABOVE it for
+// a room the outside light does not reach either, because it makes its own.
+//
+// So the primary tone of a lit window is `wall.t` where the wall itself is
+// `wall.l`. That costs NO NEW COLOUR AT ALL — it is a rung of a ladder the
+// building already minted — and it keeps the window inside the building's own
+// material, which is the whole difference between a window and a sticker.
+//
+// Only the punctuation is a lamp, and the lamps are a SMALL SHARED SET drawn
+// once for the scene, never one per window. Minting per window would put a
+// colour on every opening in the frame and `palette.distinct` is a measured
+// quantity, not spare capacity.
+//
+// NONE OF THIS RUNS UNLESS `cond.night`. At `golden` a low warm sun is already
+// doing the work and at `day` nothing here is reachable, so the day path is
+// byte-identical — which is a gate, not an aspiration.
+//
+// EVERY QUANTITY BELOW COMES FROM `h3`, NOT FROM AN Rng DRAW. Law 2 in
+// src/core/rng.js: a new quantity opens its own stream or it re-rolls every
+// subsequent draw in the stream it borrows. Occupancy is a property of the
+// BUILDING and has to be stable for it, and `h3` is already how this file
+// decides what is behind every other window, so there is nothing to open.
+// ---------------------------------------------------------------------------
+
+/**
+ * THE SCENE'S LAMPS. THREE TONES, shared by every window in the frame.
+ *
+ * A lamp is an EMITTER, not a pigment: it is not lit by the scene's ambient, it
+ * IS a light in the scene. `mk` applies the night ambient to every tone that
+ * passes through it, so a lamp is minted at the very top of the pigment range
+ * and lands at the top of the night ramp — the brightest thing the picture
+ * contains, which is exactly what a lit window is after dark.
+ *
+ * The warm one stays BELOW hue 38 deliberately. `pullHue` takes the shortest
+ * arc to the night hue, and 38 is the antipode of 218 where that arc changes
+ * sign: a filament at 37 comes out a warm red, at 39 a yellow-green. Straddling
+ * that boundary would make the scene's warmest light depend on a rounding.
+ *
+ * Keyed off the scene's OWN light commitment, so two night cities have
+ * different lamps without a single new random draw and without the set growing.
+ */
+function lampSet(C) {
+  const sk = h3(Math.round(C.light.HUE0 * 1e5), Math.round(C.light.LEFT * 1e5),
+    Math.round(C.paintRate * 1e5));
+  const j = (n, lo, hi) => lo + ((h3(sk, n, 17) & 1023) / 1024) * (hi - lo);
+  return [
+    C.mk(j(1, 27, 37.4), j(2, 0.56, 0.80), 0.99),   // filament, a warm room
+    C.mk(j(3, 146, 172), j(4, 0.26, 0.46), 0.99),   // a fluorescent tube
+    C.mk(j(5, 196, 216), j(6, 0.03, 0.11), 0.99),   // a cold screen or a landing
+  ];
+}
+
+/**
+ * WHO IS IN, PER BUILDING. Structure, not tone.
+ *
+ * Independent per-window coin flips read as noise — the same failure the
+ * animation work kept hitting, and the reason a chequerboard of lights looks
+ * like a spreadsheet rather than a building. Occupancy here has three
+ * overlapping structures and they are all spatial:
+ *
+ *   a FLOOR is occupied or it is not      — horizontal bands, and they wrap the
+ *                                           corner because a floor is a floor
+ *   a RUN of adjacent bays on that floor  — one office suite, one flat
+ *   a RISER is lit top to bottom          — the stairwell, on some buildings
+ *
+ * then two small corrections that stop the blocks reading as blocks: somebody
+ * on a lit floor is out, and somebody on a dark floor is up late.
+ *
+ * EXPORTED so the occupancy rate can be MEASURED rather than asserted: a script
+ * can enumerate the real (bay, floor) grid of every facade a render draws and
+ * count. It is a pure function of `o` and changes no pixel by being reachable.
+ */
+export function nightStructure(o) {
+  const s = o.seed;
+  // Not every building is occupied. A whole dark block is what makes the lit
+  // ones read as lit.
+  o.anyLit = (h3(s, 4401, 7) % 100) < 84;
+  o.floorPct = 42 + (h3(s, 4402, 7) % 30);
+  o.runMax = 2 + (h3(s, 4403, 7) % 3);
+  o.darkPct = 14 + (h3(s, 4404, 7) % 14);
+  o.strayPct = 3 + (h3(s, 4405, 7) % 5);
+  o.riser = (h3(s, 4406, 7) % 100) < 38 ? (h3(s, 4407, 7) & 0xffff) : -1;
+  // How this building's lit windows divide between its own material and the
+  // scene's lamps. Most of them are the material.
+  o.tW = 5 + (h3(s, 4408, 7) % 3);
+  o.shopPct = 26 + (h3(s, 4409, 7) % 22);
+  return o;
+}
+
+/** 1 if the window in this bay on this floor is lit. `nb` is bays per face. */
+export function litAt(o, nb, bay, fl) {
+  if (!o.anyLit) return 0;
+  const b = ((bay % nb) + nb) % nb;
+  // The stairwell. Lit nearly the whole height, which is what makes it read as
+  // a column rather than as a coincidence.
+  if (nb >= 4 && o.riser >= 0 && b === o.riser % nb && (h3(o.seed, 8801, fl) & 7) < 6) return 1;
+  let on = 0;
+  if ((h3(o.seed, 5501, fl) % 100) < o.floorPct) {
+    // A WIDE FACE GETS MORE THAN ONE RUN. One suite on a forty-metre floor
+    // plate is a stripe with a building drawn round it; two or three separate
+    // runs with dark bays between them is a floor with tenants on it.
+    const runs = nb >= 13 ? 3 : nb >= 7 ? 2 : 1;
+    // A RUN NEVER COVERS A WHOLE FACE. On a three-bay building a run of four
+    // wraps the face and the floor becomes a solid lit band, which is the
+    // stripe this section exists to avoid; the run has to leave a dark bay.
+    const cap = Math.max(1, Math.min(o.runMax + (nb >> 2), nb - 1));
+    for (let i = 0; i < runs && !on; i++) {
+      const r = h3(o.seed + o.faceK * 977, 6607 + i * 131, fl);
+      const len = 1 + (r >>> 9) % cap;
+      if ((((b - (r % nb)) % nb) + nb) % nb < len) on = 1;
+    }
+  }
+  const q = h3(o.seed + o.faceK * 977, bay + 64, fl + 4096) % 100;
+  if (on) { if (q < o.darkPct) on = 0; }
+  else if (q >= 100 - o.strayPct) on = 1;
+  return on;
+}
+
+/**
+ * The family behind a lit window, or null.
+ *
+ * The tone is chosen per FLOOR and not per window: one office floor is lit by
+ * one kind of lamp, and a facade whose every lit window is a different colour
+ * is the spreadsheet again. One window in six dissents, so the bands are not
+ * perfect either.
+ */
+function litFam(o, nb, bay, fl) {
+  if (!litAt(o, nb, bay, fl)) return null;
+  const base = h3(o.seed + o.faceK * 977, 7717, fl) & 15;
+  const q = (h3(o.seed, bay + 512, fl + 8192) % 6) === 0 ? (base + 7) & 15 : base;
+  return q < o.tW ? o.roomW : q < o.tW + 3 ? o.roomT
+    : q < o.tW + 7 ? o.lampA : q < o.tW + 9 ? o.lampB : o.lampC;
+}
+
+/** The family behind an OPEN shop, or null. Ground floor, per unit. */
+function shopFam(o, bi) {
+  if (!o.anyLit) return null;
+  const hh = h3(o.seed + 33, bi, 313);
+  if ((hh % 100) >= o.shopPct) return null;
+  const q = (hh >>> 9) & 15;
+  return q < 5 ? o.roomW : q < 8 ? o.roomT : q < 13 ? o.lampA : o.lampB;
+}
+
 /** Cast panels a couple of bays by a few floors, in the wall's own two steps. */
 function panelTone(o, bay, fl) {
   if (o.panelSpan <= 0) return o.wall;
@@ -41,6 +191,10 @@ function facade(F, o) {
   // either direction is the whole failure mode: doubled line weights on one
   // side, hairline architecture on the other.
   const q = F.q === undefined ? 1 : F.q;
+  // Bays across THIS face. Computed once per face, not per pixel: the left and
+  // right facades of one mass share every option except their width, so the
+  // occupancy runs below have to be indexed against each face's own bay count.
+  const nb = Math.max(1, Math.floor(o.W / o.bayU));
   return (sx, sy) => {
     const u = au * sx + cu;
     const v = av * sx + bv * sy + cv;
@@ -61,6 +215,9 @@ function facade(F, o) {
       const bi = Math.floor(u / o.shopU);
       const gu = u - bi * o.shopU;
       const hh = h3(o.seed, bi, 101);
+      // AN OPEN SHOP IS THE BRIGHTEST THING AT STREET LEVEL, and a street of
+      // shut ones is what makes it read. Null unless `cond.night`.
+      const sf = o.night ? shopFam(o, bi) : null;
       // The fascia head is the shadow the fascia throws on the wall above it,
       // so it is the WALL's own dark. It used to be a full-width run of shared
       // ink across every shopfront on every building — one of the longest
@@ -77,8 +234,9 @@ function facade(F, o) {
       if (v < 1.0 + 0.55 * q && !door) return K;
       if (!door && v > top - 0.55 * q) return K;
       if (door && v > o.groundH - 1.9 - 0.55 * q) return K;
-      if (door) return v < 3.2 ? o.door : o.shopGlass;
+      if (door) return v < 3.2 ? o.door : (sf ? sf.t : o.shopGlass);
       if (o.shopMull > 0 && Math.abs(gu - o.shopU * 0.5) < 0.28 * q) return K;
+      if (sf) return sf.t;
       return (hh & 3) === 1 ? o.shopGlassB : o.shopGlass;
     }
 
@@ -136,8 +294,20 @@ function facade(F, o) {
     // boundary and stays ink; the bars inside it are the glass's own dark, for
     // the same reason the solar grille is. This is where the reference's
     // "rings itself at 0.49 of interior luma" actually applies — interior form.
-    if (o.centreMull && wx1 - wx0 > 3.6 && Math.abs(fu - o.bayU * 0.5) < 0.28 * q) return o.glassK;
-    if (o.transom && wy1 - wy0 > 3.2 && Math.abs(fv - (wy0 + wy1) * 0.5) < 0.26 * q) return o.glassK;
+    // THE LIT PANE, AND ITS BARS IN ITS OWN TONE.
+    //
+    // The glazing bars are interior form, so they take the LIT family's own
+    // contour step rather than the glass's — the same rule that puts a panel
+    // line in the object's material instead of in the shared ink. Drawing them
+    // in black would be adding ink to a facade that is already the largest
+    // interior consumer of it, and `outline.darkShare` is a two-sided open
+    // regression. The frame around the opening is unchanged: it is the object
+    // boundary and it was already ink, so a lit pane is still a framed hole in
+    // a wall rather than a bright rectangle painted on one.
+    const lf = o.night ? litFam(o, nb, bay, fl) : null;
+    if (o.centreMull && wx1 - wx0 > 3.6 && Math.abs(fu - o.bayU * 0.5) < 0.28 * q) return lf ? lf.k : o.glassK;
+    if (o.transom && wy1 - wy0 > 3.2 && Math.abs(fv - (wy0 + wy1) * 0.5) < 0.26 * q) return lf ? lf.k : o.glassK;
+    if (lf) return lf.t;
     const hh = h3(o.seed, bay, fl) & 15;
     if (hh < o.gA) return o.g0;
     if (hh < o.gB) return o.g1;
@@ -152,7 +322,7 @@ function facadeOpts(C, st, wall, W, H, seed, style, blank) {
   const trim = st.bool(0.7) ? C.white : st.pick([C.cream, C.concrete, C.pave]);
   const acc = st.pick(C.accents);
   const o = {
-    W, H, seed, black: C.black, blank,
+    W, H, seed, black: C.black, blank, faceK: 0,
     wall: wall.l, wallD: wall.r, quoin: wall.r,
     wallK: wall.k, glassK: glass.k,
     panelSpan: st.weighted([[1, 4], [2, 6], [3, 3]]),
@@ -201,6 +371,32 @@ function facadeOpts(C, st, wall, W, H, seed, style, blank) {
   const cp = st.weighted([[1, 5], [2, 3], [3, 2], [4, 1]]);
   o.colPeriod = cp; o.colCount = cp === 1 ? 1 : Math.max(1, cp - 1);
 
+  // ---------------- night
+  //
+  // Only the tones a window can hold and the structure of who is in. Nothing
+  // here is reachable by day, so the day path is untouched.
+  o.night = !!(C.cond && C.cond.night);
+  if (o.night) {
+    nightStructure(o);
+    const lamps = lampSet(C);
+    // The room's own wall, one rung ABOVE the facade's lit face. This is the
+    // colour most lit windows are, and it costs nothing: the building already
+    // minted this ladder.
+    // `roomW` is the wall family itself — a lit window uses its `.t`, one rung
+    // above the `.l` the facade is drawn in, and its `.k` for the glazing bars.
+    // `roomT` is the trim family, the pale ceiling or blind of a lit room.
+    o.roomW = wall; o.roomT = trim;
+    o.lampA = lamps[0]; o.lampB = lamps[1]; o.lampC = lamps[2];
+    // The two DAY window states that are bright by construction are folded back
+    // into the dark ones after dark. `lit` was the amber family's top and
+    // `blind` was the trim's, and both landed on two of sixteen windows by an
+    // independent per-window hash — which after dark is exactly the unstructured
+    // scatter this whole section exists to avoid. A dark window is still a
+    // window though, so neither becomes black: one is another glass rung and the
+    // other is the pale trim in shadow, i.e. a drawn blind with nobody behind it.
+    o.lit = glass.l; o.blind = trim.r;
+  }
+
   if (style === 1) {           // ribbon glazing, wide flat spandrels
     o.mull = 0.38; o.spandrel = 1.85; o.bayU = st.range(2.9, 4.0);
     o.rowPeriod = 1; o.rowCount = 1; o.colPeriod = 1; o.colCount = 1;
@@ -221,7 +417,11 @@ function mass(cv, iso, C, st, x, y, z, w, d, h, wall, style, seed) {
   const blankL = ((h3(seed, 1, 3) & 15) < 5);
   const blankR = ((h3(seed, 2, 3) & 15) < 5);
   const oL = facadeOpts(C, st, wall, w, h, seed, style, blankL);
-  const oR = Object.assign({}, oL, { W: d, blank: blankR });
+  // The two facades of one mass share every option but their width. `faceK`
+  // separates the per-BAY hashes so the same run of lit windows does not appear
+  // twice at the corner; the per-FLOOR hashes deliberately do NOT carry it,
+  // because a lit floor wraps the corner — a floor is a floor.
+  const oR = Object.assign({}, oL, { W: d, blank: blankR, faceK: 1 });
   box(cv, iso, x, y, z, w, d, h, {
     top: null, left: facade(FL, oL), right: facade(FR, oR),
   });
