@@ -305,3 +305,199 @@ The gate is not yet trusted: it has been asked to survive an inversion test
 (adversarial recolour / 1px-jitter / hue-rotation controls must rank BELOW a
 genuine spread of reference crops) before any number from it is treated as a
 score. Read the NARROW list, not the count.
+
+---
+
+## r3 — pixels and audio. Both halves. **LOST.**
+
+Generator frozen at commit `b121f1f`, tree digest `a9f2180f82d62760`, `verify.mjs`
+4/4 byte-identical across processes and 4/4 distinct seeds. Duel stamped with
+that digest. Judge brief **v3**, per-judge scratch directories, checksummed
+inputs, symmetric padding.
+
+### Verdict: 0-4, and it is not close
+
+| pair | -ab | -ba | result |
+|---|---|---|---|
+| 1 | reference | reference | **LOSS** |
+| 2 | reference | reference | **LOSS** |
+| 3 | reference | reference | **LOSS** |
+| 4 | reference | reference | **LOSS** |
+
+**Eight fresh judges, eight confident picks for the reference, zero splits, and
+every judge correctly identified which side was the program.** Pair 3 agreed in
+both orders, so there is no position bias on it.
+
+This is a cleaner result than r2, and worse. In r2 all four pairs *split* — two
+judges shown identical pixels disagreed, because the verdict depended on which
+proxy each happened to measure. Brief v3 closed those proxies, and judges now
+**agree with each other**. They agree we lose. One judge stated explicitly that
+it had set aside palette size, fringe and near-duplicate darks per caution 4,
+and that colours-per-tile was effectively tied per caution 2 — and it still
+identified us, on craft.
+
+### The progress is real and large
+
+- **Ink closure 9.62 -> median 5.17** across six seeds (range 4.57-6.18), with
+  the seed-to-seed spread collapsing from 4.25-15.74. LA reference 3.23,
+  Lufthansa 4.95. **The generator is now in the same regime as genuine work
+  rather than a different one.** It is *not* level with a genuine Pixorama —
+  two seeds in six beat Lufthansa, the typical seed does not.
+- **The first reference floor ever cleared in this project.** Perceptual variety,
+  minimum pairwise distance across seeds: 0.1754 -> **0.2045** against a
+  reference floor of **0.1950**, and all four windows clear it
+  (0.2045 / 0.2189 / 0.2325 / 0.2526). The variety gate still returns FAIL on
+  its ratio half (0.963 vs 1.000), and both halves must be reported — "variety
+  FAIL" alone would misrepresent it. The one FROZEN metric, `runLen.median`, is
+  integer-quantised at 2.000: that is the metric's resolution, not a property of
+  the scenes.
+- **The `shade.*` family is unfrozen** — `lumaRatioMedian` 0.018 -> 1.101,
+  `hueRotMedian` 0.115 -> 0.558. That was the named root cause and it moved.
+- `corrDx0Share` and `edge.meanDelta` now pass on 4/4 seeds; `hueRotMedian`
+  passes 4/4 and never rotates warm.
+
+### The single remaining gap on the pixel side: SCALE
+
+Not "add detail". **The detail is drawn, and drawn below the size at which it
+can survive quantisation.**
+
+Settled on one object: a judge reported our vehicle has "two orphan yellow
+pixel-pairs floating where headlights should be". Those *are* the builder's lamp
+housings. The code fires. At the size the object is drawn, a lamp housing is two
+loose pixels and a door seam is stipple. The bus likewise has wheels — radius
+about 4 screen pixels, which reads as "a dashed row of disconnected black
+pixels".
+
+The numbers, from four independent judges plus my own verification:
+
+| | Fixel | reference |
+|---|---:|---:|
+| objects below building scale resolving into a nameable thing at 1:1 | **0** | ~14 figures, 3 vehicles, a dozen fixtures |
+| area in non-lattice-conforming forms | **0.5%** | **9.9%** |
+| colour-boundary runs that are exactly the 2px iso stair | 45.2% | 30.6% |
+| runs exceeding 5px | 5.0% | 15.2% |
+| uniform 17x17 windows | 1.34% | **0.01%** |
+| exact structural duplicate 12x12 windows | 6.08% | 1.40% |
+| 32x32 windows holding <=2 colours | 4.2% | **0.0%** |
+
+The 0.5% vs 9.9% on off-lattice form is a **twentyfold gap and the hardest
+single number in the project.**
+
+The best summary anyone produced: *"A is bimodal — its macro geometry is
+machine-clean, while everything below building scale dissolves into
+organic-contoured colour patches with interstitial dark speckle — the signature
+of a low-fidelity source resolved onto a pixel grid rather than placed pixel by
+pixel."* We are drawing detail into a space too small to hold it, and the
+quantiser turns craft into noise.
+
+And the sentence for the whole round: we and the reference are **"statistically
+twinned on the metrics that usually separate machine from hand"** — 5x5-flat
+0.153 vs 0.156, median 16x16 tile colour count 7 vs 9, structural repetition
+both ~22%. **"What is not twinned is decision-making."**
+
+### Metrics retired or demoted this round
+
+- **`flat.frac5x5` can no longer steer anything.** Discrimination at its own
+  window is 1.07x (13.08% vs 13.95%) while at 17x17 it is 134x. We gated on it
+  with "zero headroom" and it cannot see the defect it exists to protect. Gate
+  13x13 or 17x17 instead.
+- **`palette.top1Share` reads backwards** — our top colour is one shared ink at
+  ~19%; the reference's is a sand tone at 6.45% *because its black is fragmented
+  into many near-blacks by rasterisation*. Fourth metric contaminated by the
+  reference's file history. Brief v3 caution 4 already covers it.
+- **`edge.fracAA` is not antialiasing.** Nothing in the renderer blends. It is
+  our three-step ladder on objects too small to carry a ladder — the scale
+  defect measured a second way, not an independent failure.
+
+### Open regression: ink is over budget, and unevenly
+
+`outline.darkShare`, six seeds x nine crops:
+
+| | whole-image | crop max |
+|---|---|---|
+| range | 16.57-19.53% | **20.43-29.24%** |
+
+Band ceiling 19.56%, reference 16.26%. No seed's whole-image reading exceeds the
+ceiling; crops reach 29.24%. **Ink is spatially concentrated and averaging hides
+it — and the duel judges 320px crops.** Gate the per-crop max. Round 4 cannot add
+ink anywhere until this is understood.
+
+### Bugs found, none statistical
+
+1. **Signage foreshortens.** Glyphs taper ~9px -> ~5px cap height across one
+   sign. An axonometric plane shears but never scales, so type on it must hold
+   constant cap height and stroke weight. A correctness error in glyph placement.
+2. **125 horizontal constant runs >=40px against the reference's 9**, longest
+   106px vs 50px. A horizontal line is off-axis for both the 2:1 lattice and the
+   vertical, so it cannot be a chosen lattice break.
+3. **Merged corner** — a building's two vertical facets rendering the exact same
+   RGB (156,157,153) with no outline and no value step, so its own edge vanishes.
+4. **Non-closing ink** — "dotted, non-closing 1px black chains that begin and end
+   in mid-plane and bound nothing". That is what our ink-closure number looks
+   like on screen.
+5. **`tagN` wraps** at `scene.js:104` (`% 65534` into a `Uint16Array`). Worst of
+   eight seeds reaches 53,515 at 1600x1100 — **18% headroom**. Fix before
+   anything increases density or frame size, which is exactly what round 4 does.
+
+### Hero signage shipped as a slab
+
+Round 3 added hero signs — the loudest absence in round 2 — and a judge read ours
+as the worst object in the frame: "3,082 pixels of one unbroken yellow with no
+frame, no panel thickness, no edge value change, and a support pole below that
+terminates at the boundary without a join." **Round 4 must build signs, not place
+them.**
+
+---
+
+## r3 audio — the synth works; the bar does not discriminate
+
+**The synth is sound.** Duty cycle recovers from a solo stem at **MSE 0.00000**,
+determinism verified byte-identical across processes, **26 ms cold start**,
+symbolic note data serialisable and measurable independently of the wav. The
+architecture separation the bar requires was designed in from the start, and the
+limiter envelope is computed once and applied identically to mix and stems so
+`sum(stems) === mix` — which is what makes per-channel duty measurement
+meaningful at all.
+
+**But it failed its inversion test: four of five adversarial controls PASS**,
+including one bar of music repeated verbatim for 60 seconds.
+
+I confirmed the mechanism analytically. Against the unlooped synth, only three
+metrics respond to verbatim repetition with real force — `repeatStrength`
++131.5%, `novelFraction` -98.5%, `noveltyPerSecond` -76.6% — and the budget is 5.
+
+My own spliced loop scored 6 and appeared to contradict this. It did not: the
+sixth was `beatStrength` at +12.2%, and **my ffmpeg splice manufactures a hard
+transient every 1.45 s**, which is a periodic onset. Remove the splice artefact
+and a verbatim loop lands at exactly 5 against a budget of 5 — **it passes, with
+zero margin.** The builder's symbolically-generated loop, which has no splice, is
+the clean test, and its PASS stands. My test understated the failure.
+
+**So the audio fail-count is a floor.** It rejects a drone and a random walk. It
+does not distinguish music from a verbatim loop of music.
+
+**The synth's 1.50 mean is not a pass.** It ranks *above* genuine chiptune's
+1.89 — the same centrality signature that retired the pixel band: a generator
+sitting near the middle of every interval scores well precisely by being
+unremarkable.
+
+**Remaining audio gap: no tempo metric survives.** `tempoBpm` was removed after
+it was shown to return the centre of its own search window (6 of 24 on a
+resampling self-consistency test). Nothing in the suite now constrains how fast
+the music is. The synth's 140-172 BPM is **UNGATED** and rests on musical
+judgement alone — an assumption, not a checked property.
+
+---
+
+## What this round taught the process
+
+- **Third instrument-contamination catch**, after WSOLA manufacturing transients
+  in the resampling test and the duty fit querying harmonics the band-limiter
+  never rendered. Each time the agent caught its own instrument instead of
+  shipping the number. That habit is the most valuable thing this loop has built.
+- **A sixth retraction, avoided.** I reported ink closure as "4.94, level with
+  Lufthansa" from a single seed. The six-seed median is 5.17 and only two of six
+  beat Lufthansa. **The generator is a distribution, not an artefact** — any
+  number from fewer than about six seeds now carries its range or does not
+  appear. And the statistic must match how the artefact is judged: the duel shows
+  crops, so a whole-image mean is the wrong summary.
