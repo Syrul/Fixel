@@ -35,9 +35,15 @@ cost us twice.
 | `src/core/**` | the lead | projection, canvas, rng, png — changing these moves every metric at once |
 | `tools/metrics.mjs`, `tools/budget.mjs`, `tools/variety.mjs`, `docs/band-*.json`, `docs/budget-*.json` | **the metrics builder** | a band that moves under a measurement is the bug we are fixing |
 | `tools/duel.mjs`, `tools/page.mjs`, `tools/treehash.mjs`, `tools/crop.mjs`, `tools/verify.mjs` | the lead | the harness must not be edited by anyone it judges |
-| `docs/ROUNDS.md`, `docs/HARNESS.md`, `docs/JUDGE-PROMPT.md`, `docs/DIFF.md`, `docs/CRAFT.md`, `docs/OWNERSHIP.md` | the lead | the record of what happened |
+| `docs/ROUNDS.md`, `docs/HARNESS.md`, `docs/JUDGE-PROMPT.md`, `docs/DIFF.md`, `docs/CRAFT.md`, `docs/BAR.md`, `docs/OWNERSHIP.md` | the lead | the record of what happened |
 | `src/audio/**` | **the synth builder** | the engine. May NOT touch the bar it is measured against |
 | `corpus/**`, `tools/audio-metrics.mjs`, `tools/calibrate-audio-band.mjs`, `docs/AUDIO-MEASURED.md`, `docs/band-audio-v1.json` | **the audio-bar owner** | the bar. Frozen while a synth is being measured against it |
+
+**Any path not in this table belongs to the lead by default.** `docs/BAR.md` was
+absent from it for five rounds and was edited by whoever was nearest, which is
+precisely the state that produced the concurrent-write incident above. An
+unassigned file is not an unowned file; it is a file whose owner nobody has had
+to name yet.
 
 A builder needing a change outside its own files messages the lead with the
 exact change. It does not make it "just this once".
