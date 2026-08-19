@@ -27,8 +27,8 @@
 // the same post it always restored. That is checked, not assumed: the city path
 // is byte-identical across the refactor.
 
-import { Rng } from '../core/rng.js';
 import { makeStage } from './stage.js';
+import { BIOME_WEIGHTS, BIOME_KEYS, pickBiome } from './biome-mix.js';
 import { paintCity } from './biomes/city.js';
 import { paintDesert } from './biomes/desert.js';
 import { paintShore } from './biomes/shore.js';
@@ -51,19 +51,13 @@ import { paintHighland } from './biomes/highland.js';
  * background in a picture that has no sky. Nothing in the harness would fail.
  */
 const BIOMES = {
-  city: { paint: paintCity, weight: 34, backPad: 0 },
-  shore: { paint: paintShore, weight: 22, backPad: 60 },
-  desert: { paint: paintDesert, weight: 22, backPad: 80 },
-  highland: { paint: paintHighland, weight: 22, backPad: 190 },
+  city: { paint: paintCity, backPad: 0 },
+  shore: { paint: paintShore, backPad: 60 },
+  desert: { paint: paintDesert, backPad: 80 },
+  highland: { paint: paintHighland, backPad: 190 },
 };
 
-export const BIOME_KEYS = Object.keys(BIOMES);
-
-/** Which kind of place this seed is. Pure function of the seed. */
-export function pickBiome(seed) {
-  const st = new Rng(seed).stream('biome');
-  return st.weighted(BIOME_KEYS.map((k) => [k, BIOMES[k].weight]));
-}
+export { BIOME_KEYS, BIOME_WEIGHTS, pickBiome };
 
 export function renderScene(seed, opts = {}) {
   const kind = BIOMES[opts.biome] ? opts.biome : pickBiome(seed);
