@@ -760,16 +760,37 @@ export function paintShore(stage) {
   // buoys, moored craft, weed rafts, the skerries, and the pier's piles with
   // their reflections. Fewer bands plus more objects answers both constraints;
   // more bands answers neither.
-  const waterTop = (u, v) => {
+  //
+  // AND IT IS THE ONE FACE IN THIS GENERATOR THAT MOVES.
+  //
+  // `waterTop` is a pure function of (world position, FRAME INDEX). It shades
+  // frame `stage.frame` and, on the same call, emits ALL K frames' palette
+  // indices to `stage.anim` — see `src/core/anim.js` for why that is a few per
+  // cent of a render rather than seven hundred. Everything expensive here (four
+  // field lookups, the region resolution, the bathymetry, the fine field) is
+  // the same for every frame and is computed ONCE, above `tone`; only the two
+  // phase scalars differ per frame, and each costs a triangle wave and a
+  // compare.
+  //
+  // `vals` is hoisted out of the shader and reused. A `new Uint16Array(K)` per
+  // pixel would be 200,000 allocations a frame.
+  const K = stage.frames;
+  const FR = stage.frame;
+  const vals = new Uint16Array(K);
+
+  const waterTop = (u, v, z, q, sx, sy) => {
     MF.at(u, v, buf);
     const h0 = buf[0], swell = buf[1], grain = buf[2];
     const e = h0 / slope;
     const R = regionAt(u, v, swell);
+    const g0 = MF.grad(u, v);
+    const gi = idxN(grain, 5);
 
-    const fw = foamAt(e, MF.grad(u, v), grain);
-    if (fw > 0.60) return R.foam[idxN(grain, 5)].t;
-    if (fw > 0.44) return R.foam[idxN(grain, 5)].l;
-
+    // THE SEABED IS COMPUTED FROM THE UNSHIFTED EXPOSURE AND NEVER MOVES.
+    // The depth zone and the contour ladder below it are the SEA FLOOR. A sea
+    // floor that breathes is wrong at a level no amount of subtlety rescues,
+    // and it is also the largest area in the picture — moving it would be the
+    // scrolling gradient this design exists to refuse.
     const zi = e > -6 ? 3 : e > -21 ? 2 : e > -48 ? 1 : 0;
     const F = R.sea[zi][idxN(grain, 4) + 4 * idxN(swell, 2)];
 
@@ -800,15 +821,38 @@ export function paintShore(stage) {
     // straight, and gated on the grain so each one is an arc rather than a line
     // from one edge of the frame to the other.
     const d = (u - Ox) * nx + (v - Oy) * ny;
-    const t = tri(d / R.pitch + swell * 1.25);
-    if (grain > 0.30) {
-      if (t > 0.87) return F.l;
-      // The trough takes the RIGHT step, not the contour step. `.k` is the line
-      // the light does not reach at all, and a hundred pixels of it running
-      // across open water read as a drawn contour rather than as a swell.
-      if (t < 0.06) return F.r;
-    }
-    return base;
+
+    /**
+     * One frame's answer, from the two quantities that move.
+     *
+     * `dE` shifts the foam band along the cross-shore ordinate, in world units.
+     * `ph` shifts the swell crest, in units of the swell PERIOD. Both are zero
+     * at frame 0 by construction, so frame 0 is byte-identical to the still
+     * render and every craft number ever measured on this biome still stands.
+     */
+    const tone = (dE, ph) => {
+      const fw = foamAt(e + dE, g0, grain);
+      if (fw > 0.60) return R.foam[gi].t;
+      if (fw > 0.44) return R.foam[gi].l;
+      const t = tri(d / R.pitch + swell * 1.25 + ph);
+      if (grain > 0.30) {
+        if (t > 0.87) return F.l;
+        // The trough takes the RIGHT step, not the contour step. `.k` is the
+        // line the light does not reach at all, and a hundred pixels of it
+        // running across open water read as a drawn contour rather than as a
+        // swell.
+        if (t < 0.06) return F.r;
+      }
+      return base;
+    };
+
+    // WITH ONE FRAME THE ANIMATION PATH IS NOT ENTERED AT ALL. `AnimRec.push`
+    // already returns on its first line, but K frames computed and thrown away
+    // would still be K frames computed.
+    if (K < 2) return tone(0, 0);
+    for (let k = 0; k < K; k++) vals[k] = tone(0, 0);
+    stage.anim.push(sy * cv.w + sx, cv.t, vals);
+    return vals[FR];
   };
 
   const groundSide = (u, v, plane, axis) => {

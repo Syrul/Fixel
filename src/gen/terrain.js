@@ -219,6 +219,19 @@ export function walkTrack(T, st, o = {}) {
  * callbacks in WORLD coordinates — the face inverse is done here once per
  * terrace rather than once per cell, so a biome writes what the ground is made
  * of and never touches the projection.
+ *
+ * `mats.water` takes TWO EXTRA TRAILING ARGUMENTS, `sx` and `sy`, and only it
+ * does. A shader that animates has to hand `AnimRec` a SCREEN OFFSET, and the
+ * face inverse here is deliberately one-way: it turns (sx, sy) into world (u,
+ * v) and throws the screen coordinates away. Recovering them by re-inverting
+ * the inverse in the biome would be a second copy of the projection living
+ * outside `src/core`, which is the one thing `faces.js` exists to prevent, and
+ * it would be a copy that silently goes wrong the next time the scale moves.
+ *
+ * `mats.top` and `mats.side` are UNCHANGED. Desert and highland call through
+ * them, the extra arguments would be inert there, and a signature that grows
+ * for every biome that wants something is how a shared substrate stops being
+ * shared. Water is the only face in this generator that moves.
  */
 export function drawTerrain(cv, iso, T, mats, o) {
   const { X0, Y0, cell, step, gx, gy, lvl, wet } = T;
@@ -269,8 +282,14 @@ export function drawTerrain(cv, iso, T, mats, o) {
     let f = topCache.get(key);
     if (f) return f;
     const F = topFace(iso, z, 0, 0);
-    const g = isWet ? mats.water : mats.top;
-    f = (sx, sy) => g(F.au * sx + F.bu * sy + F.cu, F.av * sx + F.bv * sy + F.cv, z, F.q);
+    // Two closures rather than one with a branch: the branch would be taken per
+    // pixel over the whole terrain, and the land shader must not pay for a
+    // capability only the water uses.
+    f = isWet
+      ? (sx, sy) => mats.water(
+        F.au * sx + F.bu * sy + F.cu, F.av * sx + F.bv * sy + F.cv, z, F.q, sx, sy)
+      : (sx, sy) => mats.top(
+        F.au * sx + F.bu * sy + F.cu, F.av * sx + F.bv * sy + F.cv, z, F.q);
     topCache.set(key, f);
     return f;
   };
