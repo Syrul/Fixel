@@ -917,3 +917,53 @@ by looking at the OUTPUT rather than at the number**:
 
 **A number you have not seen the shape of is a number you do not have.** Plot it, strip it,
 render it, sort it and read both ends — before it goes in a table.
+
+---
+
+# Standing rule 12: DISCLOSURE IS NOT MITIGATION — measure the size of every disclosed compromise
+
+`HARMONIC_SHADOW` in `src/audio/theory.js` avoids voicing notes at +12/19/24/28/31/34/36
+semitones above a lower voice **because the analyser's salience grid suppresses them there**.
+It was disclosed three times over. The synth builder raised it unprompted in its own report as
+"one disclosed tune-to-the-metric". It is labelled as such in the source. `theory.js` calls it
+"the one place the composer is shaped by the measurement rather than only by the music", and
+`docs/BAR.md` above records it approvingly as one of "two disclosures the builder made
+unprompted, both correct to disclose".
+
+Every reader of that disclosure — the builder, two rounds of critics, and the lead — treated it
+as handled. **Nobody asked how big it was.** Measured, on the symbolic score:
+
+| | |
+|---|---|
+| harmony notes displaced a semitone off the chord by the rule | **87.3%** |
+| of those, still inside the shadow after being moved | **84.4%** |
+| median octave headroom available to the escape path `m + 12 <= HARM_HI ? m + 12 : m - 1` | **0.0%** |
+
+The third row is what makes the first two damning. The octave escape never fires, so the branch
+always falls through to `m - 1`, which adds a chromatic pitch class every single time it runs.
+**The rule fails at its own purpose on five notes in six while detuning almost an entire voice
+to satisfy an analyser it does not satisfy.**
+
+The compromise was honest, labelled, and unmeasured, and its size was roughly seven times what
+any reader assumed. An honest label on an unmeasured compromise is how a project convinces
+itself it has a small problem.
+
+> **A disclosed compromise carries its magnitude, or it is not disclosed.** "I tuned this to the
+> metric" is the beginning of the report, not the end of it. State what fraction of the artefact
+> it touches, and state whether it achieves what it was traded for.
+
+## The refutation that found it, recorded because the wrong answer was mine
+
+The standing hypothesis — carried by a previous builder, restated by the lead of this round, and
+handed down as the thing to test first — was that `pitchClassEntropy` running hot was driven by
+**chord vocabulary**: sevenths, borrowed cadences and secondary dominants. `theory.js` says so in
+a comment: those chromatic degrees exist "to push `pitchClassEntropy` off a bare seven-note
+diatonic collection toward the corpus median of 3.119".
+
+**Measured, the chord vocabulary sits at 2.771 — comfortably inside the band. The hypothesis is
+refuted.** The entropy was coming from the shadow rule's `m - 1` fallback, not from the harmony.
+
+The lead read that source comment and restated it as a causal finding without measuring it. That
+is standing rule 7 — **plausibility is not evidence** — failing in the cheapest possible way: a
+comment in the code is a claim about the code, not a measurement of its output. Do not chase
+sevenths. The record says so instead of quietly correcting itself.
