@@ -37,8 +37,13 @@ import { FRAMES, triPhase } from '../../core/frame.js';
 // flipbook is. What is allowed is a MICRO-VARIANT of the SAME table: one
 // coherent part of one figure translated by one pixel.
 
-/** How far a figure's head travels sideways. One pixel is the whole budget. */
-const FIGURE_SHIFT_PX = 0;
+/**
+ * How far a figure's interior settles, in screen pixels. ONE IS THE WHOLE
+ * BUDGET and there is no second value worth sweeping: a figure is twenty rows
+ * tall, most of its features are one or two rows deep, and at two the brow
+ * lands on the mouth.
+ */
+const FIGURE_SHIFT_PX = 1;
 /** One figure in this many moves at all. A crowd in unison is a chorus line. */
 const FIGURE_MOVES_ONE_IN = 4;
 
@@ -97,10 +102,27 @@ function origins(K) {
   return o;
 }
 
-/** Draw pose 0 exactly as `blit` would; record the rest only when recording. */
+/**
+ * Draw pose 0 exactly as `blit` would; record the rest only when recording.
+ *
+ * THE DEPTH IS ROUNDED TO FLOAT32 BEFORE IT IS HANDED OVER, and that is a
+ * workaround for a bug in `Canvas.blitAnim`, not a stylistic choice. `Canvas`
+ * stores depth in a `Float32Array`, so `blit` writes `fround(d)`; `blitAnim`
+ * then re-tests each pose with `d >= this.depth[o]`, comparing the ORIGINAL
+ * DOUBLE against its own float32 rounding. Whenever that rounding goes up — for
+ * roughly half of all depths — the test fails on a pixel pose 0 itself just
+ * drew, the pose is treated as not covering it, and the motion is silently
+ * dropped. Measured on one city seed: 67 pixels recorded where 279 changed.
+ *
+ * Passing a depth that is already exactly representable makes the comparison
+ * agree with itself. The proper fix is one line in `src/core/canvas.js` and is
+ * in the report; this keeps the rounding identical on both branches so the
+ * still render and the animated frame 0 stay the same picture.
+ */
 function putPoses(cv, x0, y0, ps, map, d, A) {
-  if (ps.length > 1 && A && A.anim) cv.blitAnim(x0, y0, ps, origins(ps.length), map, d, A.anim);
-  else cv.blit(x0, y0, ps[0], map, d);
+  const df = Math.fround(d);
+  if (ps.length > 1 && A && A.anim) cv.blitAnim(x0, y0, ps, origins(ps.length), map, df, A.anim);
+  else cv.blit(x0, y0, ps[0], map, df);
 }
 
 const POSES = [
@@ -181,9 +203,63 @@ function outlined(rows) {
 
 const OUTLINED = POSES.map(outlined);
 
+/**
+ * A MICRO-VARIANT OF THE SAME POSE, NOT A DIFFERENT POSE.
+ *
+ * The tables above differ from each other enormously — standing against
+ * striding — and swapping between two of them is the cartoon failure this file
+ * is explicitly not allowed to have. What happens here is one pixel of
+ * displacement: the figure's INTERIOR is read one ROW over, so its hair line,
+ * its brow, its collar and the shading across its coat all settle together by a
+ * pixel, while the silhouette it is cut out of does not move at all. That is
+ * the most literal reading of what was asked for — a figure breathing.
+ *
+ * DOWN A ROW RATHER THAN ACROSS A COLUMN, and the difference is not cosmetic.
+ * Across, the changed pixels are the vertical colour boundaries — a hand, a
+ * lapel edge, two eyes — and they come out as a rash of ones and twos: 22.6% to
+ * 41.3% of the motion in 1-2px islands over six city seeds, which
+ * `tools/animcheck.mjs` rejects as a twinkle. Down, the changed pixels are
+ * whole rows of the torso at once and the same seeds read 7.7-16.8% with island
+ * p50 2-4. A figure is nine pixels wide and twenty tall: it has rows to move
+ * and it does not have columns.
+ *
+ * THE SILHOUETTE MAY NOT MOVE. `Canvas.blitAnim` can represent a colour change
+ * at a pixel whose tag, depth and coverage are the same in every pose, and
+ * nothing else — `blob` in `src/gen/props/nature.js` carries the measurement.
+ * Where the shifted source is empty the original character is kept, so the
+ * outline, the keyline and the tag are identical in all K poses by
+ * construction, and a figure never grows a pixel into the pavement or eats one
+ * of the bench behind it.
+ *
+ * Two poses never take a variant. A figure with its hands in its pockets and a
+ * figure sitting down are figures that have decided not to move, and some of
+ * them not moving is worth more than all of them moving.
+ */
+const STILL_POSES = { 3: 1, 7: 1 };
+const MICRO = new Map();
+function microPose(pi, shift) {
+  if (!shift || STILL_POSES[pi]) return OUTLINED[pi];
+  const key = pi * 16 + (shift + 8);
+  const had = MICRO.get(key);
+  if (had) return had;
+  const core = POSES[pi], w = core[0].length, h = core.length;
+  const out = outlined(core.map((row, j) => {
+    const k = j - shift;
+    const src = k >= 0 && k < h ? core[k] : null;
+    let line = '';
+    for (let i = 0; i < w; i++) {
+      const here = row[i];
+      if (here === '.' || !src || src[i] === '.') { line += here; continue; }
+      line += src[i];
+    }
+    return line;
+  }));
+  MICRO.set(key, out);
+  return out;
+}
+
 export function drawPerson(cv, iso, C, st, wx, wy, wz, opt, A) {
   const pi = opt && opt.pose !== undefined ? opt.pose : st.int(0, POSES.length - 1);
-  const pose = OUTLINED[pi];
   // A crowd is not fourteen people repeated. Each figure mints its own shirt
   // and trousers off a family, which is where a large part of a reference
   // crop's several hundred distinct colours actually comes from: many small
@@ -213,7 +289,7 @@ export function drawPerson(cv, iso, C, st, wx, wy, wz, opt, A) {
   };
   const p = projR(iso, wx, wy, wz);
   const off = movePhase(wx, wy, 0x3ce27b, FIGURE_MOVES_ONE_IN);
-  const ps = poseSet(A, off, FIGURE_SHIFT_PX, () => pose);
+  const ps = poseSet(A, off, FIGURE_SHIFT_PX, (m) => microPose(pi, m));
   putPoses(cv, p[0] - (ps[0][0].length >> 1), p[1] - (ps[0].length - 3), ps, map,
     dep(iso, wx, wy, wz, 0.7), A);
 }
