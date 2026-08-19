@@ -15,7 +15,7 @@
 
 import { drawSlab, asShade } from '../core/iso.js';
 import { box, gable } from './draw.js';
-import { leftFace, rightFace, topFace, blitFace } from './faces.js';
+import { leftFace, rightFace, topFace, blitFace, textPanel } from './faces.js';
 import { h3 } from './palette.js';
 import { textBitmap, scaleBitmap, coinWord, coinTag } from './font.js';
 import * as R from './props/roof.js';
@@ -35,19 +35,32 @@ function facade(F, o) {
     if (v > H - 1.3) return o.cornice;
 
     // ---------------- ground floor: shopfronts, the busiest band on a street
+    //
+    // Rebuilt in round 3 as CLOSED OPENINGS. It used to be a comb: a black
+    // mullion every 2.4 to 4 world units — five to eight screen pixels — down
+    // the whole shop window, plus a black jamb each side of every unit and a
+    // black band across the fascia. All stroke, nothing closed, and between
+    // them they were one of the largest consumers of an ink budget that has
+    // since gone from under to over. A shop window is now one opening with a
+    // frame round it and at most one transom, so the same ink encloses a cell.
     if (v < o.groundH) {
       const bi = Math.floor(u / o.shopU);
       const gu = u - bi * o.shopU;
       const hh = h3(o.seed, bi, 101);
-      if (v > o.groundH - 0.62) return K;
+      if (v > o.groundH - 0.55) return K;                 // fascia head
       if (v > o.groundH - 2.6) return o.fascia[hh % o.fascia.length];
-      if (gu < 0.55 || gu > o.shopU - 0.55) return K;
-      if (gu < 1.2 || gu > o.shopU - 1.2) return o.quoin;
-      if (v < 1.5) return o.shopBase;
-      if ((hh & 7) < 2 && gu > o.shopU * 0.34 && gu < o.shopU * 0.60) {
-        return v < 4.4 ? o.door : o.quoin;
-      }
-      if ((gu % o.shopMull) < 0.55) return K;
+      if (gu < 1.3 || gu > o.shopU - 1.3) return o.quoin;  // pier between units
+      if (v < 1.4) return o.shopBase;                      // stall riser
+      const door = (hh & 7) < 3 && gu > o.shopU * 0.34 && gu < o.shopU * 0.62;
+      const top = o.groundH - 3.1;
+      if (!door && v > top) return o.quoin;
+      // 1px frame on all four sides of the opening
+      if (gu < 1.85 || gu > o.shopU - 1.85) return K;
+      if (v < 1.95 && !door) return K;
+      if (!door && v > top - 0.55) return K;
+      if (door && v > o.groundH - 3.15) return K;
+      if (door) return v < 4.4 ? o.door : o.shopGlass;
+      if (o.shopMull > 0 && Math.abs(gu - o.shopU * 0.5) < 0.28) return K;
       return (hh & 3) === 1 ? o.shopGlassB : o.shopGlass;
     }
 
@@ -73,19 +86,28 @@ function facade(F, o) {
     }
     const wy0 = o.spandrel, wy1 = o.floorH - o.head;
     const wx0 = o.mull, wx1 = o.bayU - o.mull;
-    if (fu < 0.55) return K;                      // 1px vertical bay line
     if (fv < wy0 || fv > wy1 || fu < wx0 || fu > wx1) {
       if (o.bandEvery > 0 && (fl % o.bandEvery) === 0 && fv < 1.4) return o.band;
       return o.wall;
     }
-    // 1px black frame all round the opening, then flat glass inside it
+    // A CLOSED FRAME, ALL FOUR SIDES.
+    //
+    // Until round 3 this drew the two JAMBS and, separately, a black line down
+    // the whole height of every bay — so a facade was a comb of long vertical
+    // strokes and not one window was enclosed. Two measurements, one edit:
+    // `slope.corrDx0Share` was +1.65 bandwidths of "everything vertical, no
+    // diagonals" (the full-height bay line, now gone), and the ink-closure
+    // ratio counts a window that is ringed as its own cell (the head and sill,
+    // now present). Ink spent is about the same; ink that CLOSES is all of it.
     if (fu < wx0 + 0.55 || fu > wx1 - 0.55) return K;
-    if (o.centreMull && wx1 - wx0 > 3.2 && Math.abs(fu - o.bayU * 0.5) < 0.28) return K;
+    if (fv < wy0 + 0.5 || fv > wy1 - 0.5) return K;
+    if (o.centreMull && wx1 - wx0 > 3.6 && Math.abs(fu - o.bayU * 0.5) < 0.28) return K;
+    if (o.transom && wy1 - wy0 > 3.2 && Math.abs(fv - (wy0 + wy1) * 0.5) < 0.26) return K;
     const hh = h3(o.seed, bay, fl) & 15;
-    if (hh < 6) return o.g0;
-    if (hh < 11) return o.g1;
-    if (hh < 13) return o.lit;
-    if (hh < 15) return o.blind;
+    if (hh < o.gA) return o.g0;
+    if (hh < o.gB) return o.g1;
+    if (hh < o.gB + 2) return o.lit;
+    if (hh < o.gB + 4) return o.blind;
     return o.open;
   };
 }
@@ -100,14 +122,23 @@ function facadeOpts(C, st, wall, W, H, seed, style, blank) {
     plinth: wall.r, cornice: trim.l,
     band: acc.l, bandEvery: st.weighted([[0, 6], [3, 2], [4, 2], [5, 1]]),
     jointEvery: st.weighted([[0, 3], [2, 2], [3, 2]]),
-    groundH: st.range(6.5, 9.5),
-    floorH: st.range(4.8, 7.2),
-    bayU: st.range(4.0, 6.5),
-    mull: 0.9, spandrel: 1.7, head: 0.9, centreMull: st.bool(0.5),
+    groundH: st.range(7.0, 10.5),
+    // Floors and bays are both a good third larger than they were. At the old
+    // 4.8-unit floor a window opening was 4x5 screen pixels with a 1px frame
+    // round it, i.e. more frame than glass — which at 5x reads as a chequer of
+    // black confetti rather than as windows, and buys `flat.frac5x5` nothing.
+    floorH: st.range(6.2, 9.6),
+    bayU: st.range(5.2, 8.4),
+    mull: 1.05, spandrel: 2.2, head: 1.1,
+    centreMull: st.bool(0.42), transom: st.bool(0.3),
     rowPeriod: 1, rowCount: 1, colPeriod: 1, colCount: 1,
+    // How many of the sixteen window states are the building's ONE glass tone.
+    // A facade whose windows are five different colours is a spreadsheet; the
+    // reference's are overwhelmingly one tone with a few lit and a few blind.
+    gA: st.int(7, 11), gB: st.int(12, 14),
     g0: glass.r, g1: glass.l, lit: C.amber.t, blind: trim.t, open: glass.d,
-    shopU: st.range(9, 16),
-    shopGlass: glass.r, shopGlassB: glass.l, shopMull: st.range(2.4, 4.0),
+    shopU: st.range(10, 18),
+    shopGlass: glass.r, shopGlassB: glass.l, shopMull: st.bool(0.45) ? 1 : 0,
     shopBase: wall.r,
     door: st.pick([C.red, C.blue, C.wood, C.green, C.slate]).r,
     fascia: [acc.l, acc.t, acc.r, trim.t],
@@ -124,14 +155,15 @@ function facadeOpts(C, st, wall, W, H, seed, style, blank) {
   o.colPeriod = cp; o.colCount = cp === 1 ? 1 : Math.max(1, cp - 1);
 
   if (style === 1) {           // ribbon glazing, wide flat spandrels
-    o.mull = 0.5; o.spandrel = 2.4; o.bayU = st.range(3.6, 5.0);
+    o.mull = 0.6; o.spandrel = 3.0; o.bayU = st.range(4.6, 6.4);
     o.rowPeriod = 1; o.rowCount = 1; o.colPeriod = 1; o.colCount = 1;
-    o.g0 = glass.r; o.g1 = glass.r;
+    o.g0 = glass.r; o.g1 = glass.r; o.centreMull = false;
   } else if (style === 2) {    // heavy grid, deep piers
-    o.mull = 1.6; o.bayU = st.range(6.5, 9.5); o.spandrel = 2.4;
+    o.mull = 2.0; o.bayU = st.range(8.0, 12.0); o.spandrel = 3.0;
+    o.floorH = st.range(7.4, 10.5);
   } else if (style === 3) {    // masonry, small punched windows, big wall
-    o.bayU = st.range(6.0, 9.5); o.mull = 2.2; o.floorH = st.range(5.4, 7.6);
-    o.spandrel = 2.6; o.g1 = glass.r;
+    o.bayU = st.range(7.5, 11.5); o.mull = 2.8; o.floorH = st.range(6.6, 9.4);
+    o.spandrel = 3.2; o.g1 = glass.r; o.centreMull = false;
   }
   return o;
 }
@@ -251,23 +283,62 @@ export function drawBuilding(cv, iso, C, st, x, y, z, w, d, opt) {
   }
 
   // ---------------- signage, all of it invented
+  const D = opt.D || {};
   const top = masses[masses.length - 1];
   const sg = opt.sign;
-  if (sg && !pitched && st.bool(0.26) && top[3] > 14) {
+  if (sg && !pitched && st.bool(0.4 * (D.roofSign === undefined ? 0.26 : D.roofSign)) && top[3] > 14) {
     cv.t = opt.tag();
-    R.roofSign(cv, iso, C, st, top[0] + 2, top[1] + 2, top[2] + top[5] + 1.6, coinWord(sg));
+    const ax = st.bool(0.5) ? 0 : 1;
+    R.roofSign(cv, iso, C, st, top[0] + 1.5, top[1] + 1.5, top[2] + top[5] + 1.4,
+      coinWord(sg), ax);
   }
-  if (sg && st.bool(0.6)) {
-    const word = coinWord(sg).slice(0, 8);
-    const rows = textBitmap(word, 1);
-    const gH = st.range(6.6, 8.2);
-    if (st.bool(0.5)) {
-      const p = iso.proj(x + 2.0, y + d + 0.02, z + gH);
-      blitFace(cv, rows, { '#': C.black, '.': -1 }, p[0], p[1], 'l', x + y + z + 400);
-    } else {
-      const p = iso.proj(x + w + 0.02, y + d - 2.0, z + gH);
-      blitFace(cv, rows, { '#': C.black, '.': -1 }, p[0], p[1], 'r', x + y + z + 400);
-    }
+  if (sg && st.bool(0.16 * (D.heroSign === undefined ? 1 : D.heroSign))) {
+    wallSign(cv, iso, C, st, x, y, z, w, d, tall, coinWord(sg), opt);
   }
   return tall;
+}
+
+/**
+ * A SHOPFRONT OR FASCIA SIGN AT READING SIZE.
+ *
+ * What was here before blitted a 5x7 word straight onto the wall in black at
+ * glyph scale 1 — about four pixels tall on screen, invisible at 1:1 and
+ * indistinguishable from grime at 5x. The reference's equivalent is a panel:
+ * one saturated ground, a keyline, and letters big enough to read across the
+ * street. That panel is also, incidentally, the largest committed single-colour
+ * field on the whole facade, and 36.3% of our canvas sits in unbroken ink-free
+ * plane against the reference's 20.8%.
+ *
+ * The word is coined and filtered in font.js. No real mark, and no near-miss.
+ */
+function wallSign(cv, iso, C, st, x, y, z, w, d, tall, word, opt) {
+  const k = st.weighted([[1, 8], [2, 3]]);
+  const rows = scaleBitmap(textBitmap(word.slice(0, 6), 1), k);
+  const tw = rows[0].length, th = rows.length;
+  const pw = tw / 2 + 2.4;
+  const ph = (th + (tw >> 1)) / 2 + 2.4;
+  const ax = (d > pw + 2 && st.bool(0.5)) ? 1 : 0;
+  const span = ax === 0 ? w : d;
+  if (span < pw + 2.0 || tall < ph + 9) return;
+  const panel = st.weighted([[st.pick(C.accents), 7], [C.white, 3], [C.cream, 2], [C.tar, 3]]);
+  const ink = st.pick([...C.accents, C.white, C.tar]);
+  const inkC = (ink === panel) ? (panel === C.tar ? C.white.t : C.ink)
+    : (panel === C.tar ? ink.t : ink.r);
+  const off = st.range(0.8, Math.max(0.9, span - pw - 0.8));
+  const zz = z + st.range(7.5, Math.max(7.6, tall - ph - 1.2));
+  cv.t = opt.tag();
+  const bx = ax === 0 ? x + off : x + w;
+  const by = ax === 0 ? y + d : y + off;
+  const bw = ax === 0 ? pw : 0.3, bd = ax === 0 ? 0.3 : pw;
+  const F = ax === 0 ? leftFace(iso, by + bd, bx, zz) : rightFace(iso, bx + bw, by, zz);
+  const face = textPanel(F, rows, {
+    w: pw, h: ph, pad: 0.8, edge: C.black, fill: panel.t, ink: inkC,
+    dir: ax === 0 ? 1 : -1,
+    tu: ax === 0 ? 1.4 : pw - 1.4, tv: ph - 1.4,
+  });
+  box(cv, iso, bx, by, zz, bw, bd, ph, {
+    top: panel.l,
+    left: ax === 0 ? face : panel.l,
+    right: ax === 0 ? panel.r : face,
+  });
 }

@@ -3,7 +3,7 @@
 
 import { drawSlab } from '../../core/iso.js';
 import { box } from '../draw.js';
-import { topFace, leftFace, blitFace } from '../faces.js';
+import { topFace, leftFace, rightFace, blitFace, textPanel } from '../faces.js';
 import { h3 } from '../palette.js';
 import { textBitmap, scaleBitmap } from '../font.js';
 
@@ -88,11 +88,15 @@ export function aerial(cv, iso, C, st, x, y, z) {
 
 export function railing(cv, iso, C, st, x, y, z, len, ax, h) {
   const c = st.pick([C.metal, C.slate, C.steel]);
-  const n = Math.floor(len / 2.2);
+  // Pitch out from 2.2 to 3.2 and the posts in the rail's own dark rather than
+  // pure black. A parapet rail at this scale was contributing a solid black
+  // comb along the top of every roof, and ink is over budget.
+  const pitch = st.range(3.0, 4.4);
+  const n = Math.floor(len / pitch);
   for (let i = 0; i <= n; i++) {
-    const px = ax === 0 ? x + i * 2.2 : x;
-    const py = ax === 0 ? y : y + i * 2.2;
-    box(cv, iso, px, py, z, 0.45, 0.45, h, { top: C.black, left: C.black, right: C.black });
+    const px = ax === 0 ? x + i * pitch : x;
+    const py = ax === 0 ? y : y + i * pitch;
+    box(cv, iso, px, py, z, 0.45, 0.45, h, { top: c.d, left: C.black, right: c.d });
   }
   if (ax === 0) box(cv, iso, x, y, z + h - 0.35, len, 0.4, 0.35, { top: c.t, left: c.l, right: c.r });
   else box(cv, iso, x, y, z + h - 0.35, 0.4, len, 0.35, { top: c.t, left: c.l, right: c.r });
@@ -109,21 +113,49 @@ export function crateStack(cv, iso, C, st, x, y, z) {
   }
 }
 
-/** A roof sign: a lit frame carrying an invented word. */
-export function roofSign(cv, iso, C, st, x, y, z, word, len) {
-  const k = st.int(1, 2);
-  const rows = scaleBitmap(textBitmap(word, 1), k);
-  const w = rows[0].length;
-  const need = (w + 4) / 2;
-  const panel = st.pick([C.white, C.cream, C.tar, ...C.accents]);
-  const ink = st.pick(C.accents);
-  const inkC = panel === C.tar ? ink.t : (ink === panel ? C.ink : ink.l);
-  const h = (rows.length + 5) / 2;
-  box(cv, iso, x, y, z, 0.4, 0.4, 2.0, MD(C.metal));
-  box(cv, iso, x + need - 0.4, y, z, 0.4, 0.4, 2.0, MD(C.metal));
-  box(cv, iso, x, y, z + 2.0, need, 0.25, h, { top: panel.t, left: panel.l, right: panel.r });
-  const p = iso.proj(x, y, z + 2.0 + h);
-  blitFace(cv, rows, { '#': inkC, '.': -1 }, p[0] + 2, p[1] + 2, 'l', x + y + z + 80);
+/**
+ * A roof sign: a lit frame carrying an invented word.
+ *
+ * SIGNAGE WAS THE LOUDEST ABSENCE AT 1:1. The reference carries six or more
+ * signs at 60px and up in a single view — a pylon, a fascia, a rooftop frame —
+ * and this generator carried ZERO hero signs while already owning a working
+ * hand-authored 5x7 font and a syllabary to feed it. A sign at glyph scale 2 or
+ * 3 is also the largest single-colour field in a city block, which is precisely
+ * what "a colour should MEAN something" looks like on the wall rather than on
+ * the ground.
+ *
+ * Every word is invented from the syllabary in font.js and filtered. No real
+ * mark, no near-miss of one, ever.
+ */
+export function roofSign(cv, iso, C, st, x, y, z, word, ax = 0) {
+  const k = st.weighted([[1, 5], [2, 4]]);
+  const rows = scaleBitmap(textBitmap(word.slice(0, 6), 1), k);
+  const tw = rows[0].length, th = rows.length;
+  const need = tw / 2 + 2.4;
+  const h = (th + (tw >> 1)) / 2 + 2.4;
+  const panel = st.weighted([[C.white, 3], [C.cream, 2], [C.tar, 3],
+    [st.pick(C.accents), 7]]);
+  const ink = st.pick([...C.accents, C.white, C.tar]);
+  const inkC = (ink === panel) ? (panel === C.tar ? C.white.t : C.ink)
+    : (panel === C.tar ? ink.t : ink.r);
+  const legH = st.range(1.2, 4.0);
+  const w = ax === 0 ? need : 0.32, d = ax === 0 ? 0.32 : need;
+  for (const t of [0, 1]) {
+    const lx = x + (ax === 0 ? t * (need - 0.6) : 0);
+    const ly = y + (ax === 0 ? 0 : t * (need - 0.6));
+    box(cv, iso, lx, ly, z, 0.6, 0.6, legH + 0.8, MD(C.metal));
+  }
+  const F = ax === 0 ? leftFace(iso, y + d, x, z + legH) : rightFace(iso, x + w, y, z + legH);
+  const face = textPanel(F, rows, {
+    w: need, h, pad: 0.85, edge: C.black, fill: panel.t, ink: inkC,
+    dir: ax === 0 ? 1 : -1,
+    tu: ax === 0 ? 1.5 : need - 1.5, tv: h - 1.4,
+  });
+  box(cv, iso, x, y, z + legH, w, d, h, {
+    top: panel.l,
+    left: ax === 0 ? face : panel.l,
+    right: ax === 0 ? panel.r : face,
+  });
 }
 
 export function roofDeck(cv, iso, C, st, x, y, z, w, d, wall) {

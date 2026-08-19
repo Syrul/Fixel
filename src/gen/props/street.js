@@ -5,9 +5,9 @@
 
 import { drawSlab } from '../../core/iso.js';
 import { box, gable } from '../draw.js';
-import { leftFace, rightFace, topFace, blitFace } from '../faces.js';
+import { leftFace, rightFace, topFace, blitFace, textPanel } from '../faces.js';
 import { h3 } from '../palette.js';
-import { textBitmap } from '../font.js';
+import { textBitmap, scaleBitmap } from '../font.js';
 
 const M = (f) => ({ top: f.t, left: f.l, right: f.r });
 const MD = (f) => ({ top: f.l, left: f.r, right: f.d });
@@ -196,20 +196,27 @@ export function scaffold(cv, iso, C, st, x, y, z, w, d, h) {
       const c = st.pick(C.accents);
       box(cv, iso, x, y + d - 0.15, z + lv + 0.25, w, 0.1, 1.4, M(c));
     }
-    // cross-braces: drawn straight in screen space at 45 degrees, which no
-    // axis-aligned box in this projection can produce
-    {
+    // Cross-braces: drawn straight in screen space at 45 degrees, which no
+    // axis-aligned box in this projection can produce, so this is one of very
+    // few places the frame gets a genuine 1:1 stroke.
+    //
+    // It used to draw a full X on EVERY lift of EVERY scaffold, which at 1:1
+    // reads as black scribble and was one of the larger single consumers of an
+    // ink budget that is now over, not under. One diagonal per bay, on some
+    // lifts, is a brace; two on all of them is hatching.
+    if (st.bool(0.45)) {
       const p0 = iso.proj(x, y + d, z + lv);
       const p1 = iso.proj(x + w, y + d, z + lv + 2.6);
       const dep = x + w + y + d + z + lv + 3;
       const n = Math.max(1, Math.round(Math.abs(p1[0] - p0[0]) / 14));
       for (let q = 0; q < n; q++) {
+        if (!st.bool(0.6)) continue;
         const ax0 = Math.round(p0[0] + (p1[0] - p0[0]) * q / n);
         const ax1 = Math.round(p0[0] + (p1[0] - p0[0]) * (q + 1) / n);
         const ay0 = Math.round(p0[1] + (p1[1] - p0[1]) * q / n);
         const span = Math.abs(ax1 - ax0);
-        cv.line(ax0, ay0, ax1, ay0 - span, C.black, dep);
-        cv.line(ax0, ay0 - span, ax1, ay0, C.black, dep);
+        if (st.bool(0.5)) cv.line(ax0, ay0, ax1, ay0 - span, C.black, dep);
+        else cv.line(ax0, ay0 - span, ax1, ay0, C.black, dep);
       }
     }
   }
@@ -261,10 +268,14 @@ export function awning(cv, iso, C, st, x, y, z, len, ax, colA) {
  */
 export function hoarding(cv, iso, C, st, x, y, z, len, ax, h) {
   const a = st.pick(C.accents);
-  const b = st.bool(0.5) ? C.white : C.black;
-  const pitch = st.int(4, 7);
+  // The alternate stripe used to be pure black half the time, which put a
+  // 45-degree black hatch over the whole face of every hoarding on the site.
+  // A hoarding is painted, not inked; the dark alternate is now a dark step of
+  // its own paint.
+  const b = st.bool(0.55) ? C.white : C.tar;
+  const pitch = st.int(4, 8);
   const face = (dark) => (sxp, syp) => (Math.floor((sxp + syp) / pitch) & 1)
-    ? (dark ? a.r : a.l) : (b === C.black ? C.black : (dark ? C.concrete.l : C.white.t));
+    ? (dark ? a.r : a.l) : (b === C.tar ? (dark ? C.tar.d : C.tar.r) : (dark ? C.concrete.l : C.white.t));
   const w = ax === 0 ? len : 0.7, d = ax === 0 ? 0.7 : len;
   box(cv, iso, x, y, z, w, d, h, { top: C.concrete.l, left: face(false), right: face(true) });
 }
@@ -301,4 +312,83 @@ export function crateStackShim(cv, iso, C, st, x, y, z) {
     box(cv, iso, x + st.range(0, 0.4), y + st.range(0, 0.4), zz, s, s, 1.1, M(c));
     zz += 1.1;
   }
+}
+
+/**
+ * A PYLON SIGN: a tall pole carrying one big panel of one colour with an
+ * invented word on it. The reference's single loudest object in a 110px window
+ * is exactly this — a saturated orange disc on a pole taking a fifth of the
+ * crop — and until round 3 nothing in this generator was allowed to be that
+ * big or that committed to one colour. It is the cheapest available answer to
+ * three separate findings at once: no hero signage, no large single-colour
+ * field, and 36% of the canvas sitting in unbroken ink-free plane.
+ *
+ * The word is coined from the syllabary in font.js and filtered against real
+ * marks. Nothing here reproduces lettering that exists.
+ */
+export function pylonSign(cv, iso, C, st, x, y, z, word, ax) {
+  const k = st.weighted([[1, 5], [2, 4]]);
+  const rows = scaleBitmap(textBitmap(word.slice(0, 5), 1), k);
+  const tw = rows[0].length, th = rows.length;
+  // Panel sized off the bitmap: half a world unit per text pixel across, and
+  // enough height for the stair the letters walk down as they go right.
+  const pw = tw / 2 + 2.2;
+  const ph = (th + (tw >> 1)) / 2 + 2.2;
+  const poleH = st.range(3.5, 11);
+  const post = st.pick([C.slate, C.metal, C.steel, C.concrete]);
+  const panel = st.weighted([[st.pick(C.accents), 8], [C.white, 3], [C.cream, 2], [C.tar, 2]]);
+  const ink = st.pick([...C.accents, C.white, C.tar]);
+  const inkC = (ink === panel) ? (panel === C.tar ? C.white.t : C.ink)
+    : (panel === C.tar ? ink.t : ink.r);
+  const cx = x + (ax === 0 ? pw * 0.5 - 0.55 : 0);
+  const cy = y + (ax === 0 ? 0 : pw * 0.5 - 0.55);
+  box(cv, iso, cx, cy, z, 1.1, 1.1, poleH + 1.6, MD(post));
+  const w = ax === 0 ? pw : 0.35, d = ax === 0 ? 0.35 : pw;
+  const F = ax === 0 ? leftFace(iso, y + d, x, z + poleH) : rightFace(iso, x + w, y, z + poleH);
+  const face = textPanel(F, rows, {
+    w: pw, h: ph, pad: 0.85, edge: C.black, fill: panel.t, ink: inkC,
+    dir: ax === 0 ? 1 : -1,
+    tu: ax === 0 ? 1.4 : pw - 1.4, tv: ph - 1.4,
+  });
+  box(cv, iso, x, y, z + poleH, w, d, ph, {
+    top: panel.l,
+    left: ax === 0 ? face : panel.l,
+    right: ax === 0 ? panel.r : face,
+  });
+}
+
+/**
+ * A hoarding-mounted billboard: two legs, one big panel, a coined word, and a
+ * band of colour under it. Same job as the pylon at a lower eye line, used on
+ * lots and building sites where there is nothing else to look at.
+ */
+export function billboard(cv, iso, C, st, x, y, z, word, ax) {
+  const k = st.weighted([[1, 3], [2, 6]]);
+  const rows = scaleBitmap(textBitmap(word.slice(0, 6), 1), k);
+  const tw = rows[0].length, th = rows.length;
+  const pw = tw / 2 + 3.0;
+  const ph = (th + (tw >> 1)) / 2 + 4.2;
+  const legH = st.range(1.2, 3.6);
+  const panel = st.weighted([[C.white, 4], [C.cream, 3], [st.pick(C.accents), 6]]);
+  const band = st.pick(C.accents);
+  const ink = st.pick([...C.accents, C.tar]);
+  const inkC = ink === panel ? C.ink : ink.r;
+  for (const t of [0.12, 0.72]) {
+    const lx = x + (ax === 0 ? t * pw : 0);
+    const ly = y + (ax === 0 ? 0 : t * pw);
+    box(cv, iso, lx, ly, z, 0.7, 0.7, legH + 1.0, MD(C.metal));
+  }
+  const w = ax === 0 ? pw : 0.4, d = ax === 0 ? 0.4 : pw;
+  const F = ax === 0 ? leftFace(iso, y + d, x, z + legH) : rightFace(iso, x + w, y, z + legH);
+  const face = textPanel(F, rows, {
+    w: pw, h: ph, pad: 0.8, edge: C.black, fill: panel.t, ink: inkC,
+    band: band.t, bandV: ph * 0.24,
+    dir: ax === 0 ? 1 : -1,
+    tu: ax === 0 ? 1.5 : pw - 1.5, tv: ph - 1.3,
+  });
+  box(cv, iso, x, y, z + legH, w, d, ph, {
+    top: panel.l,
+    left: ax === 0 ? face : panel.l,
+    right: ax === 0 ? panel.r : face,
+  });
 }

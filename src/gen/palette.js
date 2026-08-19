@@ -151,7 +151,7 @@ export function buildPalette(rng) {
   // which is why `hue.meanSat` and `palette.top1Share` barely moved seed to
   // seed. A desert noon and an overcast harbour are different pictures.
   const drift = r.range(-16, 16);
-  const satMul = r.range(0.72, 1.30);
+  const satMul = r.range(0.60, 1.14);
   const litMul = r.range(0.90, 1.08);
   const neutralSat = r.range(0.7, 1.6);
   for (const [k, h, s, l] of FAM) {
@@ -178,7 +178,7 @@ export function buildPalette(rng) {
    *  much of a city is PAINTED rather than built is a property of the city,
    *  not a constant: a bleached seaside strip and a grey business district are
    *  different pictures and the old fixed 0.55 made every seed the same mix. */
-  const paintRate = r.range(0.18, 0.72);
+  const paintRate = r.range(0.10, 0.56);
   C.paintRate = paintRate;
   C.wallTone = (st) => {
     const base = st.bool(paintRate) ? st.pick(C.accents) : st.pick(C.walls);

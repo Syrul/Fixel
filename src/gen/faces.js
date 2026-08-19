@@ -63,3 +63,37 @@ export function faceBlitSize(rows) {
   const w = rows[0] ? rows[0].length : 0;
   return [w, rows.length + (w >> 1)];
 }
+
+/**
+ * A SIGN FACE AS ONE SHADE CALLBACK: keyline, panel, and the letters, all cut
+ * in face coordinates.
+ *
+ * The first attempt at hero signage blitted the word over the panel afterwards
+ * at a constant depth, and every letter vanished: depth here is x+y+z in world
+ * units, world coordinates run to several hundred, and a 90-unit fudge is
+ * smaller than the panel's own depth range. The result was seventy-pixel blank
+ * slabs floating over the city — visible in the output before it was found, and
+ * a good argument for never compositing at a guessed depth.
+ *
+ * Cut in-plane there is no depth to guess. The projection makes the mapping
+ * exact: one text pixel is half a world unit along the face and half a unit
+ * down it, so text pixel (i, j) sits at u = u0 + dir*i/2, v = v0 - j/2.
+ *
+ * dir is +1 for a +y (left) face and -1 for a +x (right) face.
+ */
+export function textPanel(F, rows, o) {
+  const th = rows.length, tw = rows[0] ? rows[0].length : 0;
+  const dir = o.dir === undefined ? 1 : o.dir;
+  const pad = o.pad === undefined ? 0.85 : o.pad;
+  const { au, bu, cu, av, bv, cv } = F;
+  return (sx, sy) => {
+    const u = au * sx + bu * sy + cu;
+    const v = av * sx + bv * sy + cv;
+    if (u < pad || u > o.w - pad || v < pad || v > o.h - pad) return o.edge;
+    if (o.band !== undefined && v < o.bandV) return v > o.bandV - 0.5 ? o.edge : o.band;
+    const i = Math.floor(dir * (u - o.tu) * 2);
+    const j = Math.floor((o.tv - v) * 2);
+    if (i >= 0 && i < tw && j >= 0 && j < th && rows[j].charCodeAt(i) === 35) return o.ink;
+    return o.fill;
+  };
+}

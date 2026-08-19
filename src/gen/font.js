@@ -99,6 +99,15 @@ const CODA = ['X', 'K', 'N', 'R', 'T', 'Z', 'L', 'M', 'SH', 'TH', 'NK', 'RT',
 // nonsense to begin with, this only closes the accidental case.
 const FORBIDDEN = /^(SONY|NIKE|FORD|SHELL|ESSO|COKE|PEPSI|IKEA|ZARA|VISA|BOSCH|MOTEL|HOTEL|POLICE|TAXI|BANK|CAFE|SUSHI|PIZZA|BURGER|MART|SHOP|BAR|DELI|KFC|LOTTO|NASA|UPS|DHL|FEDEX)$/;
 
+// A second filter, added in round 3 after the first hero signs went up and the
+// syllabary — which is nonsense by construction — coined SLEEP and REFLEE on
+// the same rooftop. Neither is a mark and neither breaks the content law, but a
+// sign that reads as a plain English word stops reading as invented signage and
+// starts reading as a caption. These are the collisions short CVC nonsense
+// actually produces; the list is short on purpose and re-rolls rather than
+// mangles, so nothing here is a near-miss of anything.
+const REAL_WORDS = /^(SLEEP|SLEEK|SLIP|SLOT|STOP|START|STORE|SHOT|SHIP|SHOP|TRIP|TRAP|DRESS|DRINK|PRESS|PRINT|GREEN|GRASS|BLOCK|BLACK|BRASS|BREAK|FRESH|FLASH|FLAT|FROST|CLASS|CRASH|SNOW|SNACK|SPIN|SPOT|STEEL|STEAM|TRUCK|TRAIN|GLASS|PLANT|PLATE|PRIME|SMOKE|STONE|SWEET|SPEED|SPACE|SPARK|SHARP|SHINE|SKATE|SLIDE|STAR|STAND|SWIM|TREE|TRUST|WEST|WOOD|ZOOM|ROOM|MOON|NOON|SOON|SOAP|TOOL|POOL|FOOD|GOOD|LOOK|BOOK|BOOT|ROOT|MEET|FEET|SEED|NEED|DEEP|KEEP|BEEF|REED|LEAN|MEAN|BEAN|RAIN|MAIN|PAIN|GAIN|TRAIL|SNAIL|BRAIN|DRAIN|GRAIN|STAIN|TOAST|ROAST|COAST|BOAST)$/;
+
 export function coinWord(st) {
   for (let attempt = 0; attempt < 8; attempt++) {
     let w = st.pick(ONSET) + st.pick(NUC);
@@ -107,7 +116,7 @@ export function coinWord(st) {
       w += st.pick(ONSET).slice(0, 2) + st.pick(NUC);
       if (st.bool(0.5)) w += st.pick(CODA);
     }
-    if (w.length >= 3 && w.length <= 8 && !FORBIDDEN.test(w)) return w;
+    if (w.length >= 3 && w.length <= 8 && !FORBIDDEN.test(w) && !REAL_WORDS.test(w)) return w;
   }
   return 'ZOK' + st.int(2, 9);
 }

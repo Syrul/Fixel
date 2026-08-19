@@ -100,13 +100,26 @@ export function planCity(rng, X0, X1, Y0, Y1) {
  * projection per pixel. Markings, crossings, bays, patches and grit are all
  * decided here, so the asphalt is never a flat fill anywhere.
  */
-export function roadShade(iso, C, plan, seedN, tones) {
+export function roadShade(iso, C, plan, seedN, tones, opt = {}) {
   const G = groundInv(iso, 0);
   const { X0, Y0, nx, ny, ix, iy } = plan;
   // Each street carries its own asphalt tone. One global grey for every road in
   // the frame is what pushes a single colour to a fifth of the canvas; eight
   // near-identical greys read the same and spread the histogram.
   const TN = tones.road, TD = tones.roadD;
+  // Resurfacing patches. These used to be cut on an 8-unit grid, i.e. a fresh
+  // random tone every 16 screen pixels over every road in the frame: several
+  // hundred separate flat faces of near-identical grey, which is most of why
+  // the face count runs 2.6x the reference's while the closed-cell count runs
+  // short. A patch is now a PATCH — tens of units across — and there is one
+  // alternative tone, not three.
+  const PSH = opt.patchShift === undefined ? 5 : opt.patchShift;
+  const PRATE = opt.patchRate === undefined ? 2 : opt.patchRate;
+  // Centre-line dash pitch. At 12 world units every road in the frame carried a
+  // dash every 24 screen pixels, and each dash is its own flat face inside the
+  // one enormous road cell: the road held 130 faces against the reference's
+  // busiest cell at 55. Longer dashes, fewer faces, same marked road.
+  const DASH = opt.dash || 22;
   const white = C.white.t, whiteD = C.concrete.t, yellow = C.amber.t;
   const RAIN = [C.red.t, C.orange.t, C.yellow.t, C.lime.t, C.cyan.t, C.indigo.t, C.magenta.t];
   return (sx, sy) => {
@@ -123,24 +136,24 @@ export function roadShade(iso, C, plan, seedN, tones) {
     // change-rate and lose the flat interiors the reference actually has.
     const si = (ax >= 0 ? ix.id[i] : 0) + (ay >= 0 ? iy.id[j] * 7 : 0);
     const A = TN[(si >>> 0) % TN.length], T = TD[(si >>> 0) % TD.length];
-    const patch = h3(wx >> 3, wy >> 3, seedN + 7) & 15;
-    const base = patch < 2 ? T.t : patch < 4 ? A.l : A.t;
+    const patch = h3(wx >> PSH, wy >> PSH, seedN + 7) & 15;
+    const base = patch < PRATE ? A.l : A.t;
 
     const inter = ax >= 0 && ay >= 0;
 
     if (ax >= 0 && ay < 0 && iy.pre[j] >= 0) {
       const cid = h3(ix.id[i], iy.id[j] + 1, seedN + 3);
-      const bar = Math.floor((wy - Y0) / 3) % 2;
+      const bar = Math.floor((wy - Y0) / 4) % 2;
       if (bar === 0 && ax > 2 && ax < ix.wd[i] - 3) {
-        return (cid & 7) === 0 ? RAIN[Math.floor((wy - Y0) / 3) % 7] : white;
+        return (cid & 7) === 0 ? RAIN[Math.floor((wy - Y0) / 4) % 7] : white;
       }
       return base;
     }
     if (ay >= 0 && ax < 0 && ix.pre[i] >= 0) {
       const cid = h3(iy.id[j], ix.id[i] + 1, seedN + 3);
-      const bar = Math.floor((wx - X0) / 3) % 2;
+      const bar = Math.floor((wx - X0) / 4) % 2;
       if (bar === 0 && ay > 2 && ay < iy.wd[j] - 3) {
-        return (cid & 7) === 0 ? RAIN[Math.floor((wx - X0) / 3) % 7] : white;
+        return (cid & 7) === 0 ? RAIN[Math.floor((wx - X0) / 4) % 7] : white;
       }
       return base;
     }
@@ -154,15 +167,15 @@ export function roadShade(iso, C, plan, seedN, tones) {
       const w = ix.wd[i], mid = w >> 1;
       if (ax === 0) return T.r;
       if (ax === 2 || ax === w - 3) return whiteD;
-      if (ax === mid && (((wy - Y0) % 12) < 7)) return yellow;
-      if (ax === mid - 1 && w > 17 && (((wy - Y0) % 12) < 7)) return yellow;
+      if (ax === mid && (((wy - Y0) % DASH) < DASH * 0.62)) return yellow;
+      if (ax === mid - 1 && w > 17 && (((wy - Y0) % DASH) < DASH * 0.62)) return yellow;
       return base;
     }
     const w = iy.wd[j], mid = w >> 1;
     if (ay === 0) return T.r;
     if (ay === 2 || ay === w - 3) return whiteD;
-    if (ay === mid && (((wx - X0) % 12) < 7)) return yellow;
-    if (ay === mid - 1 && w > 17 && (((wx - X0) % 12) < 7)) return yellow;
+    if (ay === mid && (((wx - X0) % DASH) < DASH * 0.62)) return yellow;
+    if (ay === mid - 1 && w > 17 && (((wx - X0) % DASH) < DASH * 0.62)) return yellow;
     return base;
   };
 }
@@ -171,22 +184,34 @@ export function roadShade(iso, C, plan, seedN, tones) {
  * Pavement top of a block: large flat slabs with seams, plus occasional pale
  * organic stains. No per-pixel speckle — the interiors have to stay flat.
  */
-export function pavementShade(iso, C, x0, y0, w, d, z, seedN, P, K) {
+export function pavementShade(iso, C, x0, y0, w, d, z, seedN, P, K, opt = {}) {
   const T = groundInv(iso, z);
   P = P || C.pave; K = K || C.concrete;
+  // THE SEAM LATTICE WAS THE SINGLE WORST OBJECT IN THE PICTURE.
+  //
+  // Slab joints every 8 world units, on a rigid 2:1 lattice, over 35% of the
+  // canvas. Three separate consequences, all measured: a seven-lag harmonic
+  // ladder in the autocorrelation where the reference's dies after two; roughly
+  // 140 extra flat faces per 320px crop, every one of them inside the SAME
+  // open cell, which is the ink-closure ratio stated as a picture; and a
+  // mid-tone seam colour flagged as antialiasing. The reference's pavement, at
+  // 5x, is a large flat field with one organic stain across it and no lattice
+  // at all.
+  //
+  // So the pitch is now per block and usually absent, and a block that does
+  // carry joints carries them at its own pitch, which is also the thing that
+  // stops every block in every seed looking like every other.
+  const seam = opt.seam || 0;
+  const kerb = opt.kerb === undefined ? 2.0 : opt.kerb;
   return (sx, sy) => {
     const u = T.ax * sx + T.bx * sy + T.cx - x0;
     const v = T.ay * sx + T.by * sy + T.cy - y0;
-    if (u < 2.0 || v < 2.0 || u > w - 2.0 || v > d - 2.0) return P.t;
-    if ((u % 8) < 0.62 || (v % 8) < 0.62) return P.l;
-    const cu = Math.floor(u / 8), cvv = Math.floor(v / 8);
-    const k = h3(cu, cvv, seedN) & 31;
-    if (k === 0) return K.t;
-    if (k === 1) return P.l;
+    if (u < kerb || v < kerb || u > w - kerb || v > d - kerb) return P.t;
+    if (seam > 0 && ((u % seam) < 0.62 || (v % seam) < 0.62)) return P.r;
     // Large pale stains with hand-drawn contours. The boundary is a quadratic
     // form in (u, v), so it walks off the 2:1 lattice at every angle, and the
     // interior is a big flat region in a tone nothing else uses.
-    const cw = 22;
+    const cw = opt.stainPitch || 22;
     const gu2 = Math.floor(u / cw), gv2 = Math.floor(v / cw);
     const g = h3(gu2, gv2, seedN + 5);
     if ((g & 3) === 0) {

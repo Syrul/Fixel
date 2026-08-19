@@ -65,7 +65,6 @@ function sideShade(F, o) {
     for (let i = 0; i < o.seams.length; i++) {
       if (u > o.seams[i] - PX && u < o.seams[i] + PX) return K;
     }
-    if (u < PX2 || u > o.L - PX2) return K;           // panel ends
     return v > o.waist ? o.upper : o.lower;
   };
 }
@@ -81,7 +80,6 @@ function endShade(F, o) {
   return (sx, sy) => {
     const u = au * sx + bu * sy + cu;
     const v = av * sx + bv * sy + cv;
-    if (u < PX2 || u > o.W - PX2) return K;
     if (v > o.bumper - PX && v < o.bumper + PX) return K;
     if (v < o.bumper) {
       // lamps sit in the lower band, each ringed by the ink around it
@@ -104,8 +102,10 @@ function glassShade(F, o) {
   return (sx, sy) => {
     const u = au * sx + bu * sy + cu;
     const v = av * sx + bv * sy + cv;
-    if (v < PX2 || v > o.H - PX2) return K;           // sill and header
-    if (u < PX2 || u > o.L - PX2) return K;           // A and C pillars
+    // No ring here: the cabin carries its own object tag, so the silhouette
+    // sweep already draws its keyline. Drawing it twice was 1px of ink around
+    // every window for nothing, and ink is over budget, not under.
+    if (v < PX2) return K;                            // sill only
     for (let i = 0; i < o.pillars.length; i++) {
       if (u > o.pillars[i] - PX && u < o.pillars[i] + PX) return K;
     }
@@ -123,10 +123,14 @@ export function drawVehicle(cv, iso, C, st, x, y, z, ax, kind, mkTag) {
   const sub = () => { if (mkTag) cv.t = mkTag(); return cv.t; };
   const K = C.black;
 
-  const body = st.weighted([
+  // This vehicle's own paint. Minted, not picked: see the note in scene.js.
+  const base = st.weighted([
     [st.pick(C.accents), 5], [C.white, 4], [C.concrete, 2],
-    [C.slate, 2], [C.steel, 2],
+    [C.slate, 2], [C.steel, 2], [C.metal, 2], [C.cream, 1],
   ]);
+  const body = C.mk(base._h + st.range(-13, 13),
+    Math.min(1, base._s * st.range(0.72, 1.28)),
+    Math.min(0.96, base._L * st.range(0.86, 1.14)));
   const glassC = st.pick([C.glass, C.aqua, C.steel, C.cyan]);
 
   if (kind === 'bike') {
@@ -142,14 +146,20 @@ export function drawVehicle(cv, iso, C, st, x, y, z, ax, kind, mkTag) {
   }
 
   //          L     W    H    cabin@  cabinL cabinH  wheel  seams
+  // Bodies are TALLER than they were, not just longer. At H = 1.55 a side face
+  // is three screen pixels and a wheel arch inside it is two: the detail was
+  // drawn and could not be seen. At H = 2.4 the side is five pixels, the tyre
+  // reads as a tyre and the hub is a cell the closure metric can count. The
+  // reference's car is 78x62px against our 27x21 — this does not close that
+  // gap, it makes the difference between detail and no detail.
   const spec = {
-    car:    [10.0, 4.6, 1.55, 2.9, 4.2, 1.45, 1.15, 2],
-    taxi:   [10.4, 4.6, 1.55, 3.0, 4.3, 1.50, 1.15, 2],
-    pickup: [11.0, 4.8, 1.75, 1.7, 3.4, 1.55, 1.25, 1],
-    van:    [12.4, 5.0, 1.70, 1.3, 7.6, 2.30, 1.20, 2],
-    truck:  [15.5, 5.4, 1.90, 0.9, 4.2, 2.60, 1.35, 1],
-    bus:    [19.0, 5.4, 1.55, 0.7, 17.2, 2.90, 1.25, 4],
-  }[kind] || [10.0, 4.6, 1.55, 2.9, 4.2, 1.45, 1.15, 2];
+    car:    [10.5, 4.8, 2.35, 3.0, 4.6, 1.95, 1.55, 2],
+    taxi:   [10.8, 4.8, 2.35, 3.1, 4.7, 2.05, 1.55, 2],
+    pickup: [11.4, 5.0, 2.55, 1.8, 3.6, 2.05, 1.65, 1],
+    van:    [12.8, 5.2, 2.60, 1.3, 8.0, 2.70, 1.60, 2],
+    truck:  [15.8, 5.6, 2.80, 0.9, 4.4, 3.10, 1.75, 1],
+    bus:    [19.4, 5.6, 2.45, 0.7, 17.6, 3.40, 1.65, 4],
+  }[kind] || [10.5, 4.8, 2.35, 3.0, 4.6, 1.95, 1.55, 2];
   let [L, W, H, cf, cl, ch, wr, nSeam] = spec;
   const grow = st.range(0.92, 1.12);
   L *= grow; W *= st.range(0.96, 1.06); cf *= grow; cl *= grow;
@@ -178,14 +188,8 @@ export function drawVehicle(cv, iso, C, st, x, y, z, ax, kind, mkTag) {
   // are cut into the side faces above, so this stays under a pixel of ink per
   // scanline instead of being a slab.
   sub();
-  box(cv, iso, ax, x + 0.7, y + 0.30, z, L - 1.4, W - 0.60, 0.42,
+  box(cv, iso, ax, x + 0.7, y + 0.30, z, L - 1.4, W - 0.60, 0.30,
     { top: null, left: K, right: K });
-  for (const a of axles) {
-    const bx = ax === 0 ? x + a - wr * 0.62 : x + 0.30;
-    const by = ax === 0 ? y + 0.30 : y + a - wr * 0.62;
-    box3(cv, iso, bx, by, z, ax === 0 ? wr * 1.24 : W - 0.60, ax === 0 ? W - 0.60 : wr * 1.24, 0.5,
-      { top: null, left: K, right: K });
-  }
 
   // -------------------------------------------------------------------- body
   cv.t = own;
@@ -210,7 +214,6 @@ export function drawVehicle(cv, iso, C, st, x, y, z, ax, kind, mkTag) {
       const v = FT.av * sx + FT.bv * sy + FT.cv;
       const along = ax === 0 ? u : v;
       const across = ax === 0 ? v : u;
-      if (across < PX2 || across > W - PX2) return K;
       for (let i = 0; i < bl.length; i++) {
         if (along > bl[i] - PX && along < bl[i] + PX) return K;
       }
