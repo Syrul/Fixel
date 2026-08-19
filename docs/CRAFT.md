@@ -152,21 +152,50 @@ per-file digests use `shasum -a 256`.
 
 ---
 
-## Two metrics that pass the ordering test the band failed
+## CORRECTED: ONE metric passes the ordering test the band failed, not two
 
 `tools/colour.mjs`. Median over 9 seeded 320px interior crops:
 
-| | ink closure (faces per ink-enclosed cell) | colour radius of gyration (px) |
-|---|---:|---:|
-| **LA reference** — the bar | **3.23** | **59.96** |
-| Lufthansa Pixorama — genuine, same craft family | 4.95 | 87.69 |
-| **Fixel** | **8.98** | **117.32** |
+> **This section originally claimed BOTH metrics order correctly. That was
+> wrong and is corrected below.** Only ink closure does. Radius of gyration was
+> checked more carefully across all three images and its median form *inverts*.
 
-**Both order correctly: reference best, genuine-second-opinion second, generator
-worst.** That is exactly the test the 60-metric band failed — there, Fixel
-*beat* Lufthansa, which is what proved the band measures artwork identity rather
-than craft (`docs/DIFF.md` section 3). A metric that ranks a real Pixorama
-between the bar and us is measuring something real about craft.
+| | ink closure | rg (median) | rg (pixel-weighted) |
+|---|---:|---:|---:|
+| **LA reference** — the bar | **3.13** | 19.17 | 178.70 |
+| Lufthansa — genuine, same craft family | 4.70 | **27.02** | **161.74** |
+| **Fixel** | **10.76** | **23.98** | 529.17 |
+
+**Ink closure orders correctly** — 3.13 < 4.70 < 10.76, genuine work ahead of
+the generator — and it is the test the 60-metric band failed, where Fixel *beat*
+Lufthansa. It is robust across implementations too (2.94/8.25 from an
+independent critic). **It is the best diagnostic in this repo. Chase it.**
+
+**rg(median) INVERTS: Fixel 23.98 beats genuine Lufthansa 27.02.** That is the
+identical failure mode that retired the band. It cannot be a target or a score,
+and `tools/colour.mjs` now prints it flagged.
+
+**rg(pixel-weighted) is a FLOOR only.** It separates genuine (161.74, 178.70)
+from generated (529.17) cleanly, but does not order the two genuine works —
+Lufthansa scores *lower* than the bar. So it can say we are outside the craft
+family; it can never say we are winning inside it. Same epistemic status as the
+fail count.
+
+The generalisation I first drew — "absolutes do not travel, direction does" —
+was too broad. The correct, narrower version: **ink closure travels in both
+absolute and ratio; radius of gyration travels only as a genuine-vs-generated
+separator, and only pixel-weighted.**
+
+### The closure problem, stated as plainly as it can be
+
+**Fixel has 29,970 faces against the reference's 11,686 — 2.6x as many — while
+having FEWER closed cells (2,785 vs 3,730).** Far more flat patches, fewer loops
+around them.
+
+So **"add more small detail" is the wrong instinct**: the faces already exist and
+are not being enclosed. And **ink is now slightly OVER** — 17.44% against the
+reference's 16.26% — so the budget headroom is gone and any fix that raises ink
+share further is going the wrong way. Redistribution is the whole job.
 
 That does not make them a score. Two numbers cannot be a verdict and the duel
 remains the bar. But it does make them the two best diagnostics we have, and

@@ -9,11 +9,20 @@
 //   1. COLOUR RADIUS OF GYRATION — is a colour confined to the object it
 //      belongs to, or smeared across the frame? In the reference a colour
 //      MEANS something: green is a lawn, orange is a pylon, sand is a beach.
-//      Reference ~20.5px, generator ~58.8px. One global ramp vs local
-//      material commitment. This is the load-bearing fix: the variety gate
-//      found seed-to-seed structure already differs (0.98-1.11, essentially
-//      unrelated compositions) while palettes do not, so colour is the entire
-//      binding constraint on variety AND the critic's top craft complaint.
+//
+//      *** READ THIS BEFORE USING IT AS A TARGET ***
+//
+//      rg(med) INVERTS and must never be a score or a target:
+//          LA reference 19.17  <  Fixel 23.98  <  Lufthansa 27.02
+//      The generator beats genuine eBoy work on it. That is precisely the
+//      failure that retired the 60-metric band (docs/DIFF.md section 3), and
+//      it is the reason this file refuses to print rg(med) without a warning.
+//
+//      rg(pixel-weighted) is usable but ONLY AS A FLOOR: LA 178.70 and
+//      Lufthansa 161.74 against Fixel 529.17 separates genuine from generated
+//      cleanly, but does NOT order the two genuine works. So it can say we are
+//      outside the craft family; it can never say we are winning inside it.
+//      Same status as the fail count.
 //
 //   2. INK CLOSURE RATIO — flat faces per ink-enclosed cell. Reference 2.94,
 //      generator 8.25. The ink BUDGET is already right (14.12% vs 14.74%) and
@@ -152,8 +161,9 @@ function banner() {
 }
 
 function report(label, m) {
-  console.log(`${label.padEnd(30)} rg(med)=${fmt(m.medianRg)}  rg(pixel-weighted)=${fmt(m.pixelWeightedRg)}  ` +
-    `inkClosure=${fmt(m.ratio)}  cells=${m.cells}  faces=${m.faces}  ink=${fmt(m.inkShare * 100, 2)}%`);
+  console.log(`${label.padEnd(30)} inkClosure=${fmt(m.ratio)}  cells=${m.cells}  faces=${m.faces}  ` +
+    `ink=${fmt(m.inkShare * 100, 2)}%  |  rg(pw)=${fmt(m.pixelWeightedRg)} [floor only]  ` +
+    `rg(med)=${fmt(m.medianRg)} [INVERTS - NOT A TARGET]`);
 }
 
 const argv = process.argv.slice(2);
@@ -203,5 +213,8 @@ if (a.compare) {
   const ref = measure(readPNG(path.join(REPO, 'refs/EBY-LA-Hot-Dog-175k.png')));
   console.log('\nreference, same script, whole image:');
   report('  EBY-LA-Hot-Dog', ref);
-  console.log('\ntarget: match the reference AS MEASURED BY THIS SCRIPT. Ratio is the number that travels.');
+  console.log('\ninkClosure is the ONLY column here that is safe to chase: it orders');
+  console.log('LA < Lufthansa < Fixel, so genuine work beats the generator on it, and its');
+  console.log('absolutes travel across implementations. rg(pw) is a floor. rg(med) INVERTS');
+  console.log('(Fixel 23.98 beats genuine Lufthansa 27.02) and must not be targeted.');
 }

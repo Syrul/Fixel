@@ -84,19 +84,60 @@ export function buildPalette(rng) {
   // system rather than as shading.
   const BLACK = pal.add(8, 8, 10);
 
+  // ---- this scene's light ------------------------------------------------
+  // LEFT is the lit-to-shaded ratio; RIGHT falls further; DARK is the step
+  // that only underside and recess faces ever reach. Centred on the old
+  // constants (0.77 / 0.57 / 0.46) so a typical scene sits where the measured
+  // band already accepted it, and wide enough that two seeds are lit
+  // differently rather than identically.
+  const LEFT = r.range(0.665, 0.865);
+  const RIGHT = LEFT * r.range(0.62, 0.86);
+  const DARK = RIGHT * r.range(0.66, 0.90);
+
+  // ---- this scene's hue policy -------------------------------------------
+  // HUEK is how far a shadow step drifts in hue; the SIGN is per family, so
+  // some pigments cool and others warm and the scene has no net rotation. That
+  // is the measured reference behaviour: `hueRotAbsMedian` up to 5.6 degrees
+  // while `hueRotMedian` is nil. A scene-wide rotation is the classic
+  // procedural-shader tell and this must never do it — the small negative bias
+  // below is the reference's own, not a drift toward blue.
+  const HUEK = r.range(0, 7.5);
+  const SATK = r.range(0.90, 1.32);
+
+  // ---- this scene's palette resolution -----------------------------------
+  // How finely two tones must differ before they are the same tone. A coarse
+  // scene is a poster; a fine one is a crowded market street.
+  const QH = r.range(3.4, 8.5), QS = r.range(9, 21), QL = r.range(18, 36);
+
   function mk(h, s, l) {
     h = ((h % 360) + 360) % 360;
     s = Math.max(0, Math.min(1, s));
     l = Math.max(0.05, Math.min(0.99, l));
-    const key = Math.round(h / 6) * 100000 + Math.round(s * 14) * 1000 + Math.round(l * 26);
+    const key = Math.round(h / QH) * 100000 + Math.round(s * QS) * 1000 + Math.round(l * QL);
     let f = cache.get(key);
     if (f) return f;
     const b = hsl(h, s, l);
+    const bl = rec601(b);
+    // Sign of the hue drift for THIS pigment. Hashed off the key so it is
+    // stable for a family and uncorrelated between families; biased 3:2 cool
+    // so the signed median lands just below zero where the reference's is,
+    // rather than exactly on zero where it is one sample from either side.
+    const q = (Math.imul(key ^ 0x9e3779b9, 2654435761) >>> 0) % 100;
+    const sgn = q < 60 ? -1 : 1;
+    const step = (k, t) => {
+      if (HUEK <= 0.02) return pal.add(b[0] * k, b[1] * k, b[2] * k);
+      const c = hsl(h + sgn * HUEK * t, Math.min(1, s * (1 + (SATK - 1) * t)), l);
+      const cl = rec601(c);
+      // rescale so the luma ratio is EXACTLY k: hue is the pigment's business,
+      // the ladder is the light's, and the two must vary independently
+      const m = cl > 1 ? k * bl / cl : k;
+      return pal.add(c[0] * m, c[1] * m, c[2] * m);
+    };
     f = {
-      t: pal.add(b[0] * TOP, b[1] * TOP, b[2] * TOP),
-      l: pal.add(b[0] * LEFT, b[1] * LEFT, b[2] * LEFT),
-      r: pal.add(b[0] * RIGHT, b[1] * RIGHT, b[2] * RIGHT),
-      d: pal.add(b[0] * DARK, b[1] * DARK, b[2] * DARK),
+      t: pal.add(b[0], b[1], b[2]),
+      l: step(LEFT, 1),
+      r: step(RIGHT, 1.7),
+      d: step(DARK, 2.3),
       // metadata, deliberately underscored: `l` is already the LEFT face index
       _h: h, _s: s, _L: l,
     };
@@ -105,12 +146,21 @@ export function buildPalette(rng) {
   }
 
   const C = { black: BLACK, ink: BLACK, mk };
-  const drift = r.range(-8, 8);
-  const satMul = r.range(0.92, 1.10);
+  // The scene's own weather: how far its hues sit off the table, how saturated
+  // it runs, and how pale. These used to be ±8 degrees and ±9% of saturation,
+  // which is why `hue.meanSat` and `palette.top1Share` barely moved seed to
+  // seed. A desert noon and an overcast harbour are different pictures.
+  const drift = r.range(-16, 16);
+  const satMul = r.range(0.72, 1.30);
+  const litMul = r.range(0.90, 1.08);
+  const neutralSat = r.range(0.7, 1.6);
   for (const [k, h, s, l] of FAM) {
     const neutral = s < 0.25;
-    C[k] = mk(h + (neutral ? drift * 0.25 : drift), s * (neutral ? 1 : satMul), l);
+    C[k] = mk(h + (neutral ? drift * 0.3 : drift),
+      s * (neutral ? neutralSat : satMul),
+      Math.min(0.98, l * (neutral ? litMul : 1 + (litMul - 1) * 0.4)));
   }
+  C.light = { LEFT, RIGHT, DARK, HUEK, SATK };
   C.tar = C.slate;
 
   C.skin = [
@@ -124,11 +174,14 @@ export function buildPalette(rng) {
   C.accents = ACCENT_KEYS.map((k) => C[k]);
   C.walls = WALL_KEYS.map((k) => C[k]);
 
-  /** A wall tone near one of the neutral families, jittered per building. One
-   *  building in four is painted rather than built, which is where a grey city
-   *  gets its saturation back without turning into confetti. */
+  /** A wall tone near one of the neutral families, jittered per building. How
+   *  much of a city is PAINTED rather than built is a property of the city,
+   *  not a constant: a bleached seaside strip and a grey business district are
+   *  different pictures and the old fixed 0.55 made every seed the same mix. */
+  const paintRate = r.range(0.18, 0.72);
+  C.paintRate = paintRate;
   C.wallTone = (st) => {
-    const base = st.bool(0.55) ? st.pick(C.accents) : st.pick(C.walls);
+    const base = st.bool(paintRate) ? st.pick(C.accents) : st.pick(C.walls);
     return mk(base._h + st.range(-10, 10), base._s * st.range(0.85, 1.3),
       Math.min(0.97, base._L * st.range(0.86, 1.12)));
   };
