@@ -132,6 +132,77 @@ export class Canvas {
     }
   }
 
+  /**
+   * Blit a sprite that has K poses, recording the whole loop as it goes.
+   *
+   * `poses` is K row-tables — pose 0 is what gets drawn, the rest are only
+   * measured. They need not be the same size; each carries its own top-left
+   * offset in `origins[k] = [dx, dy]` relative to (x0, y0), which is how a
+   * canopy that breathes outward by a pixel keeps its centre still.
+   *
+   * WHY THE TRANSPARENT PIXELS ARE THE HARD PART. A sprite that only ever
+   * changes colour is trivial. A sprite whose SILHOUETTE changes — a canopy
+   * gaining a pixel at its edge, an arm leaving the body — needs to know what
+   * is behind it at every pixel any pose might cover, because on the frames
+   * where the pose is absent that pixel must show the background again. So the
+   * union footprint is walked AFTER pose 0 is drawn, and frame 0's value is
+   * read back off the canvas rather than predicted: whatever is there is the
+   * truth, including the case where the depth test rejected pose 0 entirely.
+   *
+   * The depth test is re-run per pose for the same reason. A tree pixel that
+   * pose 0 did not draw may be sitting in front of a wall that is NEARER, and
+   * pose 3 must lose to that wall exactly as pose 0 would have.
+   *
+   * Nothing here decides whether a pixel survives to the finished frame — a
+   * later sprite may cover it, and the silhouette sweep may blacken it. That is
+   * `AnimRec.finish`'s job, and it resolves it against the canvas that actually
+   * exists rather than against anyone's model of it.
+   */
+  blitAnim(x0, y0, poses, origins, map, d, rec, tag = 0) {
+    const K = poses.length;
+    // Pose 0 draws exactly as an ordinary blit would, so a still render and an
+    // animated render agree on frame 0 by construction rather than by care.
+    const o0 = origins[0];
+    this.blit(x0 + o0[0], y0 + o0[1], poses[0], map, d, tag);
+    if (!rec || !rec.on || K < 2) return;
+
+    // The union footprint, in screen pixels.
+    let ax = Infinity, ay = Infinity, bx = -Infinity, by = -Infinity;
+    for (let k = 0; k < K; k++) {
+      const g = origins[k], rows = poses[k];
+      const px = x0 + g[0], py = y0 + g[1];
+      if (px < ax) ax = px;
+      if (py < ay) ay = py;
+      if (px + rows[0].length > bx) bx = px + rows[0].length;
+      if (py + rows.length > by) by = py + rows.length;
+    }
+    ax = Math.max(0, ax); ay = Math.max(0, ay);
+    bx = Math.min(this.w, bx); by = Math.min(this.h, by);
+    if (ax >= bx || ay >= by) return;
+
+    const vals = rec._scratch || (rec._scratch = new Uint16Array(K));
+    for (let y = ay; y < by; y++) {
+      for (let x = ax; x < bx; x++) {
+        const o = y * this.w + x;
+        const v0 = this.idx[o];
+        vals[0] = v0;
+        let moves = 0;
+        for (let k = 1; k < K; k++) {
+          const g = origins[k], rows = poses[k];
+          const j = y - (y0 + g[1]), i = x - (x0 + g[0]);
+          let v = v0;
+          if (j >= 0 && j < rows.length && i >= 0 && i < rows[j].length) {
+            const ci = map[rows[j][i]];
+            if (ci !== undefined && ci >= 0 && d >= this.depth[o]) v = ci;
+          }
+          vals[k] = v;
+          if (v !== v0) moves = 1;
+        }
+        if (moves) rec.push(o, this.tag[o], vals);
+      }
+    }
+  }
+
   /** RGBA8 buffer, resolved through the palette. */
   toRGBA() {
     const out = Buffer.alloc(this.w * this.h * 4);
