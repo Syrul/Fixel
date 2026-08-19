@@ -44,7 +44,6 @@ const N = Number(arg('seeds', 6));
 const W = Number(arg('w', 440));
 const H = Number(arg('h', 1000));
 const BIOME = arg('biome', undefined);
-const GAIN = Number(arg('gain', 1));
 const K = Number(arg('frames', FRAMES));
 
 // The share of moving pixels allowed to live in islands of 1-2 px. A design in
@@ -64,7 +63,7 @@ let bad = 0;
 const rows = [];
 
 for (const seed of seeds) {
-  const o = { w: W, h: H, frames: K, gain: GAIN };
+  const o = { w: W, h: H, frames: K };
   if (BIOME) o.biome = BIOME;
 
   const t0 = process.hrtime.bigint();

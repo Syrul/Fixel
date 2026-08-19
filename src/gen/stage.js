@@ -204,16 +204,11 @@ export function makeStage(seed, opts = {}) {
   const frames = Math.max(1, opts.frames || 1);
   const frame = ((opts.frame | 0) % frames + frames) % frames;
   const anim = new AnimRec(frames, frames > 1);
-  // Amplitude gain. Multiplies every animated amplitude and NOTHING else — it
-  // may not reach an Rng draw, a layout decision or the seed, because a post's
-  // identity is its seed and this is a property of the render. See the note in
-  // src/core/frame.js for why it exists at all and when it gets deleted.
-  const gain = opts.gain === undefined ? 1 : Math.max(0, Number(opts.gain) || 0);
 
   return {
     W, H, S, rng, pal, C, cv, iso, ox, oy, X0, X1, Y0, Y1, seedN,
     tag, tagRaw, vis,
-    frame, frames, anim, gain,
+    frame, frames, anim,
     get tagN() { return tagN; },
     finish(o = {}) {
       if (o.outline !== false) outlinePass(cv, C.black, noOutline, tagN);

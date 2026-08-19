@@ -106,7 +106,7 @@ import { triPhase } from '../../core/frame.js';
  * and independent pixels flipping is the one thing this animation may not be.
  * "Subtler" past that point does not buy subtlety, it buys twinkle.
  */
-export const SWELL_AMP = 0.0125;
+export const SWELL_AMP = 0.0225;
 
 /**
  * How far the foam band surges up and down the beach over one loop, in WORLD
@@ -131,7 +131,7 @@ export const SWELL_AMP = 0.0125;
  * exactly the kind of pass this repo has learned not to accept. 0.40 is the
  * smallest value at which the foam stands on its own.
  */
-export const FOAM_AMP = 0.40;
+export const FOAM_AMP = 0.72;
 
 /**
  * WHERE A STRETCH OF SEA IS IN ITS BREATH, and this is the part that stops the
@@ -891,7 +891,6 @@ export function paintShore(stage) {
   // pixel would be 200,000 allocations a frame.
   const K = stage.frames;
   const FR = stage.frame;
-  const G = stage.gain === undefined ? 1 : stage.gain;
   const vals = new Uint16Array(K);
 
   /**
@@ -1004,17 +1003,10 @@ export function paintShore(stage) {
     const off = offsetAt(u, v);
     const offF = off + FOAM_LAG + (u * cxu + v * cyu) / FOAM_LEN;
     const b = triPhase(0, off), bF = triPhase(0, offF);
-    // `stage.gain` is the user's `?anim=` knob and it multiplies HERE, at the
-    // one site both amplitudes are applied, so there is no second code path to
-    // keep alive — the still render is gain 0 by arithmetic, not by a branch.
-    // It cannot reach an Rng draw or the layout: `tone` is a pure function of
-    // two displacements. Frame 0 stays the still picture at EVERY gain, because
-    // the anchor `b` is subtracted before the multiply.
-    const gA = FOAM_AMP * G, gS = SWELL_AMP * G;
     for (let k = 0; k < K; k++) {
       vals[k] = tone(
-        gA * (triPhase(k, offF) - bF),
-        gS * (triPhase(k, off) - b));
+        FOAM_AMP * (triPhase(k, offF) - bF),
+        SWELL_AMP * (triPhase(k, off) - b));
     }
     stage.anim.push(sy * cv.w + sx, cv.t, vals);
     return vals[FR];

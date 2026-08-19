@@ -45,12 +45,9 @@ function own(ta) {
 }
 
 self.onmessage = (e) => {
-  const { id, seed, w, h, gain } = e.data;
+  const { id, seed, w, h } = e.data;
   const t0 = performance.now();
-  // `gain` is the `?anim=` knob. It is a render parameter beside w and h, and
-  // it is deliberately NOT part of the seed — the same seed at a different gain
-  // is the same post drawn softer, so `?seed=N` restores it either way.
-  const cv = renderScene(seed, { w, h, frames: FRAMES, frame: 0, gain });
+  const cv = renderScene(seed, { w, h, frames: FRAMES, frame: 0 });
   const cols = cv.pal.rgb;
   const idx = cv.idx;
   const n = cv.w * cv.h;

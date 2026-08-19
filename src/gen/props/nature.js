@@ -50,9 +50,9 @@ import { FRAMES, triPhase } from '../../core/frame.js';
  * 5.6-15.9% with island p50 3-6. Shrinking the constant does not make the
  * motion subtler, it makes it noise.
  */
-const CANOPY_SHIFT_PX = 2;
+const CANOPY_SHIFT_PX = 3.6;
 /** A bush: the whole canopy IS about one clump at this size. */
-const BUSH_SHIFT_PX = 2;
+const BUSH_SHIFT_PX = 3.6;
 /**
  * A palm: ZERO, and this is a reasoned exclusion rather than an omission.
  *
@@ -110,10 +110,9 @@ const FROND_SWING_PX = 0;
  * apart (every metric identical to 3 dp bar orphan 1px at 0.013 pp, which is
  * noise); the picture can tell them apart instantly.
  *
- * IT SATURATES AT ONE RUNG AND THAT IS HONEST. `stage.gain` multiplies it like
- * every other amplitude here, but the ladder has exactly one rung above the
- * frond core, so gain 1.8 and gain 3 buy the same tone. Above gain 1 the knob's
- * remaining travel goes into the sector width below.
+ * IT SATURATES AT ONE RUNG, and the shipped amplitude is that rung. The ladder
+ * has exactly one step above the frond core, so a larger amplitude buys no more
+ * tone; what it buys instead is a wider lit sector, which is `GUST_PEAK` below.
  */
 const FROND_LIT_STEPS = 1;
 /**
@@ -156,12 +155,35 @@ const FROND_GUST_DEG = 60;
  * next for no reason a viewer could name.
  *
  * `GUST_MAX` clamps it, and the clamp is not cosmetic — it is the same one
- * `DISP_MAX` makes below. `?anim=` reaches gain 8, and a `wid` that overflowed
- * its four-bit slot would collide with a NEIGHBOURING CROWN'S key and hand back
- * a crown of a different shape. That exact bug was caught by the oracle at gain
- * 3 on desert last round; it does not get to happen twice.
+ * `DISP_MAX` makes below. A `wid` that overflowed its four-bit slot would
+ * collide with a NEIGHBOURING CROWN'S key and hand back a crown of a different
+ * shape. That exact bug was caught by the oracle on desert; it does not get to
+ * happen twice, so the clamp stays even though the shipped width cannot reach
+ * it.
  */
 const GUST_STEPS = 4;
+/**
+ * THE PEAK SECTOR WIDTH, IN RUNGS, AT THE SHIPPED AMPLITUDE.
+ *
+ * Separate from `GUST_STEPS` because that constant has TWO jobs and only one of
+ * them scales with the amplitude. `GUST_STEPS` is the RUNG SIZE: `frondCrown`
+ * divides by it to turn a whole number of rungs back into a fraction of
+ * `FROND_GUST_DEG`. `GUST_PEAK` is HOW MANY RUNGS the gust reaches at its
+ * widest.
+ *
+ * They were one constant while a gain multiplied it at the call site, and
+ * folding the chosen gain into it broke the divisor: the sector came out at
+ * `wid / 7.2` where it had been `wid / 4`, so it was little more than half as
+ * wide and fourteen lit frond pixels went dark. Nothing in the arithmetic was
+ * wrong — 4 * 1.8 is exactly 7.2 — and the substitution was still incorrect,
+ * because the constant was standing for two different quantities that had
+ * happened to be equal.
+ *
+ * Caught by rendering 72 frames before and after and comparing the bytes. It
+ * would not have been caught by reading the diff, which was four lines and
+ * looked like an identity.
+ */
+const GUST_PEAK = 7.2;
 const GUST_MAX = 15;
 /**
  * Sector centre positions around a crown: one per frame, so the gust travels a
@@ -218,11 +240,12 @@ const PALM_MOVES_ONE_IN = 3;
 const swing = (k, off) => triPhase(k, off) - triPhase(0, off);
 // Whole screen pixels, symmetric about zero, and CLAMPED TO +/-DISP_MAX. The
 // clamp is not cosmetic: every table cache in this file keys on the
-// displacement in a fixed-width slot, and `?anim=` lets the user ask for a gain
-// of 8. A displacement that overflowed its slot collided with a NEIGHBOURING
-// VARIANT'S key and handed back a mask of a different shape — caught by the
-// oracle at gain 3 on desert as 39 pixels whose tag changed under a sprite that
-// cannot change its own silhouette.
+// displacement in a fixed-width slot, so a displacement that overflowed its
+// slot collided with a NEIGHBOURING VARIANT'S key and handed back a mask of a
+// different shape. It is kept even though the shipped amplitude cannot reach
+// it: the clamp is what makes the slot width a PROPERTY of the cache rather
+// than a coincidence of the current constant. Found by the oracle, as 39 pixels
+// whose tag changed under a sprite that cannot change its own silhouette.
 const DISP_MAX = 31;
 const stepPx = (v, amp) => {
   let a = amp * v;
@@ -257,16 +280,12 @@ function movePhase(wx, wy, salt, oneIn) {
  */
 function poseSet(A, off, amp, make) {
   if (!A || A.frames < 2 || off < 0) return [make(0)];
-  // `stage.gain` is the user's `?anim=` knob and it multiplies HERE, at the one
-  // site every amplitude in this file is applied, so there is no second code
-  // path to keep alive: gain 0 is the still picture by arithmetic rather than by
-  // a branch, and frame 0 is the still picture at EVERY gain because `swing` is
-  // anchored to zero at k = 0 before the multiply. It cannot reach an Rng draw
-  // or a layout decision — it only scales a displacement that is already a pure
-  // function of the frame index.
-  const g = A.gain === undefined ? 1 : A.gain;
+  // FRAME 0 IS THE STILL PICTURE, because `swing` is anchored to zero at k = 0.
+  // That is what keeps every craft number in `docs/` describing the frame the
+  // metrics are taken on, and it is why the animation could be added without
+  // re-deriving five rounds of measurement.
   const out = new Array(A.frames);
-  for (let j = 0; j < A.frames; j++) out[j] = make(stepPx(swing(A.frame + j, off), amp * g));
+  for (let j = 0; j < A.frames; j++) out[j] = make(stepPx(swing(A.frame + j, off), amp));
   return out;
 }
 
@@ -307,16 +326,15 @@ function poseSet(A, off, amp, make) {
  */
 function crownPoses(A, off, make) {
   if (!A || A.frames < 2 || off < 0) return [make(0, 0, 0)];
-  const g = A.gain === undefined ? 1 : A.gain;
   // Whole sectors, so the rotation is an integer walk rather than an angle that
   // has to be re-quantised. `off` is already a multiple of 1 / FRAMES.
   const m = Math.round(off * FRAMES);
   const out = new Array(A.frames);
   for (let j = 0; j < A.frames; j++) {
     const k = A.frame + j;
-    out[j] = make(stepPx(swing(k, off), FROND_SWING_PX * g),
+    out[j] = make(stepPx(swing(k, off), FROND_SWING_PX),
       ((k + m) % CROWN_SECTORS + CROWN_SECTORS) % CROWN_SECTORS,
-      gustPx(swing(k, off), GUST_STEPS * g));
+      gustPx(swing(k, off), GUST_PEAK));
   }
   return out;
 }
@@ -505,7 +523,7 @@ function frondCrown(R, variant, swingPx = 0, sec = 0, wid = 0) {
   // EVERY PARAMETER THAT CHANGES A PIXEL IS IN THE KEY, in its own fixed-width
   // slot. A memo keyed on less than it depends on serves one crown's poses for
   // another crown, and this project has now found that class of bug twice —
-  // most recently as a displacement overflowing its slot at gain 3 and handing
+  // most recently as a displacement overflowing its slot and handing
   // back a mask of a different shape.
   //
   // Slots: variant < 16, swingPx + 32 < 64 (clamped by DISP_MAX), sec <
@@ -543,7 +561,6 @@ function frondCrown(R, variant, swingPx = 0, sec = 0, wid = 0) {
   };
   // The wedge. Clamped at a half-turn because past 180 degrees a cosine
   // threshold stops widening the sector and starts cutting a hole in it, and
-  // `?anim=` can ask for gain 8.
   const SA = (sec / CROWN_SECTORS) * 6.283185307;
   const SX = Math.cos(SA), SY = Math.sin(SA);
   const COS_HALF = Math.cos(Math.min(Math.PI,
@@ -690,7 +707,7 @@ export function palm(cv, iso, C, st, x, y, z, A) {
   // The lit tone is a property of the CROWN, not of a pose: it lives in the
   // map, which `blitAnim` reads once for every pose. What changes per frame is
   // only which fronds are drawn in it.
-  const lit = litTone(g, Math.round(FROND_LIT_STEPS * (A && A.gain !== undefined ? A.gain : 1)));
+  const lit = litTone(g, FROND_LIT_STEPS);
   const ps = crownPoses(A, off, (m, sec, wid) => frondCrown(cR, cV, m, sec, wid));
   putPoses(cv, p[0] - (ps[0][0].length >> 1), p[1] - ps[0].length + 4, ps,
     leafMap(C, g, lit), dep(iso, x, y, z + h, 2), A);

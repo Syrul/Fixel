@@ -61,7 +61,6 @@ const W = Number(args.w ?? 800);
 const H = Number(args.h ?? 560);
 const K = Number(args.frames ?? 1);
 const BIOME = typeof args.biome === 'string' ? args.biome : null;
-const GAIN = args.gain === undefined ? null : String(args.gain);
 const TMP = path.join(REPO, 'out', '.verify');
 
 // WHICH FRAMES, AND WHY THESE. 0 is the base every measurement in this repo was
@@ -84,7 +83,6 @@ function render(seed, out, frame) {
   ];
   if (K > 1) a.push('--frames', String(K), '--frame', String(frame));
   if (BIOME) a.push('--biome', BIOME);
-  if (GAIN !== null) a.push('--gain', GAIN);
   execFileSync('node', a, { cwd: REPO, stdio: ['ignore', 'pipe', 'inherit'] });
 }
 
@@ -125,20 +123,16 @@ for (let i = 0; i < N; i++) {
     if (h.get(40) !== h.get(40 % K)) { drifted++; note += `  FRAME 40 != FRAME ${40 % K}`; }
     // 4. Something actually moves. A still loop satisfies every other check.
     //
-    // WHOSE STILLNESS IS A BUG DEPENDS ON WHICH BIOME DREW. Not every biome
-    // animates yet, and a mixed run of four seeds can legitimately draw three
-    // biomes that hold still — failing that as "NOTHING MOVES" would be a gate
-    // reporting the feed's composition rather than a defect. So the assertion
-    // is strict exactly when the caller has named a biome and can therefore be
-    // held to it, and otherwise reports the per-seed truth and fails only if
-    // NOTHING in the whole run moves.
+    // EVERY SEED MUST MOVE, unconditionally.
     //
-    // This weakening has an expiry: once every biome animates, drop the branch
-    // and require all seeds to move. Leaving it in past that point would be a
-    // gate that quietly stopped checking.
+    // This was briefly weakened to "strict only when a biome is named", because
+    // three of four biomes did not animate yet and a mixed run failing with
+    // "NOTHING MOVES" was a gate reporting the feed's composition rather than a
+    // defect. The weakening was written with its expiry attached: once every
+    // biome animates, drop the branch. All four animate, so it is dropped. A
+    // gate that quietly stopped checking is worse than no gate.
     const moved = FRAME_SET.some((f) => f % K !== 0 && h.get(f) !== h.get(0));
-    if (moved) movers++;
-    if (!moved && BIOME) { still++; note += '  NOTHING MOVES'; }
+    if (moved) movers++; else { still++; note += '  NOTHING MOVES'; }
   }
   const bio = BIOME || pickBiome(seed);
   console.log(`${seedBad || note ? 'FAIL' : 'ok  '}  ${seed}  ${h.get(0).slice(0, 16)}` +
@@ -165,8 +159,7 @@ console.log(`distinctness: ${distinct.size}/${N} distinct seeds gave distinct pi
 if (K > 1) {
   console.log(`loop closure: ${N - unclosed}/${N} frame ${K} === frame 0`);
   console.log(`no drift:     ${N - drifted}/${N} frame 40 === frame ${40 % K}`);
-  console.log(`motion:       ${movers}/${N} seeds have a frame differing from frame 0` +
-    (BIOME ? ` (biome ${BIOME}, all required)` : ' (mixed biomes; not all animate yet)'));
+  console.log(`motion:       ${movers}/${N} seeds have a frame differing from frame 0 (all required)`);
 }
 rmSync(TMP, { recursive: true, force: true });
 

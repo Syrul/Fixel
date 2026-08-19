@@ -203,7 +203,7 @@ function ellipseMass(R, variant, flat, salt, shift = 0) {
  * displacement is set by the 2px octave in the clumping, not by taste. UNTESTED
  * BY THE ORACLE: nothing calls this with a stage yet.
  */
-const WEED_SHIFT_PX = 3;
+const WEED_SHIFT_PX = 5.4;
 /** One weed pile in this many moves at all. */
 const WEED_MOVES_ONE_IN = 3;
 /**
@@ -242,11 +242,12 @@ const GUSTS = [
 const swing = (k, off) => triPhase(k, off) - triPhase(0, off);
 // Whole screen pixels, symmetric about zero, and CLAMPED TO +/-DISP_MAX. The
 // clamp is not cosmetic: every table cache in this file keys on the
-// displacement in a fixed-width slot, and `?anim=` lets the user ask for a gain
-// of 8. A displacement that overflowed its slot collided with a NEIGHBOURING
-// VARIANT'S key and handed back a mask of a different shape — caught by the
-// oracle at gain 3 on desert as 39 pixels whose tag changed under a sprite that
-// cannot change its own silhouette.
+// displacement in a fixed-width slot, so a displacement that overflowed its
+// slot collided with a NEIGHBOURING VARIANT'S key and handed back a mask of a
+// different shape. It is kept even though the shipped amplitude cannot reach
+// it: the clamp is what makes the slot width a PROPERTY of the cache rather
+// than a coincidence of the current constant. Found by the oracle, as 39 pixels
+// whose tag changed under a sprite that cannot change its own silhouette.
 const DISP_MAX = 31;
 const stepPx = (v, amp) => {
   let a = amp * v;
@@ -271,16 +272,12 @@ function movePhase(wx, wy, salt, oneIn) {
  */
 function poseSet(A, off, amp, make) {
   if (!A || A.frames < 2 || off < 0) return [make(0)];
-  // `stage.gain` is the user's `?anim=` knob and it multiplies HERE, at the one
-  // site every amplitude in this file is applied, so there is no second code
-  // path to keep alive: gain 0 is the still picture by arithmetic rather than by
-  // a branch, and frame 0 is the still picture at EVERY gain because `swing` is
-  // anchored to zero at k = 0 before the multiply. It cannot reach an Rng draw
-  // or a layout decision — it only scales a displacement that is already a pure
-  // function of the frame index.
-  const g = A.gain === undefined ? 1 : A.gain;
+  // FRAME 0 IS THE STILL PICTURE, because `swing` is anchored to zero at k = 0.
+  // That is what keeps every craft number in `docs/` describing the frame the
+  // metrics are taken on, and it is why the animation could be added without
+  // re-deriving five rounds of measurement.
   const out = new Array(A.frames);
-  for (let j = 0; j < A.frames; j++) out[j] = make(stepPx(swing(A.frame + j, off), amp * g));
+  for (let j = 0; j < A.frames; j++) out[j] = make(stepPx(swing(A.frame + j, off), amp));
   return out;
 }
 

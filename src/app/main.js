@@ -6,7 +6,7 @@
 // smooth.
 
 import { pickBiome } from '../gen/biome-mix.js';
-import { FPS, frameAt, gainFor, gainName } from '../core/frame.js';
+import { FPS, frameAt } from '../core/frame.js';
 import { paintFrame, dirtyBands, loopBytes } from '../core/anim.js';
 
 const FEED = document.getElementById('feed');
@@ -18,25 +18,6 @@ const START = document.getElementById('start');
 // so a link reproduces not just one picture but the run that follows it.
 const url = new URL(location.href);
 
-// ---- amplitude ------------------------------------------------------------
-// `?anim=still|default|more|most`, or a raw multiplier. This is the one number
-// in the animation round with no derivation behind it: the loop length and the
-// frame rate come from the closure constraint, the motion's spatial shape from
-// a measurement, and the amplitude from nothing but taste — the reference files
-// that were meant to supply it turned out not to be pixel art, not to be loops,
-// and to move 6-10 px a frame (docs/BAR.md, "FALSIFIED"). So it is exposed
-// rather than decided, and whoever is holding the phone settles it.
-//
-// IT IS NOT PART OF THE SEED. Nothing in `seedAt` or `mix32` reads it, no Rng
-// draw depends on it, and a link copied at `most` restores the same post at
-// `default`. It sits beside the viewport width, which already varies per device
-// without touching post identity.
-//
-// WHEN THE CHOICE IS MADE, THE WINNER BECOMES THE CONSTANT AND ALL OF THIS IS
-// DELETED — the parameter, the caption, and AMP_STEPS. A knob that outlives its
-// decision is how a repo accumulates retired machinery.
-const ANIM_PARAM = url.searchParams.get('anim');
-const GAIN = gainFor(ANIM_PARAM);
 const BASE = (Number(url.searchParams.get('seed')) || Math.floor(Math.random() * 2 ** 31)) >>> 0;
 
 function mix32(x) {
@@ -185,7 +166,7 @@ function makePost(i) {
 
 async function generate(p) {
   if (p.gen) return; p.gen = true;
-  const s = await ask(sceneW, { seed: String(p.seed), w: FRAME.w, h: FRAME.h, gain: GAIN });
+  const s = await ask(sceneW, { seed: String(p.seed), w: FRAME.w, h: FRAME.h });
   // METADATA ONLY. `s` holds four transferred ArrayBuffers and the largest is
   // the 1.76 MB RGBA base; retaining the whole message pinned all of them for
   // the life of the post, and nothing ever read them back. A still post now
@@ -229,13 +210,8 @@ async function generate(p) {
   // ready 250ms before its track is far better than the reverse.
   const a = await ask(audioW, { seed: String(p.seed), seconds: 48 });
   p.audio = a;
-  // The step is captioned only when `?anim=` is present, so the default feed is
-  // unchanged and an A/B is always labelled. An A/B you cannot label is not one:
-  // two amplitudes look alike enough that a viewer flipping between links would
-  // otherwise have no way to say which one they just preferred.
   p.meta.querySelector('.sub').textContent =
-    `${pickBiome(String(p.seed))} · ${a.bpm} BPM · ${a.key} · ${s.w}×${s.h}` +
-    (ANIM_PARAM === null ? '' : ` · anim ${gainName(GAIN)}`);
+    `${pickBiome(String(p.seed))} · ${a.bpm} BPM · ${a.key} · ${s.w}×${s.h}`;
   if (active === p.i && ac) playBuffer(new Float32Array(a.mix), a.sampleRate);
 }
 
