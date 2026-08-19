@@ -70,6 +70,9 @@ export function composeSong(seed, opts = {}) {
   const mode = rng.stream('audio.key.mode').weighted(place.modes);
   const scale = SCALES[mode];
   const progFamily = PROGRESSIONS[mode] ? mode : (mode === 'harmonicMinor' ? 'minor' : 'major');
+  // The chord a post ends on. Read off the scale rather than off a list of
+  // mode names, so a mode added to SCALES later cannot end on the wrong third.
+  const tonicQuality = scale.includes(4) ? 'M' : 'm';
 
   // ---- per-post voicing and drum kit ------------------------------------
   // Without these every post is, statistically, the same post: measured across
@@ -167,12 +170,20 @@ export function composeSong(seed, opts = {}) {
   const fst = rng.stream('audio.form.shape');
   const lst = rng.stream('audio.form.lengths');
   const form = fst.weighted(FORMS.map(f => [f, f.w]));
+  // THE POST ENDS. 18 of 24 seeds used to simply stop wherever the render
+  // window closed, mid-section and mid-phrase, because the form was a loop the
+  // clock cut. Two bars are reserved at the end and the body is planned to fit
+  // inside what is left, so the last thing a post does is finish.
+  const outroBars = totalBars >= 12 ? 2 : 0;
+  const bodyBars = totalBars - outroBars;
+
   const sections = [];
   const seen = {};
   let bar = 0;
   sections.push({ index: 0, kind: 'intro', motif: 'A', startBar: 0, bars: opening.bars });
   bar = opening.bars;
-  for (let i = 0; bar < totalBars; i++) {
+  let lastLetter = 'A';
+  for (let i = 0; bar < bodyBars; i++) {
     const letter = form.letters[i % form.letters.length];
     seen[letter] = (seen[letter] || 0) + 1;
     const kind = letter + (seen[letter] > 1 ? String(seen[letter]) : '');
@@ -181,9 +192,16 @@ export function composeSong(seed, opts = {}) {
     const want = lst.weighted([[4, 26], [8, 48], [16, 26]]);
     sections.push({
       index: sections.length, kind, motif: letter,
-      startBar: bar, bars: Math.min(want, totalBars - bar),
+      startBar: bar, bars: Math.min(want, bodyBars - bar),
     });
+    lastLetter = letter;
     bar += want;
+  }
+  if (outroBars) {
+    sections.push({
+      index: sections.length, kind: 'outro', motif: lastLetter,
+      startBar: bodyBars, bars: outroBars,
+    });
   }
 
   // ---- texture, per section kind, per post -------------------------------
@@ -191,7 +209,11 @@ export function composeSong(seed, opts = {}) {
   // seeds, which is the same arrangement in every post in the feed. Each
   // section KIND gets its own stream so adding a section kind later cannot
   // re-roll an earlier one.
-  const textures = { intro: introTexture };
+  const textures = {
+    intro: introTexture,
+    // Not a draw. An ending thins; that is what makes it an ending.
+    outro: { drums: 'light', arp: 'off', lead: 'motif', harmony: 'pad', bassFig: null, leadOct: 0 },
+  };
   for (const s of sections) {
     if (textures[s.kind]) continue;
     const tst = rng.stream(`audio.texture.${s.kind}`);
@@ -308,6 +330,9 @@ export function composeSong(seed, opts = {}) {
     const st = rng.stream(`audio.harmony.prog.${s.kind}`);
     const core = progPool[st.int(0, progPool.length - 1)];
     const cad = cadPool[st.int(0, cadPool.length - 1)];
+    // The ending is a cadence and then the tonic. Nothing else in the piece is
+    // allowed to be the last chord.
+    if (s.kind === 'outro') { s.prog = [cad, [0, tonicQuality]]; continue; }
     // sections sharing a motif letter share the harmony too, so the A-variants
     // are variations of one idea rather than four unrelated eight-bar tunes
     let prog;
@@ -401,7 +426,11 @@ export function composeSong(seed, opts = {}) {
     const nSlots = Math.ceil(TICKS_PER_BAR / step);
     const mask = [], maskB = [];
     for (let i = 0; i < nSlots; i++) {
-      const hole = step === 1 && (i % 4 === 3) && st.bool(0.4);
+      // `step === 1 &&` made this branch DEAD IN EIGHTH MODE — and eighth is
+      // the more common of the two — so an eighth-note arp played all eight
+      // slots of every bar of every post that had one. The hole rate is lower
+      // at eighths because each slot is twice as long.
+      const hole = (i % 4 === 3) && st.bool(step === 1 ? 0.40 : 0.34);
       mask.push(!hole);
       maskB.push(i % 4 === 3 ? !st.bool(0.5) : !hole);
     }
@@ -620,6 +649,44 @@ export function composeSong(seed, opts = {}) {
       if (b === 0 && (s.kind !== 'intro' || opening.plan[0].includes('D'))) {
         tracks.drums.push({ tick: t0, dur: 8, kind: 'crash', vel: 0.9 });
       }
+    }
+  }
+
+  // ---- the last bar -------------------------------------------------------
+  // 18 of 24 posts used to stop wherever the render window closed. The two
+  // reserved bars are a cadence and then this: the tonic, struck once by every
+  // voice the post has, and held. The generators are masked out of it so the
+  // chord rings rather than being played through.
+  if (outroBars) {
+    const lastBar = totalBars - 1;
+    const t0 = lastBar * TICKS_PER_BAR;
+    const ct = chordTones(tonicPc, 0, tonicQuality);
+    for (const k of Object.keys(tracks)) {
+      tracks[k] = tracks[k].filter(n => n.tick < t0);
+    }
+    if (ensemble.has('bass')) {
+      let m = BASS_LO + (((ct.root - BASS_LO) % 12) + 12) % 12;
+      while (m > BASS_HI - 5) m -= 12;
+      tracks.bass.push({ tick: t0, dur: TICKS_PER_BAR, midi: m, vel: 1 });
+    }
+    if (ensemble.has('harmony')) {
+      const base = HARM_LO + (((ct.root - HARM_LO) % 12) + 12) % 12;
+      for (const iv of [ct.intervals[1], ct.intervals[2 % ct.intervals.length]]) {
+        let m = base + iv;
+        while (m > HARM_HI) m -= 12;
+        tracks.harmony.push({ tick: t0, dur: TICKS_PER_BAR, midi: m, vel: 0.62 });
+      }
+    }
+    {
+      // The lead lands on the tonic, in its own register. It is in every
+      // ensemble, so a post always has a last note.
+      let m = voicing.leadCentre + (((ct.root - voicing.leadCentre) % 12) + 12) % 12;
+      while (m > voicing.leadCentre + 12) m -= 12;
+      tracks.lead.push({ tick: t0, dur: TICKS_PER_BAR, midi: m, vel: 1 });
+    }
+    if (ensemble.has('drums')) {
+      tracks.drums.push({ tick: t0, dur: 8, kind: 'crash', vel: 0.8 });
+      tracks.drums.push({ tick: t0, dur: 3, kind: 'kick', vel: 1 });
     }
   }
 

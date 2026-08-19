@@ -16,6 +16,14 @@ export const SCALES = {
   harmonicMinor: [0, 2, 3, 5, 7, 8, 11],
 };
 
+// EVERY ROW HERE IS REACHABLE. Measured: `dim`, `aug`, `sus2` and `six` were
+// defined and no progression or cadence in this file ever named one, so four of
+// thirteen chord qualities were vocabulary the composer could not say. Each is
+// now placed where the MODE puts it, not sprinkled: the diminished triad falls
+// on the degree that is genuinely diminished in each scale (v in phrygian, #iv
+// in lydian, vi in dorian, iii in mixolydian, ii in minor, vii in major), the
+// augmented on the bIII of a minor whose 7th is raised, and sus2 only in modes
+// with a major 2nd — which is every one of them except phrygian.
 export const QUALITIES = {
   M:     [0, 4, 7],
   m:     [0, 3, 7],
@@ -46,6 +54,9 @@ export const QUALITIES = {
 // corpus p05 of 2.773) toward the corpus median of 3.119.
 export const PROGRESSIONS = {
   minor: [
+    [[0, 'm'], [3, 'aug'], [8, 'M'], [7, 'dom7']],
+    [[0, 'm'], [2, 'm7b5'], [7, 'm7'], [10, 'M']],
+    [[0, 'sus2'], [10, 'M'], [8, 'M'], [0, 'm']],
     [[0, 'm'], [8, 'M'], [3, 'M'], [10, 'M']],
     [[0, 'm'], [5, 'm'], [10, 'M'], [3, 'M']],
     [[0, 'm'], [10, 'M'], [8, 'M'], [7, 'dom7']],
@@ -53,6 +64,8 @@ export const PROGRESSIONS = {
     [[0, 'm'], [7, 'm7'], [8, 'M'], [3, 'M']],
   ],
   major: [
+    [[0, 'six'], [9, 'm7'], [2, 'm7'], [7, 'dom7']],
+    [[0, 'M'], [11, 'dim'], [9, 'm'], [5, 'M']],
     [[0, 'M'], [9, 'm'], [5, 'M'], [7, 'M']],
     [[0, 'M'], [7, 'M'], [9, 'm'], [4, 'm']],
     [[0, 'M7'], [5, 'M7'], [2, 'm7'], [7, 'dom7']],
@@ -62,27 +75,37 @@ export const PROGRESSIONS = {
   dorian: [
     [[0, 'm'], [10, 'M'], [5, 'M'], [0, 'm']],
     [[0, 'm7'], [5, 'M'], [10, 'M'], [2, 'm7']],
+    [[0, 'sus2'], [10, 'M'], [5, 'M'], [2, 'm7']],
+    [[0, 'm'], [9, 'dim'], [5, 'M'], [10, 'M']],
   ],
   mixolydian: [
     [[0, 'M'], [10, 'M'], [5, 'M'], [0, 'M']],
     [[0, 'dom7'], [5, 'M'], [10, 'M'], [5, 'M']],
+    [[0, 'six'], [10, 'M'], [7, 'm'], [5, 'M']],
+    [[0, 'M'], [4, 'dim'], [5, 'M'], [10, 'M']],
   ],
   phrygian: [
     [[0, 'm'], [1, 'M'], [10, 'M'], [0, 'm']],
+    [[0, 'm'], [5, 'm'], [1, 'M'], [0, 'm']],
+    [[0, 'm'], [7, 'dim'], [8, 'M'], [1, 'M']],
+    [[0, 'm'], [3, 'M'], [1, 'M'], [10, 'M']],
   ],
   lydian: [
     [[0, 'M'], [2, 'M'], [7, 'M'], [4, 'm']],
+    [[0, 'M'], [7, 'M'], [9, 'm'], [2, 'M']],
+    [[0, 'six'], [2, 'M'], [11, 'm'], [7, 'M']],
+    [[0, 'M'], [6, 'dim'], [7, 'M'], [4, 'm']],
   ],
 };
 
 /** Last-bar substitutions that turn a repeated core into a real second ending. */
 export const CADENCES = {
-  minor: [[7, 'dom7'], [5, 'm7'], [10, 'M'], [7, 'sus4'], [2, 'm7b5'], [8, 'M']],
-  major: [[7, 'dom7'], [5, 'M'], [2, 'm7'], [8, 'M'], [7, 'sus4'], [9, 'm7']],
-  dorian: [[10, 'M'], [5, 'M'], [7, 'm7'], [2, 'm7']],
-  mixolydian: [[10, 'M'], [5, 'M'], [7, 'm'], [2, 'm7']],
-  phrygian: [[1, 'M'], [8, 'M'], [10, 'M']],
-  lydian: [[7, 'M'], [9, 'm'], [2, 'M']],
+  minor: [[7, 'dom7'], [5, 'm7'], [10, 'M'], [7, 'sus4'], [2, 'm7b5'], [8, 'M'], [2, 'dim'], [3, 'aug']],
+  major: [[7, 'dom7'], [5, 'M'], [2, 'm7'], [8, 'M'], [7, 'sus4'], [9, 'm7'], [11, 'dim'], [0, 'six']],
+  dorian: [[10, 'M'], [5, 'M'], [7, 'm7'], [2, 'm7'], [9, 'dim'], [0, 'sus2']],
+  mixolydian: [[10, 'M'], [5, 'M'], [7, 'm'], [2, 'm7'], [4, 'dim'], [0, 'six']],
+  phrygian: [[1, 'M'], [8, 'M'], [10, 'M'], [7, 'dim']],
+  lydian: [[7, 'M'], [9, 'm'], [2, 'M'], [6, 'dim'], [0, 'six']],
 };
 
 // Bar-length rhythm cells in sixteenths; each row sums to 16.
