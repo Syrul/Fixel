@@ -310,3 +310,38 @@ moved the digest after the gates had run. That was the right call for a round
 that could not be re-validated, and it is the wrong state to begin round 4 in.
 **Fix it before anything increases density or frame size** — which is exactly
 what round 4 (scale) will do.
+
+## A concrete projection bug in signage, found by an r3 judge
+
+**Our sign lettering foreshortens. It must not.**
+
+> "on the yellow fascia at x~266-306, y~116-134 the glyphs taper from ~9px to
+> ~5px cap height across the sign. An axonometric plane does not foreshorten
+> along the receding axis, so type on it must hold constant height; [the
+> reference's] green sign does exactly that — uniform 7px caps, uniform 1px
+> stroke, open counters, correctly sheared onto the plane."
+
+This is a genuine error in how `src/gen/font.js` glyphs are placed onto a face,
+not a style choice: an axonometric projection has no vanishing point, so a
+receding plane shears but never scales. Type drawn on it keeps constant cap
+height and constant stroke weight, and only the baseline slopes.
+
+It is cheap to fix and it is one of the few defects in this round that is a
+*correctness* error rather than a scale limitation.
+
+## The scale defect, as three judges have now measured it
+
+| | Fixel | reference |
+|---|---:|---:|
+| 16x16 windows holding <=2 colours | 8.2% (33/400) | 1.0% (4/400) |
+| 32x32 windows holding <=2 colours | 4.2% | **0.0%** |
+| exact structural duplicate 12x12 windows | 6.08% | 1.40% |
+| six largest single-colour regions, share of crop | 15.8% | — |
+
+The reference has **not one 32x32 patch anywhere carrying fewer than three
+colours.** Ours has 4.2% of its area in such patches.
+
+And the shape of it: our scale hierarchy is **bimodal** — large undetailed
+facets plus a field of near-identical small boxes, with nothing in between —
+against the reference's continuous ladder from 3px sign glyphs through 14px
+figures to 60px vehicles, with detail budgeted proportionally to size.
