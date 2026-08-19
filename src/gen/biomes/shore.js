@@ -421,7 +421,12 @@ export function paintShore(stage) {
   // the desert. `step / slope` is the tread on the beach and must stay well
   // over eight world units; on the dune ramp, where the ground is four times
   // steeper, the same step still yields seven or eight.
-  const cell = cs.range(2.8, 3.3);
+  // QUANTISED TO A QUARTER UNIT. `drawTerrain` now requires the cell to project
+  // to a whole number of screen pixels: at scale 2 a cell of 3.0818 is 12.327px
+  // wide and adjacent quads do not tile, which was the 1,176-pixel black seam
+  // lattice reported from this file. A continuous `range` here is what produced
+  // it, and the assertion in terrain.js is the right place for the rule.
+  const cell = Math.round(cs.range(2.8, 3.3) * 4) / 4;
   const step = cs.range(1.55, 2.05);
 
   // A ROUGH SEABED, AND IT IS NOT DECORATION. With the bathymetry perfectly
@@ -513,6 +518,11 @@ export function paintShore(stage) {
     // over the water.
     foam: C.mk(seaH0 - ts.range(4, 26), seaS0 * ts.range(0.22, 0.46), ts.range(0.90, 0.96)),
     wrack: C.mk(ts.range(46, 92), ts.range(0.28, 0.52), ts.range(0.20, 0.32)),
+    // Heath: the browner, woodier half of a machair mosaic. A real second
+    // material rather than a fourth value of the turf, because the foreground
+    // green was the last 11,000-pixel flat field in the frame and a value step
+    // alone does not break a field that size.
+    heath: C.mk(ts.range(28, 62), ts.range(0.20, 0.40), ts.range(0.24, 0.38)),
     shell: C.mk(sandH + ts.range(2, 16), sandS * ts.range(0.20, 0.45), Math.min(0.95, sandL * 1.10)),
   };
 
@@ -723,9 +733,14 @@ export function paintShore(stage) {
 
     // ---- firm ground. Turf, with the sand blowing through it at the seaward
     // edge and bare scrapes where the ground is high.
-    const F = R.firm[li][p];
+    // A MACHAIR IS A MOSAIC, NOT A LAWN: turf, heath and blown sand in patches,
+    // at the coarse field's scale and the fine one's together.
     if (grain > 0.72 && swell < 0.46) return R.scrape[p % 5].t;
-    if (fine > 0.70) return F.r;
+    const H = R.heath[li % 3][p];
+    if (fine > 0.78) return H.t;
+    if (fine > 0.62) return H.l;
+    const F = R.firm[li][p];
+    if (fine < 0.24) return F.r;
     return grain > 0.48 ? F.l : F.t;
   };
 
@@ -757,10 +772,26 @@ export function paintShore(stage) {
 
     const zi = e > -6 ? 3 : e > -21 ? 2 : e > -48 ? 1 : 0;
     const F = R.sea[zi][idxN(grain, 4) + 4 * idxN(swell, 2)];
-    // NO CAT'S PAWS. Three values of open water cut at the fine field's fifteen
-    // pixels turned the sea into leopard print — camouflage, which is exactly
-    // what the measurement script warns the colour floor can be bought with.
-    // The sea's structure is the reef under it and the objects on it.
+
+    // SEABED CONTOURS, AND WHY THEY ARE NOT THE MOIRE AGAIN.
+    //
+    // Four depth zones fixed the topographic-map look and left the sea as four
+    // very large flat fields — 22,454px on the worst seed, which was carrying
+    // both of the two remaining failing numbers on its own. The answer is not
+    // more bands across the shore; it is CONTOURS OF A ROUGH SEABED. The reef
+    // term swings the exposure field by about twelve units over a thirty-unit
+    // wavelength, so a ladder at six units of exposure comes out as irregular
+    // closed shapes — banks and holes — rather than as parallel stripes, and
+    // where the bed happens to be smooth the ladder simply widens out.
+    //
+    // Two values of ONE family, never a second pigment: the version that
+    // reached for a different family here turned the sea into leopard print.
+    // The fine field shifts the ladder index by one, which puts a fifteen-pixel
+    // wobble on every contour and flips the occasional patch — the ruffle a
+    // breeze puts on water, drawn as light and shade rather than as hue.
+    const fine = FF(u, v);
+    const si = Math.floor(e / R.subW) + (fine > 0.74 ? 1 : fine < 0.20 ? -1 : 0);
+    const base = (si & 1) ? F.l : F.t;
 
     // The swell runs on the LINEAR cross-shore ordinate, not on the exposure
     // field: the exposure field carries the bar, and over the bar's outer face
@@ -777,7 +808,7 @@ export function paintShore(stage) {
       // across open water read as a drawn contour rather than as a swell.
       if (t < 0.06) return F.r;
     }
-    return F.t;
+    return base;
   };
 
   const groundSide = (u, v, plane, axis) => {
@@ -902,8 +933,21 @@ function scatter(stage, SH, PIER, PROM) {
   const ws = rng.stream('craft');
   const ds = rng.stream('dune');
   const fs = rng.stream('beachfolk');
-  const CB = localC(C, ss, 5, 2);
+  const CB = localC(C, ss, 6, 2);
   const CW = localC(C, ws, 5, 2);
+  // A BEACH IS NOT A BAG OF SWEETS. Per-instance colour is legitimate on a
+  // towel, a parasol or a jacket — `docs/BAR.md` names individually-owned
+  // mobile things as exactly the case where it is correct — but the reference
+  // spends its saturation sparingly against a mostly-neutral frame, and six
+  // accents all at full chroma put pink, cyan and red next to each other on
+  // every square metre of sand. Half the list is knocked back, so the bright
+  // ones still read as bright.
+  for (let i = 0; i < CB.accents.length; i++) {
+    if (!ss.bool(0.5)) continue;
+    const a = CB.accents[i];
+    CB.accents[i] = C.mk(a._h + ss.range(-10, 10), a._s * ss.range(0.24, 0.50),
+      Math.min(0.95, a._L * ss.range(0.94, 1.24)));
+  }
 
   const u8 = (h, k) => ((h >>> k) & 255) / 256;
   const lattice = (cell, jit, salt, fn) => {
@@ -945,7 +989,7 @@ function scatter(stage, SH, PIER, PROM) {
 
   // ---- 2. THE MACHAIR BEHIND IT. Scrub, stone and the odd post: sparser, and
   // sparser by a BIGGER CELL rather than by a lower acceptance.
-  lattice(6.0, 0.9, 0x2c07, (x, y, h) => {
+  lattice(5.2, 0.9, 0x2c07, (x, y, h) => {
     const e = eAt(x, y);
     if (e < E_DUNE + 4) return;
     if (T.isWet(x, y)) return;
@@ -1156,6 +1200,24 @@ function scatter(stage, SH, PIER, PROM) {
       cv.t = tagRaw();
       P.gull(cv, iso, C, ws, x, y, T.seaZ + 9 + u8(h, 8) * 11, true);
     }
+  });
+
+  // ---- 8b. THE SMALL STUFF ON THE WATER, on its own denser lattice: floats,
+  // weed rafts and the odd standing gull on a rock. The sea is the biggest
+  // quiet surface in the frame and this is the layer that keeps it from being
+  // one; a big cell would have put four objects in a hundred thousand pixels.
+  lattice(10.5, 0.94, 0x7a3f, (x, y, h) => {
+    if (!T.isWet(x, y)) return;
+    const e = eAt(x, y);
+    if (e > -5) return;
+    if (!clear(x, y, 8, 10)) return;
+    if (!vis(x - 5, y - 5, x + 6, y + 6, 10)) return;
+    const k = u8(h, 0);
+    if (k > 0.46) return;
+    cv.t = tagRaw();
+    if (k < 0.24) P.weedPile(cv, iso, C, ws, x, y, T.seaZ, u8(h, 8) < 0.3);
+    else if (k < 0.36) P.rock(cv, iso, C, ws, x, y, T.seaZ, false);
+    else P.driftwood(cv, iso, C, ws, x, y, T.seaZ);
   });
 
   // ---- 9. THE BEACH'S OWN FURNITURE, admitted on the berm and no lower.
@@ -1956,6 +2018,8 @@ function mintRegion(C, st, B) {
   // scrape pool cuts bare sand back through it.
   R.firm = table(C, st, B.turf, 5, 12,
     { h: 6, hw: 10, s0: 0.66, s1: 1.16, lw: 0.19, lvWalk: 0.15, l0: 0.88, l1: 1.18 });
+  R.heath = table(C, st, B.heath, 3, 12,
+    { h: 6, hw: 12, s0: 0.66, s1: 1.20, lw: 0.24, lvWalk: 0.12, l0: 0.88, l1: 1.22 });
   R.rock = table(C, st, B.rock, 3, 12,
     { h: 6, hw: 11, s0: 0.55, s1: 1.40, lw: 0.22, lvWalk: 0.14, l0: 0.86, l1: 1.28 });
   // Accents on the ground: shell drift, wrack, bare scrapes, foam.
@@ -1991,4 +2055,5 @@ function mintSea(C, st, R, h0, s0, l0) {
   // crests over the whole sea, which is what a calm sea in this family looks
   // like. It was 2.6-4.4 and that is where the moiré came from.
   R.pitch = st.range(26, 46);
+  R.subW = st.range(4.6, 7.2);
 }
