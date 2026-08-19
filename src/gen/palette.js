@@ -107,8 +107,18 @@ export function buildPalette(rng) {
   // median and shows up only in `shade.hueRotAbsMedian`. The first attempt used
   // one signed knob for both and produced medians from -4.7 to +6.1 — a seed
   // whose shadows rotated six degrees warm, which is exactly the tell.
-  const HUE0 = r.range(-2.6, 0.05);
-  const HUEJ = r.range(0, 5.5);
+  //
+  // BOTH ARE ONE-DIRECTIONAL. The first version signed the per-pigment jitter
+  // randomly so it would cancel in the median, and it mostly did — but on a
+  // seed whose visible faces happen to be dominated by pigments that drew the
+  // warm sign, the measured median came out at +1.8 degrees, i.e. "shadows
+  // rotate warm". That is precisely the tell this generator is not allowed to
+  // have, and a property that only holds in expectation is not a property.
+  // Every shadow step now rotates by HUE0 plus a per-pigment amount in
+  // [0, HUEJ] in the SAME direction, so the median can never be positive while
+  // the absolute rotation still varies from seed to seed.
+  const HUE0 = r.range(-1.4, 0.02);
+  const HUEJ = r.range(0, 4.0);
   const SATK = r.range(0.90, 1.32);
 
   // ---- this scene's palette resolution -----------------------------------
@@ -133,7 +143,7 @@ export function buildPalette(rng) {
     // Jitter only bites on pigments that HAVE a hue. On a near-neutral the hue
     // angle is ill-conditioned and rotating it is noise in the measurement
     // rather than a decision in the picture, and neutrals are 59% of the frame.
-    const jit = s > 0.16 ? (q < 50 ? -HUEJ : HUEJ) : 0;
+    const jit = s > 0.16 ? -(q / 100) * HUEJ : 0;
     const dh = HUE0 + jit;
     const step = (k, t) => {
       if (Math.abs(dh) <= 0.02 && Math.abs(SATK - 1) <= 0.01) {
