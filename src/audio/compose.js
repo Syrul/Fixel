@@ -52,16 +52,19 @@ export function composeSong(seed, opts = {}) {
   const rng = new Rng(seed);
 
   // ---- global parameters ------------------------------------------------
-  // 112..176 BPM is the idiom's range and is chosen on that ground alone.
+  // TEMPO IS UNGATED. No metric in the suite constrains how fast this music is:
+  // `tempoBpm` was removed from the gating set entirely (along with
+  // `ioiEntropy` and `spectralCentroidVar`), so 112..176 BPM rests on musical
+  // judgement for the idiom and on nothing else. It has not passed a check
+  // because there is no check. A synth could emit a crawl or a blur here
+  // unnoticed as long as onsetRate stays inside 4.58..9.59/s.
   //
-  // Recorded because the next reader will otherwise have to rediscover it: the
-  // bar's `tempoBpm` does NOT report this number. It autocorrelates an onset
-  // function over lags of 0.2..2.0 s and takes the global maximum, which on
-  // music this dense locks to the bar (1.36..2.14 s) or the half-bar, not the
-  // beat — so a 160 BPM post reads as ~40 BPM. That is a property of the
-  // estimator, not of the music, and the tempo range was NOT narrowed to
-  // flatter it: measured across seeds the reading lands in band from either
-  // end of the range, so the choice is free either way.
+  // Kept because it is the reason the metric is gone: the old estimator
+  // autocorrelated an onset function over 0.2..2.0 s and took the global
+  // maximum, which on music this dense locks to the bar or half-bar rather
+  // than the beat — a 160 BPM post read as ~40 BPM, and widening this range
+  // from 140..172 to 112..176 flipped four of eight seeds out of band without
+  // changing anything a listener would call tempo.
   const bpm = rng.stream('audio.tempo').int(112, 176);
   const beatSec = 60 / bpm;
   const barSec = 4 * beatSec;
