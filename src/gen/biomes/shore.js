@@ -201,6 +201,47 @@ function makeFields(X0, Y0, X1, Y1, cell, fn) {
   };
 }
 
+/** Distance to a set of polylines, sampled onto a grid and interpolated. */
+function makeDistField(X0, Y0, X1, Y1, cell, lines, reach) {
+  const gx = Math.ceil((X1 - X0) / cell) + 4;
+  const gy = Math.ceil((Y1 - Y0) / cell) + 4;
+  const a = new Float32Array(gx * gy).fill(reach);
+  for (const pts of lines) {
+    for (let s = 1; s < pts.length; s++) {
+      const ax = pts[s - 1][0], ay = pts[s - 1][1];
+      const bx = pts[s][0], by = pts[s][1];
+      const ex = bx - ax, ey = by - ay;
+      const L = ex * ex + ey * ey;
+      const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - reach - X0) / cell) + 1);
+      const i1 = Math.min(gx - 1, Math.ceil((Math.max(ax, bx) + reach - X0) / cell) + 1);
+      const j0 = Math.max(0, Math.floor((Math.min(ay, by) - reach - Y0) / cell) + 1);
+      const j1 = Math.min(gy - 1, Math.ceil((Math.max(ay, by) + reach - Y0) / cell) + 1);
+      for (let j = j0; j <= j1; j++) {
+        const wy = Y0 + (j - 1) * cell;
+        for (let i = i0; i <= i1; i++) {
+          const wx = X0 + (i - 1) * cell;
+          let t = L > 0 ? ((wx - ax) * ex + (wy - ay) * ey) / L : 0;
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+          const cx = ax + ex * t - wx, cy = ay + ey * t - wy;
+          const d = Math.sqrt(cx * cx + cy * cy);
+          const k = j * gx + i;
+          if (d < a[k]) a[k] = d;
+        }
+      }
+    }
+  }
+  return (x, y) => {
+    const fx = (x - X0) / cell + 1, fy = (y - Y0) / cell + 1;
+    let i = Math.floor(fx), j = Math.floor(fy);
+    if (i < 0) i = 0; else if (i > gx - 2) i = gx - 2;
+    if (j < 0) j = 0; else if (j > gy - 2) j = gy - 2;
+    const tx = fx - i, ty = fy - j;
+    const k = j * gx + i, k2 = k + gx;
+    const lo = a[k] + (a[k + 1] - a[k]) * tx;
+    return lo + ((a[k2] + (a[k2 + 1] - a[k2]) * tx) - lo) * ty;
+  };
+}
+
 /** One channel, one grid, bilinear. The cheap half of the field layer. */
 function makeField1(X0, Y0, X1, Y1, cell, fn) {
   const gx = Math.ceil((X1 - X0) / cell) + 4;
@@ -501,6 +542,46 @@ export function paintShore(stage) {
   // ladder and the swell tones, which is what a stretch of water actually does.
   for (const R of REG) mintSea(C, ts, R, seaH0, seaS0, seaL0);
 
+  // ------------------------------------------------------------ the footpaths
+  //
+  // WORN TRACKS THROUGH THE DUNES, CUT INTO THE GROUND ITSELF RATHER THAN LAID
+  // ON IT. The machair behind the beach was the largest unarticulated field in
+  // the frame — a flat olive staircase — and the honest thing that articulates
+  // it is the reason anyone crosses it: everybody walking from the back of the
+  // dunes to the sand wears the same few lines through the marram. They are
+  // drawn as a distance field the ground shader reads, so the path is part of
+  // the terrain — no seam, no z-fighting where it crosses a terrace, and its
+  // edge is a curve at every angle.
+  const pth = rng.stream('paths');
+  const paths = [];
+  for (let k = 0; k < pth.int(5, 9); k++) {
+    let px = Ox + cxu * pth.range(-280, 280);
+    let py = Oy + cyu * pth.range(-280, 280);
+    // start well back, then walk to the top of the beach
+    let dxp = -nx, dyp = -ny;
+    for (let g = 0; g < 200; g++) {
+      const e = (F0(px - Ox, py - Oy)) / slope;
+      if (e > E_DUNE + pth.range(40, 110)) break;
+      px += nx * 3.0; py += ny * 3.0;
+      if (px < X0 + 4 || px > X1 - 4 || py < Y0 + 4 || py > Y1 - 4) break;
+    }
+    const line = [[px, py]];
+    for (let g = 0; g < 160; g++) {
+      const w = pth.range(-0.22, 0.22);
+      const c = 1 - w * w / 2, sn = w - w * w * w / 6;
+      const ndx = dxp * c - dyp * sn, ndy = dxp * sn + dyp * c;
+      const nn = Math.sqrt(ndx * ndx + ndy * ndy) || 1;
+      dxp = ndx / nn; dyp = ndy / nn;
+      px += dxp * 3.6; py += dyp * 3.6;
+      if (px < X0 + 3 || px > X1 - 3 || py < Y0 + 3 || py > Y1 - 3) break;
+      line.push([px, py]);
+      if ((F0(px - Ox, py - Oy)) / slope < E_BERM - 3) break;
+    }
+    if (line.length > 3) paths.push(line);
+  }
+  const PATH = makeDistField(X0, Y0, X1, Y1, 2.0, paths, 26);
+  const pathW = cs.range(1.5, 2.4);
+
   // ------------------------------------------------------------- the ground
   const buf = [0, 0, 0, 0];
   const regionAt = (u, v, swell) => {
@@ -614,6 +695,15 @@ export function paintShore(stage) {
       if (fine > 0.68) return R.berm[li][(p + 7) % 12].t;
       if (fine < 0.30) return F.r;
       return grain > 0.50 ? F.l : F.t;
+    }
+
+    // A path is bare sand with a scuffed lip, and it takes precedence over the
+    // vegetation it has worn away.
+    if (e > E_BERM - 5) {
+      const pd = PATH(u, v);
+      if (pd < pathW) return R.scrape[p % 5].t;
+      if (pd < pathW + 0.8) return R.scrape[p % 5].r;
+      if (pd < pathW + 2.2) return R.dry[li][p].l;
     }
 
     // ---- the dune face. Marram cover thickens landward; the ground under it
@@ -733,6 +823,371 @@ export function paintShore(stage) {
 
   // ------------------------------------------------------- the organising line
   SH.prom = promenade(stage, SH, PIER);
+
+  // ------------------------------------------------------- the ambient scatter
+  scatter(stage, SH, PIER, SH.prom);
+}
+
+// ---------------------------------------------------------------------------
+// THE AMBIENT SCATTER.
+//
+// Frostwind's rules, applied literally:
+//
+//   B. REJECTION IS DISCARD, NEVER RESAMPLE. A cell that fails admission
+//      yields nothing. There is no relocation and no quota.
+//   C. SPACING IS ENFORCED BY GEOMETRY. One candidate per jittered lattice
+//      cell at `cell*g + hash*cell*jit + cell*(1-jit)/2`, so the axis
+//      separation between neighbours is at least `cell*(1-jit)`. To make a
+//      layer sparser, ENLARGE THE CELL — never lower an acceptance probability,
+//      because thinning by rejection keeps the survivors' spacing and just
+//      punches holes in it.
+//   D. EVERY PER-OBJECT ATTRIBUTE IS ITS OWN COORDINATE HASH AT ITS OWN SALT,
+//      so nothing depends on iteration order or on how many candidates were
+//      culled before it, and a layer can be added without re-rolling the frame.
+//   F. THE FIGURE IS AUTHORED FIRST AND THE MATRIX READS IT. The pier and the
+//      promenade are already down; every layer below reads their distance
+//      fields, so the beach crowds under the pier and empties away from it and
+//      nothing is ever placed inside them.
+//
+// And the admission is the biome's own axis, not slope and not height: what
+// stands on a piece of ground here is decided by how much sea has been over it.
+// ---------------------------------------------------------------------------
+
+/**
+ * A TOWEL, AND WHY IT IS NOT `props/shore.js`'s.
+ *
+ * That one computes `u = F.au*sx + F.bu*sy + F.cu - x` from a `topFace(iso, z,
+ * x, y)`, but `topFace` already carries the origin: its `cu` ends in `- x0`.
+ * So the origin is subtracted twice and `u` comes out at about `-x`, which
+ * fails the rim test at every pixel — every towel it draws is a SOLID BLACK
+ * RECTANGLE about six units across. Verified by evaluating both inverses at a
+ * known world point: `groundInv` gives (101, 91), `topFace` gives (1, 1) and
+ * the prop's expression gives (-99, -89). It is not my file to fix, so this is
+ * the work-around, and it takes the chance to be better than the original: the
+ * towel is laid at an ARBITRARY angle rather than on an axis, which is a flat
+ * field whose four edges are all off the 2:1 lattice.
+ */
+function beachTowel(cv, iso, C, st, x, y, z) {
+  const a = st.pick(C.accents);
+  const b = st.bool(0.45) ? C.white : st.pick(C.accents);
+  const w = st.range(4.8, 6.4), d = st.range(2.8, 3.6);
+  let ux = st.range(-1, 1), uy = st.range(-1, 1);
+  const n = Math.sqrt(ux * ux + uy * uy) || 1;
+  ux /= n; uy /= n;
+  const vx = -uy, vy = ux;
+  const hw = w * 0.5, hd = d * 0.5;
+  const pts = [
+    [x - ux * hw - vx * hd, y - uy * hw - vy * hd],
+    [x + ux * hw - vx * hd, y + uy * hw - vy * hd],
+    [x + ux * hw + vx * hd, y + uy * hw + vy * hd],
+    [x - ux * hw + vx * hd, y - uy * hw + vy * hd],
+  ];
+  const G = groundInv(iso, z);
+  const pitch = st.range(0.85, 1.6);
+  P.polyTop(cv, iso, pts, z, (sx, sy) => {
+    const wx = G.ax * sx + G.bx * sy + G.cx - x;
+    const wy = G.ay * sx + G.by * sy + G.cy - y;
+    const u = wx * ux + wy * uy, v = wx * vx + wy * vy;
+    const e = 0.55 * G.q;
+    if (u < -hw + e || u > hw - e || v < -hd + e || v > hd - e) return C.black;
+    return (Math.floor((v + hd) / pitch) & 1) ? a.l : b.t;
+  }, cv.t);
+}
+
+function scatter(stage, SH, PIER, PROM) {
+  const { C, cv, iso, rng, X0, X1, Y0, Y1, seedN, tag, tagRaw, vis } = stage;
+  const { T, eAt, MF, E_WET, E_DRY, E_BERM, E_DUNE, nx, ny, cxu, cyu } = SH;
+  const S0 = seedN | 0;
+  const ss = rng.stream('strand');
+  const ws = rng.stream('craft');
+  const ds = rng.stream('dune');
+  const fs = rng.stream('beachfolk');
+  const CB = localC(C, ss, 5, 2);
+  const CW = localC(C, ws, 5, 2);
+
+  const u8 = (h, k) => ((h >>> k) & 255) / 256;
+  const lattice = (cell, jit, salt, fn) => {
+    const i0 = Math.floor(X0 / cell), i1 = Math.ceil(X1 / cell);
+    const j0 = Math.floor(Y0 / cell), j1 = Math.ceil(Y1 / cell);
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const h = h3(i, j, S0 ^ salt);
+        const x = (i + (1 - jit) * 0.5 + u8(h, 0) * jit) * cell;
+        const y = (j + (1 - jit) * 0.5 + u8(h, 8) * jit) * cell;
+        if (x < X0 + 1 || x > X1 - 1 || y < Y0 + 1 || y > Y1 - 1) continue;
+        fn(x, y, h3(i, j, S0 ^ (salt + 0x5bd1)), i, j);
+      }
+    }
+  };
+  const clear = (x, y, rPier, rProm) =>
+    PIER.dist(x, y) > rPier && PROM.dist(x, y) > rProm;
+
+  // ---- 1. THE DUNE. Marram in clumps, and the sand it has not taken yet.
+  //
+  // The cover field is the shader's own, so the tufts stand where the ground is
+  // already drawn as vegetated and the two layers agree instead of arguing.
+  lattice(3.9, 0.86, 0x11a3, (x, y, h) => {
+    const e = eAt(x, y);
+    if (e < E_BERM - 3 || e > E_DUNE + 46) return;
+    if (T.isWet(x, y)) return;
+    if (!clear(x, y, 7, 6)) return;
+    if (!vis(x - 3, y - 3, x + 3, y + 3, 10)) return;
+    const grain = MF.one(x, y, 2);
+    const cover = sm((e - E_BERM) / (E_DUNE - E_BERM)) * 0.66 + grain * 0.42 - 0.06;
+    if (u8(h, 0) > cover) return;
+    const z = T.surfaceZ(x, y);
+    const k = u8(h, 8);
+    cv.t = tagRaw();
+    if (k < 0.80) P.marram(cv, iso, C, ds, x, y, z);
+    else if (k < 0.92) P.weedPile(cv, iso, C, ds, x, y, z, false);
+    else P.rock(cv, iso, C, ds, x, y, z, false);
+  });
+
+  // ---- 2. THE MACHAIR BEHIND IT. Scrub, stone and the odd post: sparser, and
+  // sparser by a BIGGER CELL rather than by a lower acceptance.
+  lattice(6.0, 0.9, 0x2c07, (x, y, h) => {
+    const e = eAt(x, y);
+    if (e < E_DUNE + 4) return;
+    if (T.isWet(x, y)) return;
+    if (!clear(x, y, 9, 8)) return;
+    if (!vis(x - 4, y - 4, x + 4, y + 4, 14)) return;
+    // SCRUB GROWS IN STANDS, AND A STAND IS A CLEARING SEEN FROM THE OTHER
+    // SIDE. Evenly-spaced gorse over four hundred units read as pebbledash on
+    // the first build: the same object, the same size, the same gap, over the
+    // whole back of the frame. The cover comes off the two smooth fields, so
+    // the machair carries thickets and open grazing, and the SPECIES follows
+    // the same field — one stand is one plant.
+    const sw = MF.one(x, y, 1), gr = MF.one(x, y, 2);
+    const dens = 0.34 + sw * 0.42 + gr * 0.36;
+    if (u8(h, 0) > dens) return;
+    const z = T.surfaceZ(x, y);
+    const k = u8(h, 16) * 0.55 + sw * 0.45;
+    cv.t = tagRaw();
+    if (k < 0.46) P.marram(cv, iso, C, ds, x, y, z);
+    else if (k < 0.82) P.weedPile(cv, iso, C, ds, x, y, z, u8(h, 24) < 0.35);
+    else if (k < 0.95) P.rock(cv, iso, C, ds, x, y, z, u8(h, 24) < 0.22);
+    else { cv.t = tag(); P.shorePost(cv, iso, CB, ds, x, y, z, (h >>> 3) % 3); }
+  });
+
+  // ---- 2b. A FEW BIG THINGS BEHIND THE DUNES, so the machair carries more
+  // than one object size. `docs/BAR.md` names "one scale for everything" as a
+  // tell in its own right: vehicles 24px, people 11px, props 5px and nothing
+  // between or beyond.
+  lattice(54.0, 0.82, 0x2f8b, (x, y, h) => {
+    const e = eAt(x, y);
+    if (e < E_DUNE + 14) return;
+    if (T.isWet(x, y)) return;
+    if (!clear(x, y, 20, 15)) return;
+    if (!vis(x - 6, y - 6, x + 10, y + 10, 22)) return;
+    const z = T.surfaceZ(x, y);
+    const k = u8(h, 16);
+    if (k < 0.34) {
+      cv.t = tag();
+      P.beachHut(cv, iso, C, ds, x, y, z, (h >>> 7) & 1, CB.wallTone(ds));
+    } else if (k < 0.52) {
+      cv.t = tag();
+      P.lifeguardTower(cv, iso, CB, ds, x, y, z);
+    } else if (k < 0.74) {
+      // a stone outcrop: three or four boulders that read as one form
+      for (let i = 0; i < 4; i++) {
+        cv.t = tagRaw();
+        P.rock(cv, iso, C, ds, x + ds.range(-3.5, 3.5), y + ds.range(-3.5, 3.5),
+          T.surfaceZ(x, y), i < 2);
+      }
+    } else {
+      cv.t = tag();
+      S.kiosk(cv, iso, CB, ds, x, y, z, ds.range(5, 8), ds.range(4, 7), coinWord(ds));
+    }
+  });
+
+  // ---- 3. SAND FENCES. Chestnut paling laid along the contour to catch
+  // blowing sand — the one built thing that belongs on a dune, and a line of
+  // closed cells across the largest quiet field in the frame.
+  for (let f = 0; f < ds.int(3, 6); f++) {
+    const e0 = E_BERM + ds.range(4, 1) + ds.range(0, E_DUNE - E_BERM);
+    const [sx0, sy0] = [PROM.pts[ds.int(2, PROM.pts.length - 3)][0],
+      PROM.pts[ds.int(2, PROM.pts.length - 3)][1]];
+    let x = sx0, y = sy0;
+    for (let k = 0; k < 40; k++) {
+      const err = e0 - eAt(x, y);
+      x += SH.nx * Math.max(-1.4, Math.min(1.4, err * 0.5));
+      y += SH.ny * Math.max(-1.4, Math.min(1.4, err * 0.5));
+      if (Math.abs(eAt(x, y) - e0) < 1.5) break;
+    }
+    const dir = ds.bool(0.5) ? 1 : -1;
+    const hgt = ds.range(1.5, 2.4);
+    const tim = ds.pick([C.wood, C.taupe, C.stone]);
+    let prev = null;
+    for (let k = 0; k < ds.int(9, 22); k++) {
+      const err = e0 - eAt(x, y);
+      x += cxu * 3.4 * dir + nx * Math.max(-1.2, Math.min(1.2, err * 0.4));
+      y += cyu * 3.4 * dir + ny * Math.max(-1.2, Math.min(1.2, err * 0.4));
+      if (x < X0 + 2 || x > X1 - 2 || y < Y0 + 2 || y > Y1 - 2) break;
+      if (T.isWet(x, y) || !clear(x, y, 9, 7)) { prev = null; continue; }
+      if (!vis(x - 3, y - 3, x + 3, y + 3, 6)) { prev = null; continue; }
+      const z = T.surfaceZ(x, y);
+      cv.t = tag();
+      box(cv, iso, x - 0.25, y - 0.25, z - 0.4, 0.5, 0.5, hgt + 0.5, MD(tim));
+      if (prev && Math.abs(prev[2] - z) < 0.9) {
+        const F = wallInv(iso, prev[0], prev[1], x, y, z);
+        P.wallQuad(cv, iso, prev[0], prev[1], x, y, z - 0.3, z + hgt, (sx, sy) => {
+          const u = F.au * sx + F.bu * sy + F.cu;
+          const v = F.av * sx + F.bv * sy + F.cv;
+          if (v > hgt - 0.28) return tim.k;
+          const g = u / 0.55;
+          return (g - Math.floor(g) < 0.42) ? tim.l : tim.r;
+        }, cv.t);
+      }
+      prev = [x, y, z];
+    }
+  }
+
+  // ---- 4. THE STORM BERM. Everything the last big sea threw up and left.
+  lattice(6.4, 0.88, 0x3d55, (x, y, h) => {
+    const e = eAt(x, y);
+    if (e < E_DRY - 2 || e > E_BERM + 4) return;
+    if (T.isWet(x, y)) return;
+    if (!clear(x, y, 6, 5)) return;
+    if (!vis(x - 4, y - 4, x + 4, y + 4, 8)) return;
+    const z = T.surfaceZ(x, y);
+    const k = u8(h, 0);
+    cv.t = tagRaw();
+    if (k < 0.34) P.weedPile(cv, iso, C, ss, x, y, z, u8(h, 8) < 0.3);
+    else if (k < 0.62) P.driftwood(cv, iso, C, ss, x, y, z);
+    else if (k < 0.86) P.rock(cv, iso, C, ss, x, y, z, u8(h, 8) < 0.25);
+    else P.gull(cv, iso, C, ss, x, y, z, false);
+  });
+
+  // ---- 5. THE DRY BEACH. The KIND is a readout of the hero's distance field:
+  // towels, chairs and windbreaks gather where the pier and the promenade are,
+  // and a mile down the sand there is driftwood, weed and a gull.
+  lattice(7.2, 0.9, 0x4e91, (x, y, h) => {
+    const e = eAt(x, y);
+    if (e < E_WET - 1 || e > E_DRY + 3) return;
+    if (T.isWet(x, y)) return;
+    if (!clear(x, y, 5.5, 5)) return;
+    if (!vis(x - 5, y - 5, x + 6, y + 6, 12)) return;
+    const z = T.surfaceZ(x, y);
+    const near = Math.min(PIER.dist(x, y), PROM.dist(x, y) + 14);
+    const busy = 1 - sm((near - 22) / 95);
+    const k = u8(h, 16);
+    const ax = (h >>> 5) & 1;
+    if (k < 0.26 * busy + 0.02) { cv.t = tag(); beachTowel(cv, iso, CB, ss, x, y, z + 0.05); return; }
+    if (k < 0.46 * busy + 0.03) { cv.t = tag(); P.deckChair(cv, iso, CB, ss, x, y, z, ax); return; }
+    if (k < 0.56 * busy + 0.04) {
+      cv.t = tag(); P.windbreak(cv, iso, CB, ss, x, y, z, ss.range(6, 11), ax); return;
+    }
+    if (k < 0.585 * busy + 0.03) { cv.t = tag(); P.surfboard(cv, iso, CB, ss, x, y, z); return; }
+    if (k < 0.62 * busy + 0.07) { cv.t = tag(); S.parasol(cv, iso, CB, ss, x, y, z); return; }
+    if (k < 0.72) { cv.t = tagRaw(); P.driftwood(cv, iso, C, ss, x, y, z); return; }
+    if (k < 0.84) { cv.t = tagRaw(); P.weedPile(cv, iso, C, ss, x, y, z, false); return; }
+    if (k < 0.93) { cv.t = tagRaw(); P.gull(cv, iso, C, ss, x, y, z, false); return; }
+    cv.t = tagRaw(); P.rock(cv, iso, C, ss, x, y, z, false);
+  });
+
+  // ---- 6. THE PEOPLE ON THE SAND, on their own lattice so the crowd's spacing
+  // is its own and not the furniture's.
+  lattice(9.5, 0.95, 0x5fa7, (x, y, h) => {
+    const e = eAt(x, y);
+    if (e < -3 || e > E_DRY + 2) return;
+    if (!clear(x, y, 5, 4.5)) return;
+    if (!vis(x - 3, y - 3, x + 3, y + 3, 12)) return;
+    const near = Math.min(PIER.dist(x, y), PROM.dist(x, y) + 16);
+    if (u8(h, 24) > 1 - sm((near - 18) / 110) * 0.62) return;
+    const z = T.isWet(x, y) ? T.seaZ : T.surfaceZ(x, y);
+    cv.t = tagRaw();
+    drawPerson(cv, iso, CB, fs, x, y, z);
+  });
+
+  // ---- 7. THE WET SAND AND THE SWASH. Nothing built, ever: this ground was
+  // under water six hours ago and the biome's own axis says so.
+  lattice(8.0, 0.9, 0x60c3, (x, y, h) => {
+    const e = eAt(x, y);
+    if (e < -6 || e > E_WET) return;
+    if (!clear(x, y, 5, 5)) return;
+    if (!vis(x - 4, y - 4, x + 4, y + 4, 8)) return;
+    const z = T.isWet(x, y) ? T.seaZ : T.surfaceZ(x, y);
+    const k = u8(h, 0);
+    cv.t = tagRaw();
+    if (k < 0.40) P.gull(cv, iso, C, ss, x, y, z, false);
+    else if (k < 0.68) P.weedPile(cv, iso, C, ss, x, y, z, u8(h, 8) < 0.3);
+    else if (k < 0.86) P.rock(cv, iso, C, ss, x, y, z, false);
+    else P.driftwood(cv, iso, C, ss, x, y, z);
+  });
+
+  // ---- 8. THE WATER. Craft, floats and weed rafts, each with the reflection
+  // that is the only vertical a flat sea can carry.
+  const seaR = SH.regionAt(PIER.rx - nx * 60, PIER.ry - ny * 60);
+  const refl = seaR.sea[1][2].k;
+  const G0 = groundInv(iso, 0.04);
+  const wetOnly = (val) => (sx, sy) => {
+    const wx = G0.ax * sx + G0.bx * sy + G0.cx;
+    const wy = G0.ay * sx + G0.by * sy + G0.cy;
+    return T.isWet(wx, wy) ? val : -1;
+  };
+  lattice(17.0, 0.92, 0x71d9, (x, y, h) => {
+    if (!T.isWet(x, y)) return;
+    const e = eAt(x, y);
+    if (e > -4) return;
+    if (!clear(x, y, 11, 12)) return;
+    if (!vis(x - 8, y - 8, x + 10, y + 10, 18)) return;
+    const k = u8(h, 16);
+    const deep = e < -26;
+    if (k < (deep ? 0.20 : 0.13)) {
+      // a moored hull, and the streak of itself it puts on the water
+      const kind = u8(h, 24) < 0.30 ? 2 : u8(h, 24) < 0.66 ? 1 : 0;
+      const ax = (h >>> 7) & 1;
+      cv.t = tagRaw();
+      const rl = 3.0 + u8(h, 0) * 4.0;
+      P.polyTop(cv, iso, [[x, y], [x + 4, y + 4],
+        [x + 4 + rl, y + 4 + rl], [x + rl, y + rl]], 0.04, wetOnly(refl), cv.t);
+      cv.t = tagRaw();
+      P.boat(cv, iso, CW, ws, x, y, T.seaZ, ax, kind);
+      return;
+    }
+    if (k < (deep ? 0.42 : 0.30)) { cv.t = tag(); P.buoy(cv, iso, CW, ws, x, y, T.seaZ); return; }
+    if (k < 0.60) { cv.t = tagRaw(); P.weedPile(cv, iso, C, ws, x, y, T.seaZ, u8(h, 8) < 0.4); return; }
+    if (k < 0.70 && !deep) { cv.t = tagRaw(); P.rock(cv, iso, C, ws, x, y, T.seaZ, u8(h, 8) < 0.3); return; }
+    // A GULL ON THE WING IS EXPENSIVE AT THIS SCALE. Twenty-eight pixels of
+    // white lying over flat water with nothing under it reads as debris, not as
+    // a bird — measured by eye on the first scatter, where the sea came out
+    // strewn with white boomerangs. A handful, high, and only over the shoal.
+    if (k < 0.72 && !deep) {
+      cv.t = tagRaw();
+      P.gull(cv, iso, C, ws, x, y, T.seaZ + 9 + u8(h, 8) * 11, true);
+    }
+  });
+
+  // ---- 9. THE BEACH'S OWN FURNITURE, admitted on the berm and no lower.
+  // A lifeguard stand and two or three flag poles: the verticals a beach reads
+  // its own scale against.
+  let placed = 0;
+  lattice(46.0, 0.8, 0x82e5, (x, y, h) => {
+    if (placed > 3) return;
+    const e = eAt(x, y);
+    if (e < E_DRY || e > E_BERM + 12) return;
+    if (T.isWet(x, y)) return;
+    if (!clear(x, y, 16, 12)) return;
+    if (!vis(x - 6, y - 6, x + 8, y + 8, 24)) return;
+    const z = T.surfaceZ(x, y);
+    cv.t = tag();
+    if (u8(h, 16) < 0.42) P.lifeguardTower(cv, iso, CB, ss, x, y, z);
+    else P.flagPole(cv, iso, CB, ss, x, y, z, (h >>> 3) & 1);
+    placed++;
+  });
+
+  // ---- 10. HULLS HAULED UP THE BEACH. Above the tide, below the huts.
+  lattice(38.0, 0.85, 0x93f1, (x, y, h) => {
+    const e = eAt(x, y);
+    if (e < E_WET + 2 || e > E_BERM) return;
+    if (T.isWet(x, y)) return;
+    if (u8(h, 16) > 0.55) return;
+    if (!clear(x, y, 13, 10)) return;
+    if (!vis(x - 8, y - 8, x + 10, y + 10, 14)) return;
+    cv.t = tagRaw();
+    P.boat(cv, iso, CW, ws, x, y, T.surfaceZ(x, y), (h >>> 5) & 1,
+      u8(h, 24) < 0.55 ? 0 : 1);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -943,14 +1398,14 @@ function promenade(stage, SH, PIER) {
   // ---- the furniture and the crowd.
   for (let i = 2; i < N - 2; i++) {
     const a = pts[i];
-    const nrep = st.int(1, 3);
+    const nrep = st.int(0, 2);
     for (let k = 0; k < nrep; k++) {
       const ac = st.range(-hw + 1.0, hw - 1.6) * sgn;
       const px = a[0] + per[i][0] * ac + cxu * st.range(-3, 3);
       const py = a[1] + per[i][1] * ac + cyu * st.range(-3, 3);
       if (!vis(px - 3, py - 3, px + 3, py + 3, promZ + 12)) continue;
-      const w = st.weighted([['person', 34], ['lamp', 8], ['bench', 8], ['bin', 5],
-        ['post', 5], ['parasol', 4], ['kiosk', 2], ['rock', 2]]);
+      const w = st.weighted([['person', 22], ['lamp', 10], ['bench', 10], ['bin', 6],
+        ['post', 6], ['parasol', 5], ['kiosk', 3], ['rock', 3]]);
       cv.t = w === 'person' ? tagRaw() : tag();
       if (w === 'person') drawPerson(cv, iso, CB, fs, px, py, promZ);
       else if (w === 'lamp') S.lampPost(cv, iso, CB, st, px, py, promZ, st.int(0, 1));
