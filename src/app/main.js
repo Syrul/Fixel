@@ -328,6 +328,21 @@ function tick() {
 // bands look 9% SLOWER at full coverage; interleaving the two variants showed
 // that was drift between runs, not an effect. Do not assume — and do not trust
 // a single non-interleaved A/B either.
+//
+// THEN THE REAL GENERATOR LANDED AND THE CURVE WAS CHECKED AGAINST IT. Shore
+// seed 3, 440x1000, K=8, tree 83b86b218c799903 — a REAL water loop of 4,065 px
+// (0.924% of the frame) in one band covering 447 rows (44.7%), 1,200 samples
+// per variant in four interleaved blocks:
+//
+//   full putImageData   mean 0.1351 ms   median 0.1   p95 0.2
+//   dirty bands         mean 0.0807 ms   median 0.1   p95 0.2      1.67x
+//   paintFrame alone    mean 0.0065 ms
+//
+// The synthetic curve predicted ~1.58x at 44.7% coverage and the real loop
+// measured 1.67x, so the model held. Note the third line: resolving the palette
+// costs 5% of the frame and the UPLOAD IS THE WHOLE COST. That is why the only
+// lever that matters here is how few rows are handed to `putImageData`, and why
+// making `paintFrame` faster would buy nothing.
 function paint(p, k) {
   p.k = k;
   const t0 = performance.now();
