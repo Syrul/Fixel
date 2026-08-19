@@ -408,3 +408,46 @@ not our encoder.
 **Standing rule:** a signal that survives instruction must be removed from the
 artefact, not forbidden in the brief. Cautions in a judge brief are a fallback,
 never the primary control.
+
+### CORRECTION: the normaliser as first shipped did not work, and the ordering was wrong
+
+I built the normaliser and turned it **on by default at K=192 before sweeping
+it.** Sweeping the real median-cut pipeline afterwards:
+
+| K | 16 | 24 | 32 | 48 | 64 | 96 | 128 | 192 |
+|---|---|---|---|---|---|---|---|---|
+| top-1 share | overlaps | overlaps | **SEP 4/4** | SEP 4/4 | SEP 4/4 | SEP 4/4 | SEP 4/4 | SEP 4/4 |
+
+**A finer palette is leakier**, which is the opposite of the intuition that
+"higher fidelity is safer". A coarse shared palette merges the reference's
+fragmented near-black cloud into one slot and lifts its top-1 share to meet
+ours; a fine palette keeps our single exact ink in a slot of its own with its
+full ~0.18 mass. An independent k-means simulation closed at K=64 where median
+cut only closes at K<=24, so **the threshold is pipeline-dependent and must be
+asserted inside the real pipeline, never guessed.**
+
+Normalisation is now **off by default**. The ordering was also wrong: the
+strongest surviving separator is our own ink regression, whose fix is already a
+round-4 prerequisite. If it brings our ink share into the reference's 0.05-0.10
+band, the separator dies at source and no normaliser is needed. Re-measure the
+leak on post-fix output first, then decide.
+
+### THE LIMIT THIS ALL RUNS INTO: n_reference = 1
+
+All four reference crops come from one file. **So the entire leak battery
+distinguishes that file's rasterisation pipeline from our generator — not
+hand-made art from machine-made art.** Corner-colour presence and black
+fragmentation are properties of how a given file was rasterised, not properties
+of craft.
+
+Consequences, and they are binding:
+
+- Requiring the control to "land at chance" is **much weaker validation than it
+  sounds** and would NOT license a claim that the harness no longer leaks.
+- The eight directories are **four comparisons mirrored** — 8 looks like 8
+  samples; it is 4 comparisons over 5 distinct sources.
+- Any chance-level result is **provisional** and must be reported as such.
+
+This is the third time the single-file bar has surfaced as a root cause, after
+the 60-metric band was found to measure artwork identity rather than craft. The
+root cause is that the bar is one file.
