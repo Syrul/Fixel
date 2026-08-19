@@ -457,3 +457,53 @@ found, it is unchanged, and it is the same work as the craft fix.**
 
 Target the reference's order of magnitude, not its exact count: tens to hundreds
 of distinct darks, not one.
+
+---
+
+## CORRECTED: the long horizontal runs are not a projection bug, they are one flat face too big
+
+Round 3 recorded "125 horizontal constant runs >=40px against the reference's 9" as one of
+two genuine *correctness* bugs in the projection layer, on a judge's reasoning that "a
+perfectly horizontal line is off-axis for both the 2:1 lattice and the vertical, so it cannot
+be a chosen lattice break." **The observation is right and the diagnosis is wrong**, and the
+difference matters because the two need opposite fixes.
+
+Measured on six city seeds at 1600x1100, whole-image, by grouping every >=40px horizontal run
+into contiguous vertical stacks at the same x:
+
+| | |
+|---|---|
+| runs >=40px, per seed | ~840 |
+| **share belonging to a stack >=4px tall** | **74.1 / 77.3 / 81.9 / 84.3 / 85.0 / 85.6%** — median ~83% |
+| stack height | median 6px, p90 20px, max 62px |
+
+A long horizontal run in this generator is almost never a stray one-pixel line. It is a **2D
+rectangle** — the horizontal cross-section of a wide, unarticulated wall face. And that is not
+an error: in this projection a +y face at `y1` spans `x0..x1` with vertical sides, so *every*
+scanline crossing a flat wall `w` units wide produces a run of `2w` screen pixels. A 20-unit
+wall necessarily makes a 40px run. There is no way to draw a wide flat face in a 2:1 dimetric
+projection without one.
+
+The top offenders by colour are the saturated mid-tones — the painted accent families — which
+is to say **painted walls**, confirmed by the stacks: one tone produced a 21px-tall, 79px-wide
+flat rectangle at a single x.
+
+**So the reference does not avoid horizontals. It avoids wide flat faces.** Its longest run is
+50px and its largest single-colour region anywhere is 8,780px = 0.88% of the frame. Ours are
+8,808-9,249px absolute but only 0.50-0.53% of a larger frame, so on that number we are level —
+the difference is entirely in how many *mid-sized* flat rectangles each picture carries.
+
+Three consequences:
+
+1. **This is the same defect as `flat.largestRegion`, the uniform 13x13/17x17 windows and the
+   32x32-with-<=2-colours share.** One root cause, four readouts. Fixing articulation on wide
+   faces moves all of them; hunting the horizontal run on its own moves none.
+2. **Do not "fix" it by breaking horizontals.** Adding a value step every N pixels across a
+   wall is texture, and texture is the failure mode in `docs/BAR.md` §Density. The fix is
+   windows, panels, seams, signage and openings — articulation that means something.
+3. **It is the specific hazard a terraced landscape introduces.** A terrace top is a wide flat
+   face by construction. A biome that draws 40-unit contour bands will manufacture these at a
+   rate no city ever could.
+
+Measured with the lead's probe; the definition is the one used above and is worth keeping by
+hand until a shared tool carries it.
