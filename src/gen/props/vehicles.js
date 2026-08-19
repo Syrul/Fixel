@@ -34,11 +34,13 @@ function box(cv, iso, ax, x, y, z, L, W, H, mat, tag) {
   else box3(cv, iso, x, y, z, W, L, H, mat, tag);
 }
 
-// On every face of this projection one world unit is two screen pixels along
-// both face axes, so a 1px line is a half-unit band and a 1px arc is a
-// half-unit annulus. These are the only two magic numbers in the file.
-const PX = 0.25;      // half-width of a one-pixel line, in face units
-const PX2 = 0.5;
+// On every face of this projection one world unit is 2*s screen pixels along
+// both face axes, so a 1px line is a (0.5/s)-unit band. `F.q` IS 1/s, so the
+// two constants below are functions of the face rather than module constants —
+// which is the difference between a door seam that stays one pixel wide when
+// the car doubles in size and one that becomes two.
+const px1 = (F) => 0.25 * F.q;    // half-width of a one-pixel line, face units
+const px2 = (F) => 0.5 * F.q;     // a whole pixel
 
 /**
  * The long side of a vehicle: two wheels in their arches with a lit hub inside
@@ -48,6 +50,7 @@ const PX2 = 0.5;
 function sideShade(F, o) {
   const { au, bu, cu, av, bv, cv } = F;
   const K = o.ink;
+  const PX = px1(F);
   return (sx, sy) => {
     const u = au * sx + bu * sy + cu;
     const v = av * sx + bv * sy + cv;
@@ -78,6 +81,7 @@ function sideShade(F, o) {
 function endShade(F, o) {
   const { au, bu, cu, av, bv, cv } = F;
   const K = o.ink;
+  const PX = px1(F), PX2 = px2(F);
   return (sx, sy) => {
     const u = au * sx + bu * sy + cu;
     const v = av * sx + bv * sy + cv;
@@ -100,6 +104,7 @@ function endShade(F, o) {
 function glassShade(F, o) {
   const { au, bu, cu, av, bv, cv } = F;
   const K = o.ink;
+  const PX = px1(F), PX2 = px2(F);
   return (sx, sy) => {
     const u = au * sx + bu * sy + cu;
     const v = av * sx + bv * sy + cv;
@@ -220,6 +225,7 @@ export function drawVehicle(cv, iso, C, st, x, y, z, ax, kind, mkTag) {
       : sideShade(rightFace(iso, x + W, y, zBody), sideR);
     // bonnet and boot seams are cut in the top face for the same reason
     const FT = topFace(iso, zTop, x, y);
+    const PX = px1(FT);
     const bl = ax === 0 ? [cf - 0.3, cf + cl + 0.3] : [cf - 0.3, cf + cl + 0.3];
     const top = (sx, sy) => {
       const u = FT.au * sx + FT.bu * sy + FT.cu;
@@ -257,6 +263,7 @@ export function drawVehicle(cv, iso, C, st, x, y, z, ax, kind, mkTag) {
     for (let q = 1; q < 6; q++) ribs.push((L - 5.2) * q / 6);
     const cargoSide = (F) => {
       const { au, bu, cu, av, bv, cv: c2 } = F;
+      const PX = px1(F), PX2 = px2(F);
       return (sx, sy) => {
         const u = au * sx + bu * sy + cu, v = av * sx + bv * sy + c2;
         if (v < PX2 || v > ch + 0.6 - PX2) return K;

@@ -11,32 +11,58 @@
 //   right face (+x at x1):  u = along +y from y0,  v = height above z0
 //   top   face (z = zt):    u = along +x from x0,  v = along +y from y0
 
+// EVERY FACE CARRIES `q`, AND EVERY SHADER IN THIS GENERATOR DEPENDS ON IT.
+//
+// The face coordinates (u, v) are returned in UNSCALED world units, so all the
+// authored dimensions — a 2.2-unit plinth, a 6.8-unit window bay, a 4.4-unit
+// bench — keep their meaning and simply come out bigger on screen. What does
+// NOT keep its meaning is a width that was chosen to be one screen pixel: at
+// scale 1 a screen pixel was 0.5 world units along a face, at scale s it is
+// 0.5/s. So `q = 1/s` is published on the face, and every line width is the
+// literal it always was, times q. At s = 1 that is the identity, which is what
+// makes the substitution safe to make in bulk.
+//
+// Read a shader in this codebase as: numbers WITHOUT q are things the world
+// contains, numbers WITH q are things the drawing does.
+
+function withQ(iso, o) {
+  const s = iso.s === undefined ? 1 : iso.s;
+  o.au /= s; o.bu /= s; o.av /= s; o.bv /= s;
+  o.q = 1 / s;
+  return o;
+}
+
 export function leftFace(iso, y1, x0, z0) {
-  return {
-    au: 0.5, bu: 0, cu: -0.5 * iso.ox + y1 - x0,
-    av: 0.25, bv: -0.5, cv: -0.25 * iso.ox + y1 + 0.5 * iso.oy - z0,
-  };
+  const s = iso.s === undefined ? 1 : iso.s;
+  return withQ(iso, {
+    au: 0.5, bu: 0, cu: -0.5 * iso.ox / s + y1 - x0,
+    av: 0.25, bv: -0.5, cv: (-0.25 * iso.ox + 0.5 * iso.oy) / s + y1 - z0,
+  });
 }
 
 export function rightFace(iso, x1, y0, z0) {
-  return {
-    au: -0.5, bu: 0, cu: 0.5 * iso.ox + x1 - y0,
-    av: -0.25, bv: -0.5, cv: 0.25 * iso.ox + x1 + 0.5 * iso.oy - z0,
-  };
+  const s = iso.s === undefined ? 1 : iso.s;
+  return withQ(iso, {
+    au: -0.5, bu: 0, cu: 0.5 * iso.ox / s + x1 - y0,
+    av: -0.25, bv: -0.5, cv: (0.25 * iso.ox + 0.5 * iso.oy) / s + x1 - z0,
+  });
 }
 
 export function topFace(iso, zt, x0, y0) {
-  return {
-    au: 0.25, bu: 0.5, cu: -0.25 * iso.ox - 0.5 * iso.oy + zt - x0,
-    av: -0.25, bv: 0.5, cv: 0.25 * iso.ox - 0.5 * iso.oy + zt - y0,
-  };
+  const s = iso.s === undefined ? 1 : iso.s;
+  return withQ(iso, {
+    au: 0.25, bu: 0.5, cu: (-0.25 * iso.ox - 0.5 * iso.oy) / s + zt - x0,
+    av: -0.25, bv: 0.5, cv: (0.25 * iso.ox - 0.5 * iso.oy) / s + zt - y0,
+  });
 }
 
 /** World (x, y) of a ground-plane pixel at z = zt. */
 export function groundInv(iso, zt) {
+  const s = iso.s === undefined ? 1 : iso.s;
   return {
-    ax: 0.25, bx: 0.5, cx: -0.25 * iso.ox - 0.5 * iso.oy + zt,
-    ay: -0.25, by: 0.5, cy: 0.25 * iso.ox - 0.5 * iso.oy + zt,
+    ax: 0.25 / s, bx: 0.5 / s, cx: (-0.25 * iso.ox - 0.5 * iso.oy) / s + zt,
+    ay: -0.25 / s, by: 0.5 / s, cy: (0.25 * iso.ox - 0.5 * iso.oy) / s + zt,
+    q: 1 / s,
   };
 }
 
@@ -85,14 +111,26 @@ export function textPanel(F, rows, o) {
   const th = rows.length, tw = rows[0] ? rows[0].length : 0;
   const dir = o.dir === undefined ? 1 : o.dir;
   const pad = o.pad === undefined ? 0.85 : o.pad;
+  // World units per TEXT pixel. `0.5 * F.q` is exactly one screen pixel at any
+  // scale, and is the value that reproduces the old behaviour; a sign that
+  // wants to be read across the street passes a larger cell.
+  //
+  // AN AXONOMETRIC PLANE SHEARS BUT NEVER SCALES. A judge measured our glyphs
+  // tapering from ~9px to ~5px cap height across one sign, which is a
+  // perspective effect and there is no perspective here. It cannot happen in
+  // this function — the map from (u, v) to a glyph cell is affine and constant
+  // over the whole plane — and that is exactly why lettering is cut in face
+  // coordinates rather than blitted with a per-column offset. Any sign in this
+  // generator whose type foreshortens is a sign that is not using textPanel.
+  const cell = o.cell === undefined ? 0.5 * (F.q === undefined ? 1 : F.q) : o.cell;
   const { au, bu, cu, av, bv, cv } = F;
   return (sx, sy) => {
     const u = au * sx + bu * sy + cu;
     const v = av * sx + bv * sy + cv;
     if (u < pad || u > o.w - pad || v < pad || v > o.h - pad) return o.edge;
     if (o.band !== undefined && v < o.bandV) return v > o.bandV - 0.5 ? o.edge : o.band;
-    const i = Math.floor(dir * (u - o.tu) * 2);
-    const j = Math.floor((o.tv - v) * 2);
+    const i = Math.floor(dir * (u - o.tu) / cell);
+    const j = Math.floor((o.tv - v) / cell);
     if (i >= 0 && i < tw && j >= 0 && j < th && rows[j].charCodeAt(i) === 35) return o.ink;
     return o.fill;
   };

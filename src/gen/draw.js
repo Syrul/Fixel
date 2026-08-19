@@ -29,8 +29,13 @@ export function setInk(i) { INK = i; }
  * eBoy poles are, and two 1px faces stop counting as two separate flat faces —
  * and the face count is 2.6x the reference's.
  */
-function unsliver(w, d, mat) {
-  const thinL = w < 1.05, thinR = d < 1.05;
+function unsliver(w, d, mat, q) {
+  // The thresholds here are SCREEN sizes — "a face two pixels across" — so they
+  // are expressed in world units times q. Left unscaled they would have meant
+  // "a face four pixels across" the moment the world got bigger, and every
+  // genuinely two-pixel-wide detail on a now-larger object would have been
+  // flattened into its neighbour.
+  const thinL = w < 1.05 * q, thinR = d < 1.05 * q;
   if (!thinL && !thinR) return mat;
   const fn = (v) => typeof v === 'function';
   // A long thin box — a parapet, a rail, a sign panel — also presents a TOP
@@ -48,7 +53,8 @@ function unsliver(w, d, mat) {
 }
 
 export function box(cv, iso, x, y, z, w, d, h, mat, tag) {
-  rawBox(cv, iso, x, y, z, w, d, h, unsliver(w, d, mat), tag);
+  const s = iso.s === undefined ? 1 : iso.s, q = 1 / s;
+  rawBox(cv, iso, x, y, z, w, d, h, unsliver(w, d, mat, q), tag);
   // Gate at 0.8: dropping it to 0.55 buys outline.run1Share by carpeting the
   // frame with vertical arrises, and slope.corrDx0Share — the metric that
   // exists to catch exactly that — blows out. Measured, twice. Do not lower it.
@@ -58,15 +64,16 @@ export function box(cv, iso, x, y, z, w, d, h, mat, tag) {
   // is a vertical black stroke that encloses nothing. Ink is currently over
   // budget, not under, and `slope.corrDx0Share` is +1.65 bandwidths of "too
   // much of the outline mass is vertical". This is ink taken back.
-  if (!INK || w < 0.8 || d < 0.8 || h < 0.6) return;
-  if (w < 1.05 && d < 1.05) return;
+  if (!INK || w < 0.8 * q || d < 0.8 * q || h < 0.6 * q) return;
+  if (w < 1.05 * q && d < 1.05 * q) return;
   const X = x + w, Y = y + d;
-  const sx = Math.round(iso.ox + 2 * (X - Y));
-  const yBase = Math.round(iso.oy + (X + Y) - 2 * z);
-  const yTop = Math.round(iso.oy + (X + Y) - 2 * (z + h));
+  const a = iso.proj(X, Y, z + h), b = iso.proj(X, Y, z);
+  const sx = Math.round(a[0]);
+  const yTop = Math.round(a[1]), yBase = Math.round(b[1]);
+  const XY = s * (X + Y);
   for (let sy = yTop; sy <= yBase; sy++) {
-    const zz = (iso.oy + X + Y - sy) / 2;
-    cv.putZ(sx, sy, INK, X + Y + zz + 0.12, tag);
+    const zz = (iso.oy + XY - sy) / 2;
+    cv.putZ(sx, sy, INK, XY + zz + 0.12, tag);
   }
 }
 
@@ -84,9 +91,15 @@ export function box(cv, iso, x, y, z, w, d, h, mat, tag) {
 export function gable(cv, iso, x0, y0, z, w, d, hr, ridgeX, mat, tag) {
   const P = (a, b, c) => iso.proj(a, b, c);
   const ox = iso.ox, oy = iso.oy;
+  // The plane z = a + b*y becomes Z = s*a + b*Y once the world is scaled: the
+  // PITCH b is a ratio and does not move, the intercept is a length and does.
+  // Every coefficient below is linear in `a`, so scaling the intercept is
+  // exact rather than an approximation of the sloped-face depth.
+  const s = iso.s === undefined ? 1 : iso.s;
   if (ridgeX) {
     const ym = y0 + d / 2, k = hr / (d / 2);
-    const slope = (a, b, pts, shade) => {
+    const slope = (a0, b, pts, shade) => {
+      const a = s * a0;
       const dB = (1 + b / 2) / (1 - b);
       const dA = -(1 + b / 2) * b / (2 * (1 - b)) - b / 4;
       const kk = dB * 2 * a + a;
@@ -101,7 +114,8 @@ export function gable(cv, iso, x0, y0, z, w, d, hr, ridgeX, mat, tag) {
       dr[0], dr[1], dr[2], asShade(mat.right), tag);
   } else {
     const xm = x0 + w / 2, k = hr / (w / 2);
-    const slopeX = (a, b, pts, shade) => {
+    const slopeX = (a0, b, pts, shade) => {
+      const a = s * a0;
       const dB = (1 + b / 2) / (1 - b);
       const dA = (1 + b / 2) * b / (2 * (1 - b)) + b / 4;
       const kk = dB * 2 * a + a;

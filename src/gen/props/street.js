@@ -8,6 +8,7 @@ import { box, gable } from '../draw.js';
 import { leftFace, rightFace, topFace, blitFace, textPanel } from '../faces.js';
 import { h3 } from '../palette.js';
 import { textBitmap, scaleBitmap, signInk } from '../font.js';
+import { dep } from '../view.js';
 
 const M = (f) => ({ top: f.t, left: f.l, right: f.r });
 const MD = (f) => ({ top: f.l, left: f.r, right: f.d });
@@ -118,7 +119,7 @@ export function signPost(cv, iso, C, st, x, y, z, word) {
     { top: c.t, left: c.l, right: c.r });
   const p = iso.proj(x - pw + 0.2, y, z + h + (rows.length + 3) / 2);
   blitFace(cv, rows, { '#': c === C.white ? C.ink : C.white.t, '.': -1 },
-    p[0] + 1, p[1] + 2, 'l', x + y + z + 40);
+    p[0] + 1, p[1] + 2, 'l', dep(iso, x, y, z, 40));
 }
 
 export function kiosk(cv, iso, C, st, x, y, z, w, d, word) {
@@ -132,7 +133,7 @@ export function kiosk(cv, iso, C, st, x, y, z, w, d, word) {
   if (word) {
     const rows = textBitmap(word.slice(0, 5), 1);
     const p = iso.proj(x + 0.4, y + d + 0.09, z + h - 0.2);
-    blitFace(cv, rows, { '#': C.white.t, '.': -1 }, p[0] + 1, p[1] - 1, 'l', x + y + z + 60);
+    blitFace(cv, rows, { '#': C.white.t, '.': -1 }, p[0] + 1, p[1] - 1, 'l', dep(iso, x, y, z, 60));
   }
 }
 
@@ -207,7 +208,7 @@ export function scaffold(cv, iso, C, st, x, y, z, w, d, h) {
     if (st.bool(0.45)) {
       const p0 = iso.proj(x, y + d, z + lv);
       const p1 = iso.proj(x + w, y + d, z + lv + 2.6);
-      const dep = x + w + y + d + z + lv + 3;
+      const dpt = dep(iso, x + w, y + d, z + lv, 3);
       const n = Math.max(1, Math.round(Math.abs(p1[0] - p0[0]) / 14));
       for (let q = 0; q < n; q++) {
         if (!st.bool(0.6)) continue;
@@ -215,8 +216,8 @@ export function scaffold(cv, iso, C, st, x, y, z, w, d, h) {
         const ax1 = Math.round(p0[0] + (p1[0] - p0[0]) * (q + 1) / n);
         const ay0 = Math.round(p0[1] + (p1[1] - p0[1]) * q / n);
         const span = Math.abs(ax1 - ax0);
-        if (st.bool(0.5)) cv.line(ax0, ay0, ax1, ay0 - span, C.black, dep);
-        else cv.line(ax0, ay0 - span, ax1, ay0, C.black, dep);
+        if (st.bool(0.5)) cv.line(ax0, ay0, ax1, ay0 - span, C.black, dpt);
+        else cv.line(ax0, ay0 - span, ax1, ay0, C.black, dpt);
       }
     }
   }
@@ -294,7 +295,7 @@ export function barrier(cv, iso, C, st, x, y, z, ax) {
 
 export function cableRun(cv, iso, C, st, x0, y0, z0, x1, y1, z1) {
   const a = iso.proj(x0, y0, z0), b = iso.proj(x1, y1, z1);
-  const d = Math.max(x0 + y0 + z0, x1 + y1 + z1) + 1.2;
+  const d = Math.max(dep(iso, x0, y0, z0), dep(iso, x1, y1, z1)) + 1.2;
   const sag = 3;
   let px = a[0], py = a[1];
   for (let i = 1; i <= 12; i++) {
@@ -334,10 +335,14 @@ export function pylonSign(cv, iso, C, st, x, y, z, word, ax) {
   const k = st.weighted([[1, 5], [2, 4]]);
   const rows = scaleBitmap(textBitmap(word.slice(0, 5), 1), k);
   const tw = rows[0].length, th = rows.length;
-  // Panel sized off the bitmap: half a world unit per text pixel across, and
-  // enough height for the stair the letters walk down as they go right.
-  const pw = tw / 2 + 2.2;
-  const ph = (th + (tw >> 1)) / 2 + 2.2;
+  // Panel sized off the lettering block, which is tw by th cells in face
+  // coordinates — see the note in roof.js roofSign about the phantom stair term
+  // this used to carry.
+  const q = 1 / (iso.s === undefined ? 1 : iso.s);
+  const cell = 0.5 * q;
+  const inset = 1.7;
+  const pw = tw * cell + 2 * inset;
+  const ph = th * cell + 2 * inset;
   const poleH = st.range(3.5, 11);
   const post = st.pick([C.slate, C.metal, C.steel, C.concrete]);
   const panel = st.weighted([[st.pick(C.accents), 8], [C.white, 3], [C.cream, 2], [C.tar, 2]]);
@@ -352,9 +357,9 @@ export function pylonSign(cv, iso, C, st, x, y, z, word, ax) {
   const w = ax === 0 ? pw : 0.35, d = ax === 0 ? 0.35 : pw;
   const F = ax === 0 ? leftFace(iso, y + d, x, z + poleH) : rightFace(iso, x + w, y, z + poleH);
   const face = textPanel(F, rows, {
-    w: pw, h: ph, pad: 0.85, edge: C.black, fill: panel.t, ink: inkC,
+    w: pw, h: ph, pad: 0.85, edge: C.black, fill: panel.t, ink: inkC, cell,
     dir: ax === 0 ? 1 : -1,
-    tu: ax === 0 ? 1.4 : pw - 1.4, tv: ph - 1.4,
+    tu: ax === 0 ? inset : pw - inset, tv: ph - inset,
   });
   box(cv, iso, x, y, z + poleH, w, d, ph, {
     top: panel.t,
@@ -372,8 +377,11 @@ export function billboard(cv, iso, C, st, x, y, z, word, ax) {
   const k = st.weighted([[1, 3], [2, 6]]);
   const rows = scaleBitmap(textBitmap(word.slice(0, 6), 1), k);
   const tw = rows[0].length, th = rows.length;
-  const pw = tw / 2 + 3.0;
-  const ph = (th + (tw >> 1)) / 2 + 4.2;
+  const q = 1 / (iso.s === undefined ? 1 : iso.s);
+  const cell = 0.5 * q;
+  const inset = 1.9;
+  const pw = tw * cell + 2 * inset;
+  const ph = th * cell + 2 * inset + 2.2;
   const legH = st.range(1.2, 3.6);
   const panel = st.weighted([[C.white, 4], [C.cream, 3], [st.pick(C.accents), 6]]);
   const band = st.pick(C.accents);
@@ -387,10 +395,10 @@ export function billboard(cv, iso, C, st, x, y, z, word, ax) {
   const w = ax === 0 ? pw : 0.4, d = ax === 0 ? 0.4 : pw;
   const F = ax === 0 ? leftFace(iso, y + d, x, z + legH) : rightFace(iso, x + w, y, z + legH);
   const face = textPanel(F, rows, {
-    w: pw, h: ph, pad: 0.8, edge: C.black, fill: panel.t, ink: inkC,
-    band: band.t, bandV: ph * 0.24,
+    w: pw, h: ph, pad: 0.8, edge: C.black, fill: panel.t, ink: inkC, cell,
+    band: band.t, bandV: 2.2,
     dir: ax === 0 ? 1 : -1,
-    tu: ax === 0 ? 1.5 : pw - 1.5, tv: ph - 1.3,
+    tu: ax === 0 ? inset : pw - inset, tv: ph - inset,
   });
   box(cv, iso, x, y, z + legH, w, d, ph, {
     top: panel.t,

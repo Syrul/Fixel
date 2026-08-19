@@ -1,3 +1,4 @@
+import { dep } from '../view.js';
 // Pedestrians. 10-13px tall, five to seven px wide — the scale the reference
 // works at. Authored as slot tables: each character is a MATERIAL SLOT, not a
 // colour, so one table produces thousands of distinct people once the slots are
@@ -90,7 +91,7 @@ export function drawPerson(cv, iso, C, st, wx, wy, wz, opt) {
     b: bag.l, o: C.black, '.': -1,
   };
   const p = iso.proj(wx, wy, wz);
-  cv.blit(p[0] - 3, p[1] - (pose.length - 2), pose, map, wx + wy + wz + 0.7);
+  cv.blit(p[0] - 3, p[1] - (pose.length - 2), pose, map, dep(iso, wx, wy, wz, 0.7));
 }
 
 /** A queue / cluster of people along a line — how crowds actually read. */

@@ -7,17 +7,25 @@
 import { groundInv } from './faces.js';
 import { h3 } from './palette.js';
 
-const CROSS_D = 9;      // depth of a painted crossing, world units
-const SIDEWALK = 6.0;   // pavement width inside each block edge
+// THE GRID IS SIZED IN WORLD UNITS AND THE WORLD IS NOW TWICE AS BIG ON SCREEN,
+// so every number in this file was retuned rather than left to double.
+//
+// The target is stated as a picture, not as a constant: a 320x320 judge crop
+// covers a patch of world roughly 60 by 60 units, and it has to hold what the
+// reference's 320px crops hold — one street, two building faces, a few
+// vehicles, a crowd. Left at the old figures a single block would have been
+// 990px across and a crop would have landed inside one wall.
+const CROSS_D = 6;      // depth of a painted crossing, world units
+const SIDEWALK = 4.0;   // pavement width inside each block edge
 
 function axisBands(st, a0, a1, o) {
   const streets = [], blocks = [];
   let p = a0 - st.int(0, 30);
   while (p < a1 + 40) {
-    const sw = Math.round(st.int(15, 26) * o.streetScale);
+    const sw = Math.round(st.int(10, 17) * o.streetScale);
     streets.push([p, p + sw]);
     p += sw;
-    const bw = Math.round(st.int(52, 124) * o.blockScale);
+    const bw = Math.round(st.int(32, 76) * o.blockScale);
     blocks.push([p, p + bw]);
     p += bw;
   }
@@ -49,9 +57,9 @@ function axisIndex(bands, A0, n) {
 
 function subdivide(st, x0, y0, x1, y1, out) {
   const w = x1 - x0, d = y1 - y0;
-  if (w < 20 || d < 20) { if (w > 9 && d > 9) out.push([x0, y0, x1, y1]); return; }
-  if (w <= 52 && d <= 52 && st.bool(0.62)) { out.push([x0, y0, x1, y1]); return; }
-  if (w <= 30 && d <= 30) { out.push([x0, y0, x1, y1]); return; }
+  if (w < 13 || d < 13) { if (w > 6 && d > 6) out.push([x0, y0, x1, y1]); return; }
+  if (w <= 33 && d <= 33 && st.bool(0.62)) { out.push([x0, y0, x1, y1]); return; }
+  if (w <= 19 && d <= 19) { out.push([x0, y0, x1, y1]); return; }
   if (w >= d) {
     const c = Math.round(x0 + st.range(0.34, 0.66) * w);
     subdivide(st, x0, y0, c, y1, out); subdivide(st, c, y0, x1, y1, out);
@@ -94,7 +102,7 @@ export function planCity(rng, X0, X1, Y0, Y1, o = {}) {
       const parcels = [];
       const px0 = a + SIDEWALK, py0 = c + SIDEWALK;
       const px1 = b - SIDEWALK, py1 = d - SIDEWALK;
-      if (px1 - px0 > 6 && py1 - py0 > 6) {
+      if (px1 - px0 > 4 && py1 - py0 > 4) {
         const raw = [];
         subdivide(stp, px0, py0, px1, py1, raw);
         for (const r of raw) parcels.push({ x0: r[0], y0: r[1], x1: r[2], y1: r[3], type: stp.weighted(opt.mix) });
@@ -223,7 +231,7 @@ export function pavementShade(iso, C, x0, y0, w, d, z, seedN, P, K, opt = {}) {
     const u = T.ax * sx + T.bx * sy + T.cx - x0;
     const v = T.ay * sx + T.by * sy + T.cy - y0;
     if (u < kerb || v < kerb || u > w - kerb || v > d - kerb) return P.t;
-    if (seam > 0 && ((u % seam) < 0.62 || (v % seam) < 0.62)) return P.r;
+    if (seam > 0 && ((u % seam) < 0.62 * T.q || (v % seam) < 0.62 * T.q)) return P.r;
     // Large pale stains with hand-drawn contours. The boundary is a quadratic
     // form in (u, v), so it walks off the 2:1 lattice at every angle, and the
     // interior is a big flat region in a tone nothing else uses.

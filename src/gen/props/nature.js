@@ -6,6 +6,7 @@ import { drawSlab } from '../../core/iso.js';
 import { box } from '../draw.js';
 import { topFace } from '../faces.js';
 import { h3 } from '../palette.js';
+import { dep } from '../view.js';
 
 //  d dark leaf   m mid leaf   l light leaf   . skip
 const CANOPY = [
@@ -37,7 +38,7 @@ export function tree(cv, iso, C, st, x, y, z, big) {
   const p = iso.proj(x + 0.4, y + 0.4, z + th);
   const k = big ? 1 : 1;
   cv.blit(p[0] - ((rows[0].length * k) >> 1), p[1] - rows.length * k + 1, scale(rows, k), map,
-    x + y + z + th + 1.2);
+    dep(iso, x, y, z + th, 1.2));
 }
 
 function scale(rows, k) {
@@ -60,10 +61,10 @@ export function palm(cv, iso, C, st, x, y, z) {
   const g = st.pick([C.leaf, C.green, C.grass]);
   const map = { d: C.black, m: g.l, l: g.t, '.': -1 };
   const p = iso.proj(x + 0.4 + lean * seg * 1.2, y + 0.4 + lean * seg * 0.5, z + h);
-  cv.blit(p[0] - 7, p[1] - 8, FROND, map, x + y + z + h + 2);
+  cv.blit(p[0] - 7, p[1] - 8, FROND, map, dep(iso, x, y, z + h, 2));
   if (st.bool(0.35)) {
     const c = st.pick([C.amber, C.orange, C.lime]);
-    cv.blit(p[0] - 1, p[1] - 1, ['##', '##'], { '#': c.l }, x + y + z + h + 2.2);
+    cv.blit(p[0] - 1, p[1] - 1, ['##', '##'], { '#': c.l }, dep(iso, x, y, z + h, 2.2));
   }
 }
 
@@ -85,7 +86,7 @@ export function bush(cv, iso, C, st, x, y, z) {
   const g = st.pick([C.leaf, C.grass, C.grass, C.green]);
   const rows = CANOPY[3];
   const p = iso.proj(x, y, z);
-  cv.blit(p[0] - 4, p[1] - 5, rows, { d: C.black, m: g.l, l: g.t, '.': -1 }, x + y + z + 0.9);
+  cv.blit(p[0] - 4, p[1] - 5, rows, { d: C.black, m: g.l, l: g.t, '.': -1 }, dep(iso, x, y, z, 0.9));
 }
 
 export function flowerBed(cv, iso, C, st, x, y, z, w, d) {

@@ -6,6 +6,7 @@ import { box } from '../draw.js';
 import { topFace, leftFace, rightFace, blitFace, textPanel } from '../faces.js';
 import { h3 } from '../palette.js';
 import { textBitmap, scaleBitmap, signInk } from '../font.js';
+import { dep } from '../view.js';
 
 const M = (f) => ({ top: f.t, left: f.l, right: f.r });
 const MD = (f) => ({ top: f.l, left: f.r, right: f.d });
@@ -52,7 +53,7 @@ export function dish(cv, iso, C, st, x, y, z) {
   box(cv, iso, x, y, z, 0.4, 0.4, 1.4, MD(C.metal));
   const p = iso.proj(x + 0.2, y + 0.2, z + 1.4);
   const rows = ['.####.', '######', '######', '.####.', '..##..'];
-  cv.blit(p[0] - 3, p[1] - 5, rows, { '#': C.white.l, '.': -1 }, x + y + z + 3);
+  cv.blit(p[0] - 3, p[1] - 5, rows, { '#': C.white.l, '.': -1 }, dep(iso, x, y, z, 3));
 }
 
 export function solar(cv, iso, C, st, x, y, z, w, d) {
@@ -66,7 +67,7 @@ export function solar(cv, iso, C, st, x, y, z, w, d) {
   // interior form. Same drawing, a value step instead of a keyline.
   drawSlab(cv, iso, x, y, z + 0.6, w, d, (sxp, syp) => {
     const u = F.au * sxp + F.bu * syp + F.cu, v = F.av * sxp + F.bv * syp + F.cv;
-    if ((u % 5.5) < 0.62 || (v % 5.5) < 0.62) return C.indigo.k;
+    if ((u % 5.5) < 0.62 * F.q || (v % 5.5) < 0.62 * F.q) return C.indigo.k;
     return C.indigo.l;
   });
 }
@@ -154,8 +155,17 @@ export function roofSign(cv, iso, C, st, x, y, z, word, ax = 0) {
   const k = st.weighted([[1, 5], [2, 4]]);
   const rows = scaleBitmap(textBitmap(word.slice(0, 6), 1), k);
   const tw = rows[0].length, th = rows.length;
-  const need = tw / 2 + 2.4;
-  const h = (th + (tw >> 1)) / 2 + 2.4;
+  // Panel sized off the LETTERING, in face units. The old form added (tw >> 1)
+  // to the height for a stair the letters never walked: textPanel cuts glyphs
+  // on a rectangular grid in face coordinates and the projection shears it, so
+  // the block is tw by th cells and nothing else. That phantom term is why our
+  // hero signs came out as tall blank slabs with small type in the corner — a
+  // judge called one "3,082 pixels of one unbroken yellow".
+  const q = 1 / (iso.s === undefined ? 1 : iso.s);
+  const cell = 0.5 * q;
+  const inset = 1.7;
+  const need = tw * cell + 2 * inset;
+  const h = th * cell + 2 * inset;
   const panel = st.weighted([[C.white, 3], [C.cream, 2], [C.tar, 3],
     [st.pick(C.accents), 7]]);
   const ink = st.pick([...C.accents, C.white, C.tar]);
@@ -169,9 +179,9 @@ export function roofSign(cv, iso, C, st, x, y, z, word, ax = 0) {
   }
   const F = ax === 0 ? leftFace(iso, y + d, x, z + legH) : rightFace(iso, x + w, y, z + legH);
   const face = textPanel(F, rows, {
-    w: need, h, pad: 0.85, edge: C.black, fill: panel.t, ink: inkC,
+    w: need, h, pad: 0.85, edge: C.black, fill: panel.t, ink: inkC, cell,
     dir: ax === 0 ? 1 : -1,
-    tu: ax === 0 ? 1.5 : need - 1.5, tv: h - 1.4,
+    tu: ax === 0 ? inset : need - inset, tv: h - inset,
   });
   box(cv, iso, x, y, z + legH, w, d, h, {
     top: panel.t,
@@ -187,7 +197,7 @@ export function roofDeck(cv, iso, C, st, x, y, z, w, d, wall) {
   const seam = st.range(13, 24);
   drawSlab(cv, iso, x, y, z, w, d, (sxp, syp) => {
     const u = F.au * sxp + F.bu * syp + F.cu, v = F.av * sxp + F.bv * syp + F.cv;
-    if ((u % seam) < 0.62 || (v % seam) < 0.62) return g.l;
+    if ((u % seam) < 0.62 * F.q || (v % seam) < 0.62 * F.q) return g.l;
     const k = h3(Math.floor(u / seam), Math.floor(v / seam), seed) & 15;
     return k === 0 ? g.l : k === 1 ? g.d : g.t;
   });

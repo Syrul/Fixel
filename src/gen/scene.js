@@ -21,7 +21,8 @@
 
 import { Rng } from '../core/rng.js';
 import { Canvas } from '../core/canvas.js';
-import { Iso, drawSlab } from '../core/iso.js';
+import { drawSlab } from '../core/iso.js';
+import { View, SCALE } from './view.js';
 import { box, setInk } from './draw.js';
 import { buildPalette, h3 } from './palette.js';
 import { planCity, roadShade, pavementShade } from './city.js';
@@ -102,11 +103,18 @@ export function renderScene(seed, opts = {}) {
 
   const ox = Math.round(W / 2);
   const oy = -Math.round(H * 0.24);
-  const iso = new Iso(ox, oy);
+  // The scale is a parameter, exactly like the viewport, and for the same
+  // reason: a per-post viewport is coming and neither of these may be baked in
+  // deeper than here. Everything downstream reads `iso.s`.
+  const S = opts.scale || SCALE;
+  const iso = new View(ox, oy, S);
 
+  // The world region the frame can see, inverted through the SCALED projection.
+  // Getting this wrong does not draw wrong, it draws a city four times too
+  // large or too small for its window and culls most of it.
   const MX = 140, MY = 140;
-  const uMin = (0 - MX - ox) / 2, uMax = (W + MX - ox) / 2;
-  const vMin = (0 - MY - oy), vMax = (H + MY - oy);
+  const uMin = (0 - MX - ox) / (2 * S), uMax = (W + MX - ox) / (2 * S);
+  const vMin = (0 - MY - oy) / S, vMax = (H + MY - oy) / S;
   const X0 = Math.floor((uMin + vMin) / 2) - 4;
   const X1 = Math.ceil((uMax + vMax) / 2) + 4;
   const Y0 = Math.floor((vMin - uMax) / 2) - 4;
@@ -138,7 +146,7 @@ export function renderScene(seed, opts = {}) {
     const t = iso.proj(x0, y0, 0), b = iso.proj(x1, y1, 0);
     if (r[0] < -48 || l[0] > W + 48) return false;
     if (b[1] < -24) return false;
-    if (t[1] - 2 * maxH > H + 24) return false;
+    if (t[1] - 2 * S * maxH > H + 24) return false;
     return true;
   };
 
@@ -354,7 +362,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
     }
     cv.t = tag();
     drawBuilding(cv, iso, C, bs, x0 + ix, y0 + iy, Z, bw, bd, {
-      maxH: p.type === 'low' ? 17 : 92, sign: sg, tag, D,
+      maxH: p.type === 'low' ? 11 : 62, sign: sg, tag, D,
     });
     // awnings over the shopfronts on the two visible street faces
     const aw = ps.range(9, 15);
@@ -410,7 +418,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
     const F = topFace(iso, Z, x0, y0);
     drawSlab(cv, iso, x0, y0, Z, w, d, (sx, sy) => {
       const u = F.au * sx + F.bu * sy + F.cu, v = F.av * sx + F.bv * sy + F.cv;
-      if ((u % 5.5) < 0.62) return C.white.t;
+      if ((u % 5.5) < 0.62 * F.q) return C.white.t;
       return C.road.t;
     });
     for (let row = 0; row < 2; row++) {
@@ -450,7 +458,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
     drawSlab(cv, iso, x0, y0, Z, w, d, (sx, sy) => {
       const u = F.au * sx + F.bu * sy + F.cu, v = F.av * sx + F.bv * sy + F.cv;
       const cu = Math.floor(u / pitch), cvv = Math.floor(v / pitch);
-      if ((u % pitch) < 0.55 || (v % pitch) < 0.55) return C.black;
+      if ((u % pitch) < 0.55 * F.q || (v % pitch) < 0.55 * F.q) return C.black;
       return ((cu + cvv) & 1) ? C.pave.t : C.concrete.t;
     });
     for (let i = 0; i < Math.max(3, Math.round(w * d * D.density / 120)); i++) {
@@ -483,7 +491,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
       const pitch = ps.range(8.0, 14.0);
       drawSlab(cv, iso, x0, y0, Z, w, d, (sx, sy) => {
         const u = F.au * sx + F.bu * sy + F.cu, v = F.av * sx + F.bv * sy + F.cv;
-        if ((u % pitch) < 0.55 || (v % pitch) < 0.55) return C.black;
+        if ((u % pitch) < 0.55 * F.q || (v % pitch) < 0.55 * F.q) return C.black;
         return C.pave.t;
       });
     }
@@ -535,7 +543,7 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D) {
       top: (sx, sy) => {
         const u = FP.au * sx + FP.bu * sy + FP.cu, v = FP.av * sx + FP.bv * sy + FP.cv;
         if (u < 1.0 || v < 1.0 || u > pw - 1.0 || v > pd - 1.0) return C.white.t;
-        if ((v % 4.5) < 0.62) return C.cyan.l;
+        if ((v % 4.5) < 0.62 * FP.q) return C.cyan.l;
         return (Math.floor(u / 3.5) & 1) ? C.aqua.t : C.aqua.l;
       },
       left: C.aqua.r, right: C.aqua.d,
