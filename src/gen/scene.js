@@ -147,6 +147,12 @@ export function renderScene(seed, opts = {}) {
     nWall: ds.int(1, 3),
     blockScale: ds.range(0.72, 1.16),
     streetScale: ds.range(0.80, 1.28),
+    // How much of its colour a city spends on individuals. At one end every
+    // car and every jacket is its own mixed tone; at the other a fleet and a
+    // crowd share a short list. `palette.distinct` spans 211-435 across seeds
+    // against the reference's own 410 of crop-to-crop width, and this is the
+    // knob that widens it without touching how local any one colour is.
+    ownColour: ds.range(0.15, 1.0),
   };
   D.mix = [
     ['build', 44 + ds.range(0, 34)], ['park', ds.range(1, 14)],
@@ -184,6 +190,7 @@ export function renderScene(seed, opts = {}) {
   const sg = rng.stream('signage');
   const ts = rng.stream('traffic');
   const cs = rng.stream('colour');
+  C.ownColour = D.ownColour;
 
   for (const b of plan.blocks) {
     const bw = b.x1 - b.x0, bd = b.y1 - b.y0;

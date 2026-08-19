@@ -73,9 +73,12 @@ export function drawPerson(cv, iso, C, st, wx, wy, wz, opt) {
   // crop's several hundred distinct colours actually comes from: many small
   // objects each committing to a colour of their own, not one ramp sprayed
   // over everything. Five pixels of it, so the radius of gyration stays tiny.
-  const mix = (f, dh, ds, dl) => C.mk(f._h + st.range(-dh, dh),
-    Math.min(1, f._s * st.range(1 - ds, 1 + ds)),
-    Math.min(0.97, f._L * st.range(1 - dl, 1 + dl)));
+  const own = C.ownColour === undefined ? 1 : C.ownColour;
+  const mix = (f, dh, ds, dl) => (st.bool(own)
+    ? C.mk(f._h + st.range(-dh, dh),
+      Math.min(1, f._s * st.range(1 - ds, 1 + ds)),
+      Math.min(0.97, f._L * st.range(1 - dl, 1 + dl)))
+    : f);
   const shirt = mix(st.pick(C.accents), 18, 0.3, 0.18);
   const trous = st.bool(0.4) ? mix(st.pick(C.accents), 16, 0.3, 0.16)
     : mix(st.pick([C.steel, C.slate, C.wood, C.indigo, C.concrete]), 12, 0.4, 0.16);

@@ -108,7 +108,7 @@ export function buildPalette(rng) {
   // one signed knob for both and produced medians from -4.7 to +6.1 — a seed
   // whose shadows rotated six degrees warm, which is exactly the tell.
   const HUE0 = r.range(-2.6, 0.05);
-  const HUEJ = r.range(0, 7.0);
+  const HUEJ = r.range(0, 5.5);
   const SATK = r.range(0.90, 1.32);
 
   // ---- this scene's palette resolution -----------------------------------
