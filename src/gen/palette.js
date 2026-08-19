@@ -163,13 +163,22 @@ export function buildPalette(rng) {
   // it runs, and how pale. These used to be ±8 degrees and ±9% of saturation,
   // which is why `hue.meanSat` and `palette.top1Share` barely moved seed to
   // seed. A desert noon and an overcast harbour are different pictures.
-  const drift = r.range(-16, 16);
+  const drift = r.range(-18, 18);
   const satMul = r.range(0.60, 1.14);
-  const litMul = r.range(0.90, 1.08);
-  const neutralSat = r.range(0.7, 1.6);
+  const litMul = r.range(0.88, 1.10);
+  // THE NEUTRALS CARRY THE SCENE AND THEY WERE THE PART THAT DID NOT MOVE.
+  // 59% of the frame is near-neutral, and the neutral families used to take
+  // only 0.3 of the scene drift — about five degrees — so the greys that make
+  // up most of every crop were nearly identical from seed to seed. That is
+  // what the perceptual half of the variety gate reads first: its histogram
+  // view is dominated by the commonest colours. A warm sand city, a cool blue
+  // one and a flat concrete one are different pictures at a glance, and that
+  // difference lives almost entirely here.
+  const neutralHue = r.range(-34, 34);
+  const neutralSat = r.range(0.30, 2.05);
   for (const [k, h, s, l] of FAM) {
     const neutral = s < 0.25;
-    C[k] = mk(h + (neutral ? drift * 0.3 : drift),
+    C[k] = mk(h + (neutral ? neutralHue : drift),
       s * (neutral ? neutralSat : satMul),
       Math.min(0.98, l * (neutral ? litMul : 1 + (litMul - 1) * 0.4)));
   }
