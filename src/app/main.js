@@ -226,14 +226,22 @@ async function generate(p) {
     ANIM.animated++; ANIM.bytes += loopBytes(p.loop) + img.data.byteLength + p.pal3.byteLength;
   }
   if (p.i === active) armPlayer();
+  // THE CONDITIONS ARE RESOLVED ONCE, HERE, AND THE SAME OBJECT IS USED THREE
+  // TIMES: the audio is composed for it, the caption is written from it, and
+  // the scene worker derives its own from the same pure function of the same
+  // seed. The invariant that matters is that the audio and the picture can
+  // never disagree about the weather, and the cheapest way to break it is two
+  // resolutions of one seed drifting apart. This call used to happen AFTER the
+  // audio was composed, which is how the music came to be the only part of a
+  // post that did not know it was raining.
+  const cnd = pickConditions(String(p.seed));
   // Audio second: the picture is what the eye lands on, and a scene that is
   // ready 250ms before its track is far better than the reverse.
-  const a = await ask(audioW, { seed: String(p.seed), seconds: 48 });
+  const a = await ask(audioW, { seed: String(p.seed), seconds: 48, cond: cnd });
   p.audio = a;
   // The condition is captioned only when it is not the reference one, so a
   // plain clear day reads exactly as it did before conditions existed and the
   // label means "something is going on here" rather than being furniture.
-  const cnd = pickConditions(String(p.seed));
   p.meta.querySelector('.sub').textContent =
     `${cnd.biome}${cnd.reference ? '' : ' · ' + conditionLabel(cnd)}` +
     ` · ${a.bpm} BPM · ${a.key} · ${s.w}×${s.h}`;

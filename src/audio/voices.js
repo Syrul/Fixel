@@ -117,6 +117,55 @@ export function renderNoise(out, absFrom, absTo, sr, note, patch) {
   }
 }
 
+/**
+ * A continuous ambience bed — the sound of the place, under the music.
+ *
+ * The same 15-bit LFSR as the drum channel, sample-and-held at `period`,
+ * one-pole lowpassed, optionally one-pole highpassed, and swelled by a slow
+ * raised-cosine. No pitch, no rhythm, no envelope: it starts before the first
+ * note and ends after the last, which is what makes it a room rather than an
+ * instrument.
+ *
+ * PHASE IS INTEGRATED FROM ABSOLUTE SAMPLE ZERO, not from the render window, so
+ * a 0.5 s first-buffer render is bit-identical to the same span of a full 60 s
+ * one — the same requirement every other voice in this file meets. That costs a
+ * warm-up loop over the skipped samples, which is why the LFSR is advanced
+ * without writing anything until the window opens.
+ */
+export function renderAmbience(out, absFrom, absTo, sr, layer, reg0) {
+  let reg = reg0 || 1;
+  const period = Math.max(1, layer.period);
+  const lpK = Math.max(1e-4, Math.min(1, layer.lp));
+  const hpK = layer.hp > 0 ? Math.exp(-2 * Math.PI * layer.hp / sr) : 0;
+  const depth = Math.max(0, Math.min(1, layer.depth));
+  // The swell is evaluated on a 64-sample grid and interpolated between grid
+  // points. A cosine per sample cost 180 ms of a 60 s render for three layers —
+  // most of the ambience budget — to describe a curve whose whole period is ten
+  // seconds. The grid step is 1.5 ms; the error is below the float noise floor.
+  const STEP = 64;
+  const swellAt = (i) => {
+    const p = layer.swellHz * (i / sr) + layer.swellPhase;
+    return 1 - depth + depth * (0.5 - 0.5 * Math.cos(2 * Math.PI * p));
+  };
+  let hold = 0, acc = 0, lp = 0, hpPrevIn = 0, hpPrevOut = 0;
+  let sA = swellAt(0), sB = swellAt(STEP), sD = (sB - sA) / STEP, sCur = sA, sN = STEP;
+  for (let i = 0; i < absTo; i++) {
+    if (i === sN) { sA = sB; sB = swellAt(sN + STEP); sD = (sB - sA) / STEP; sCur = sA; sN += STEP; }
+    if (acc <= 0) {
+      const b0 = reg & 1, b1 = (reg >> 1) & 1;
+      reg = (reg >> 1) | (((b0 ^ b1) & 1) << 14);
+      hold = (reg & 1) ? 1 : -1;
+      acc += period;
+    }
+    acc -= 1;
+    lp += lpK * (hold - lp);
+    let v = lp;
+    if (hpK) { const y = hpK * (hpPrevOut + v - hpPrevIn); hpPrevIn = v; hpPrevOut = y; v = y; }
+    if (i >= absFrom) out[i - absFrom] += layer.gain * sCur * v;
+    sCur += sD;
+  }
+}
+
 /** Kick: a triangle whose pitch falls from f0 to f1 over the note. */
 export function renderThump(out, absFrom, absTo, sr, note, patch) {
   const s0 = note.start, s1 = note.start + note.len;

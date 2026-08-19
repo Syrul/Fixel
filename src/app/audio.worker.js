@@ -8,10 +8,16 @@
 import { composeSong } from '../audio/compose.js';
 import { renderRange, SAMPLE_RATE } from '../audio/render.js';
 
+// `cond` is the RESOLVED conditions object main.js already made for the
+// caption and the picture — passed in rather than re-derived here, because two
+// resolutions of one seed are two opinions and the invariant is that the audio
+// and the picture never disagree about the weather. Absent, the composer is
+// biome-neutral and there is no ambience; that is the offline path, not this
+// one.
 self.onmessage = (e) => {
-  const { id, seed, seconds = 48 } = e.data;
+  const { id, seed, seconds = 48, cond = null } = e.data;
   const t0 = performance.now();
-  const song = composeSong(seed, { seconds });
+  const song = composeSong(seed, { seconds, cond });
   const t1 = performance.now();
   const { mix } = renderRange(song, 0, Math.round(seconds * SAMPLE_RATE), SAMPLE_RATE);
   self.postMessage({
@@ -20,6 +26,7 @@ self.onmessage = (e) => {
     bpm: song.bpm,
     key: `${song.key.tonic} ${song.key.mode}`,
     bars: song.totalBars,
+    voices: song.ensemble.voices.length,
     composeMs: t1 - t0,
     renderMs: performance.now() - t1,
     mix: mix.buffer,

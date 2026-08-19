@@ -10,11 +10,14 @@
 // the mix and applied identically to every stem, so sum(stems) == mix exactly.
 
 import { Biquad, limiterGainEnvelope, dbToLin } from './dsp.js';
-import { renderTone, renderNoise, renderThump } from './voices.js';
+import { renderTone, renderNoise, renderThump, renderAmbience } from './voices.js';
 import { TICKS_PER_BAR } from './compose.js';
 
 export const SAMPLE_RATE = 44100;
-export const CHANNELS = ['lead', 'harmony', 'arp', 'bass', 'drums'];
+// 'amb' is the sound of the PLACE — see src/audio/ambience.js. It is a channel
+// and not an effect so that it is a stem like every other: measurable in
+// isolation, summing into the mix, and impossible to hide inside the master.
+export const CHANNELS = ['lead', 'harmony', 'arp', 'bass', 'drums', 'amb'];
 
 // Master chain constants. The lowpass is a deliberate, disclosed choice: chip
 // hardware drives a small speaker through an RC network and the reference
@@ -142,6 +145,20 @@ export function renderRange(song, fromSample, toSample, sr = SAMPLE_RATE) {
           seedReg: noiseSeed(nt.tick, nt.kind),
         });
       }
+    }
+  }
+
+  // ---- ambience ---------------------------------------------------------
+  // Under everything, and it does not stop when the music rests. That is the
+  // whole reason it exists: the bar the bass drops out of is now the sound of
+  // the place, not digital zero.
+  if (song.ambience) {
+    const out = stems.amb;
+    for (let li = 0; li < song.ambience.layers.length; li++) {
+      // Each layer gets its own LFSR seed, or two layers of the same period
+      // would be the same noise twice and sum to one louder layer.
+      renderAmbience(out, fromSample, toSample, sr, song.ambience.layers[li],
+        ((song.ambience.reg + li * 6151) & 0x7ffe) | 1);
     }
   }
 

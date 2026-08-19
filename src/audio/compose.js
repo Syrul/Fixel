@@ -11,6 +11,7 @@
 // names, so adding a section later cannot re-roll an earlier one.
 
 import { Rng } from '../core/rng.js';
+import { planAmbience } from './ambience.js';
 import {
   SCALES, QUALITIES, PROGRESSIONS, CADENCES, RHYTHM_CELLS, CONTOURS,
   DRUM_PATTERNS, BASS_FIGURES, ARP_SHAPES, PC_NAMES, OPENINGS,
@@ -381,6 +382,11 @@ export function composeSong(seed, opts = {}) {
     motifs[letter] = { cells, contour, startDeg: st.int(-2, 4) };
   }
 
+  // ---- the air ----------------------------------------------------------
+  // Its own named stream: ambience is new, so every seed still draws exactly
+  // the sequence it drew before this existed (law 2, src/core/rng.js).
+  const ambience = planAmbience(cond, rng.stream('audio.ambience'));
+
   const tracks = { lead: [], harmony: [], arp: [], bass: [], drums: [] };
   const chordAt = b => chords[Math.min(chords.length - 1, b)];
 
@@ -696,8 +702,9 @@ export function composeSong(seed, opts = {}) {
     seed: String(seed), seconds, bpm, beatSec, barSec, secPerTick,
     ticksPerBar: TICKS_PER_BAR, totalBars,
     key: { tonicPc, tonic: PC_NAMES[tonicPc], mode },
-    voicing, kit, balance,
+    voicing, kit, balance, ambience,
     biome: cond ? cond.biome : null,
+    conditions: cond ? { time: cond.time, weather: cond.weather, biome: cond.biome } : null,
     ensemble: { name: ens.name, voices: ens.voices },
     form: { name: form.name, letters: form.letters },
     opening: { name: opening.name, bars: opening.bars, plan: opening.plan },
