@@ -290,10 +290,17 @@ export function paintHighland(stage) {
     return t <= 0 ? 0 : domeA * t * t;
   };
 
+  // AND THE HUMMOCKS GROW WITH THE DOME. A smooth cone terraces into concentric
+  // platforms with clean vertical faces, and a stepped pale mass with clean
+  // vertical faces is a building — three seeds came back with a summit that
+  // read as a modernist block. Doubling the mid-frequency term where the dome
+  // is highest breaks the summit terraces into crags without touching the
+  // benches on the flanks, which is where the landform wants to stay legible.
   const height = (x, y) => {
     const t = tiltAt(x, y);
-    return ladder(raw(x, y) + dome(x, y) + t) - t
-      + humA * (fbm(x * humF, y * humF, seedN + 421, 3) - 0.5) * 2;
+    const dm = dome(x, y);
+    return ladder(raw(x, y) + dm + t) - t
+      + humA * (1 + 1.5 * (dm / domeA)) * (fbm(x * humF, y * humF, seedN + 421, 3) - 0.5) * 2;
   };
 
   // ---- the world box.
@@ -718,7 +725,7 @@ export function paintHighland(stage) {
       const p = patch(u, v, 26, S1 + 11, 2);
       if (p === 2) return pk(TN(M_SCREE, reg, li));
       if (p === 1) return HT.r;
-      const hp = patch(u, v, 34, S1 + 71, 2);
+      const hp = patch(u, v, 38, S1 + 71, 1);
       if (hp === 2) return pk(TN(M_HEATHER, reg, li));
       if (hp === 1) return HT.d;
       const sp = patch(u, v, 13, S1 + 97, 2);
@@ -1286,7 +1293,7 @@ function pickSteading(T, F, pts, seen, TL0, st) {
 
 /** Three pylons on the skyline and the wire between them. */
 function cableLine(cv, iso, C, st, T, F, _i, W, H, S, tag, seen, TL0) {
-  const m = C.mk(C.metal._h + st.range(-12, 12), Math.min(0.22, C.metal._s * st.range(0.6, 1.8)),
+  const m = C.mk(C.metal._h + st.range(-12, 12), Math.min(0.11, C.metal._s * st.range(0.6, 1.8)),
     Math.min(0.80, C.metal._L * st.range(0.62, 0.94)));
   const cc = C.mk(C.orange._h + st.range(-10, 10), C.orange._s * st.range(0.7, 1.0),
     C.orange._L * st.range(0.8, 1.1));
