@@ -34,9 +34,43 @@
 // the representation cannot drift, because frame k is stored absolutely rather
 // than as a chain of deltas from frame 0.
 //
-// At 5% of the frame animated — which is roughly what the references do — that
-// is 22,000 px: 88 KB of offsets plus 352 KB of values for an eight-frame loop.
-// Two per cent of the RGBA cost, and about a third of one uncompressed frame.
+// THE CEILING IS SIZED OFF PRECIPITATION, BECAUSE THAT IS WHERE IT LIVES.
+//
+// This paragraph used to read "at 5% of the frame animated — which is roughly
+// what the references do — that is 22,000 px: 88 KB of offsets plus 352 KB of
+// values", i.e. 440 KB. That number was taken from the clear case and from the
+// references, and **it describes neither regime this generator actually emits.**
+//
+// Measured, 8 seeds x 8 conditions at 440x1000, K=8, digest-bracketed
+// (`6d5609f638f61333` before and after — a torn run is void, not a data point):
+//
+//   clear / fog / overcast    1,248-9,987 px   0.28-2.27%    24-195 KB
+//   rain                     12,824-24,423 px  2.91-5.55%   250-477 KB
+//   snow                     20,115-33,588 px  4.57-7.63%   393-656 KB
+//
+// **Snow is the worst case, not rain**, and the ceiling is 656 KB on a highland
+// seed at 7.63% of frame. Sizing off the clear case understates that by 3.4x.
+// The old 5% figure sits in the gap between the two regimes and describes
+// neither: no clear post comes close to it, and most precipitation posts exceed
+// it. A budget that no real post sits near is not a budget, it is an average of
+// two populations.
+//
+// **So a post must be sized for ~660 KB, not 440 KB.** Twelve posts resident is
+// ~7.9 MB of loop rather than ~5.3 MB — still small beside the ~8 MB of Float32
+// audio *per post*, which remains the thing that actually dominates the heap.
+// That comparison is the reason this is a note and not an alarm, and it is
+// stated in its own units on purpose: quoting a total-heap reading as though it
+// were a pixel budget is how this project has twice turned a number with
+// ambiguous units into a wrong decision.
+//
+// Two secondary results from the same run, both worth having:
+//   - **Time of day does not move this at all.** Day and night give byte-identical
+//     pixel counts in every one of the eight conditions; only precipitation moves
+//     it. Night changes what the moving pixels *are*, never which ones move.
+//   - **`loopBytes()` below was checked for over-reporting and does not.** It sums
+//     `byteLength`, and the arrays are trimmed to `n`, so its answer equals the
+//     used bytes exactly in all 64 posts. The suspicion was worth testing and the
+//     instrument is clean.
 //
 // THE INVARIANT THAT MAKES THIS SAFE: frame 0's values are exactly what the
 // base canvas already holds at those offsets. Playing frame 0 is therefore a
