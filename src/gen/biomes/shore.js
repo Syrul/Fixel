@@ -96,6 +96,15 @@ import { triPhase } from '../../core/frame.js';
  * eight frames realises 75-100% of that depending on where the stretch's own
  * offset lands, so the low end of the spread is a crest you cannot be sure
  * moved — which is the target.
+ *
+ * IT CANNOT USEFULLY GO LOWER, and that is a raster fact rather than taste.
+ * Measured with the swell running alone, six seeds, `animcheck`'s twinkle test:
+ * 0.0060 fails 6 of 6 (44-65% of moving pixels in 1-2px islands), 0.0090 fails
+ * 4 of 6 (13.6-45.5%), 0.0125 passes 6 of 6 (1.5-13.8%), 0.0180 is 1.8-6.6%,
+ * 0.0250 is 1.1-4.9%. Below about a pixel a band edge cannot move AS AN EDGE —
+ * only the pixels whose threshold happens to sit inside the displacement flip,
+ * and independent pixels flipping is the one thing this animation may not be.
+ * "Subtler" past that point does not buy subtlety, it buys twinkle.
  */
 export const SWELL_AMP = 0.0125;
 
@@ -105,12 +114,24 @@ export const SWELL_AMP = 0.0125;
  *
  * It shifts the exposure `foamAt` is evaluated at, and the swash term dominates
  * the gradient there (0.33 per world unit against the grain field's 0.02), so
- * the band edge moves by very nearly the shift itself: at 0.26 that is
- * **0.9-1.3 screen pixels peak to peak**. This is the strongest single thing in
+ * the band edge moves by very nearly the shift itself: at 0.40 that is
+ * **1.4-2.1 screen pixels peak to peak**. This is the strongest single thing in
  * the frame per pixel spent — a wave running up sand is the most legible motion
  * available and it is confined to one thin line.
+ *
+ * AND IT HAS A FLOOR, WHICH IS THE OPPOSITE OF WHAT "SLIGHTLY" SUGGESTS. The
+ * brief's target was one pixel and one pixel is 0.26. Measured with the foam
+ * running ALONE, six seeds: at 0.26, 18.8-41.0% of the moving pixels live in
+ * 1-2px islands and `animcheck` calls it a twinkle on 5 of 6 seeds; at 0.40 it
+ * is 2.9-13.9% and passes on all six; at 0.85 it is 0.0-0.4%. The mechanism is
+ * a raster fact, not a tuning one: a band edge displaced by less than a pixel
+ * cannot move as an edge, so only the pixels whose threshold happens to fall in
+ * the gap flip, and that is per-pixel noise by construction. 0.26 passes the
+ * gate only because the swell's coherent arcs dilute the ratio, which is
+ * exactly the kind of pass this repo has learned not to accept. 0.40 is the
+ * smallest value at which the foam stands on its own.
  */
-export const FOAM_AMP = 0.26;
+export const FOAM_AMP = 0.40;
 
 /**
  * WHERE A STRETCH OF SEA IS IN ITS BREATH, and this is the part that stops the
