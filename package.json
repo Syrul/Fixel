@@ -1,0 +1,15 @@
+{
+  "name": "fixel",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": {
+    "render": "node tools/render.mjs",
+    "metrics": "node tools/metrics.mjs",
+    "duel": "node tools/duel.mjs",
+    "dev": "vite --port 5177 --strictPort"
+  },
+  "devDependencies": {
+    "pngjs": "^7.0.0"
+  }
+}

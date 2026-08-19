@@ -1,0 +1,246 @@
+{
+  "version": 1,
+  "generated": "2026-08-19T11:08:50.442Z",
+  "method": "p05..p95 across corpus tracks; per-track value = median across 30 s windows",
+  "windowSeconds": 30,
+  "corpusSize": 38,
+  "tracks": [
+    "3xblast-pop-punk-1.wav",
+    "celestial-8bit-thing.wav",
+    "celestial-pulsar.wav",
+    "celestial-summer-sunday.wav",
+    "centurion-delayed-chips.wav",
+    "centurion-unstable-field.wav",
+    "congus-lasso-lady.wav",
+    "congus-napping-cloud.wav",
+    "hydrogene-mechanical-complex.wav",
+    "hydrogene-perilous-dungeon.wav",
+    "junkala-adv-bossfight.wav",
+    "junkala-adv-stage1.wav",
+    "junkala-level1.wav",
+    "junkala-level2.wav",
+    "junkala-level3.wav",
+    "junkala-title-screen.wav",
+    "nene-theme-song-8bit.wav",
+    "obscure-moon-chime.wav",
+    "pmiller-nes-jazz.wav",
+    "randommind-old-tower-inn.wav",
+    "sketchy-boss.wav",
+    "sketchy-mars.wav",
+    "sketchy-mercury.wav",
+    "sketchy-venus.wav",
+    "skrjablin-c64-uptempo.wav",
+    "springspring-great-boss.wav",
+    "tinyworlds-happy-adventure.wav",
+    "wolfgang-battle-loop.wav",
+    "wolfgang-haunted-house.wav",
+    "zane-100-victories.wav",
+    "zane-aura-horizon.wav",
+    "zane-dizzy-racing.wav",
+    "zane-face-the-facts.wav",
+    "zane-insect-factory.wav",
+    "zane-poker-night.wav",
+    "zane-sinister-abode.wav",
+    "zane-space-cadet.wav",
+    "zane-starlight-city.wav"
+  ],
+  "gating": {
+    "onsetRate": {
+      "lo": 4.584166666666667,
+      "hi": 9.590607328052588,
+      "median": 6.92132612533098,
+      "min": 0.8166666666666667,
+      "max": 10.516666666666666
+    },
+    "ioiEntropy": {
+      "lo": 0.9644905429616806,
+      "hi": 3.324043567082132,
+      "median": 2.3306852430188307,
+      "min": 0.40065033610009815,
+      "max": 3.71162177016031
+    },
+    "beatStrength": {
+      "lo": 0.28201330416528003,
+      "hi": 0.8155364773885967,
+      "median": 0.7012229792705112,
+      "min": 0.12240133032753728,
+      "max": 0.8372927998990168
+    },
+    "tempoBpm": {
+      "lo": 32.502948113207545,
+      "hi": 142.9484599345439,
+      "median": 59.43334847984137,
+      "min": 30.046329941860463,
+      "max": 224.6942934782609
+    },
+    "pitchClassEntropy": {
+      "lo": 2.7728266449406798,
+      "hi": 3.3009614164270054,
+      "median": 3.1192660817656845,
+      "min": 2.6372728998958843,
+      "max": 3.3707825444175032
+    },
+    "chromaChangeRate": {
+      "lo": 0.99,
+      "hi": 1.575914589442815,
+      "median": 1.3303158949477902,
+      "min": 0.8333333333333334,
+      "max": 1.601599247412982
+    },
+    "stepFrac": {
+      "lo": 0.17555419389978213,
+      "hi": 0.45834719224437503,
+      "median": 0.27136363636363636,
+      "min": 0.1111111111111111,
+      "max": 0.6376811594202898
+    },
+    "leapFrac": {
+      "lo": 0.2953518518518518,
+      "hi": 0.5519618708358072,
+      "median": 0.42025375939849624,
+      "min": 0.08407049537289059,
+      "max": 0.59
+    },
+    "bigLeapFrac": {
+      "lo": 0.06416564242524458,
+      "hi": 0.5023239164086687,
+      "median": 0.28717672413793105,
+      "min": 0.014492753623188406,
+      "max": 0.518440391943386
+    },
+    "repeatStrength": {
+      "lo": 0.15371644016535194,
+      "hi": 0.6415995933300204,
+      "median": 0.3207896726103797,
+      "min": 0.11652016309054591,
+      "max": 0.7818313422134155
+    },
+    "novelFraction": {
+      "lo": 0.5030033725275727,
+      "hi": 0.928883726633604,
+      "median": 0.8103486370432418,
+      "min": 0.3971119133574007,
+      "max": 0.9629647457496582
+    },
+    "spectralCentroidMean": {
+      "lo": 2201.51973040981,
+      "hi": 4670.695626462972,
+      "median": 3489.503974785419,
+      "min": 1284.8739432843709,
+      "max": 5427.580447566172
+    },
+    "spectralCentroidVar": {
+      "lo": 174595.8699685448,
+      "hi": 2296770.2118459065,
+      "median": 691800.9100108533,
+      "min": 127793.55151756211,
+      "max": 5884147.350146392
+    },
+    "spectralCentroidCV": {
+      "lo": 0.12463195376636287,
+      "hi": 0.5577915255893647,
+      "median": 0.21778239677167666,
+      "min": 0.10929041939498878,
+      "max": 0.9745252832041167
+    },
+    "polyphony": {
+      "lo": 2.950729182656807,
+      "hi": 4.92851768281637,
+      "median": 4.205517736340177,
+      "min": 2.859956236323851,
+      "max": 5.413636363636364
+    },
+    "silenceFraction": {
+      "lo": 0,
+      "hi": 0.12520492087068213,
+      "median": 0.0009689922480620155,
+      "min": 0,
+      "max": 0.17164179104477612
+    },
+    "noveltyPerSecond": {
+      "lo": 0.19364391299460432,
+      "hi": 0.3495166231798215,
+      "median": 0.2881524245136523,
+      "min": 0.17427952169514388,
+      "max": 0.3662109375
+    }
+  },
+  "nonGating": {
+    "peakDbfs": {
+      "lo": -5.523467343528266,
+      "hi": 0,
+      "median": -1.2151278788155897,
+      "min": -6.667556622046624,
+      "max": 0,
+      "note": "NON-GATING: a limiter plus a gain stage sets this to any value. Reported to prove the band is not a loudness band."
+    },
+    "rmsDbfs": {
+      "lo": -20.849972631960153,
+      "hi": -9.422066622537976,
+      "median": -15.677029167920896,
+      "min": -21.28382074492226,
+      "max": -9.027856697985285,
+      "note": "NON-GATING: a limiter plus a gain stage sets this to any value. Reported to prove the band is not a loudness band."
+    },
+    "crestFactorDb": {
+      "lo": 9.422066622537974,
+      "hi": 17.202660945492184,
+      "median": 14.276867402618219,
+      "min": 9.027856697985285,
+      "max": 18.16963693772241,
+      "note": "NON-GATING: a limiter plus a gain stage sets this to any value. Reported to prove the band is not a loudness band."
+    }
+  },
+  "acceptance": {
+    "rule": "PASS if the number of gating metrics outside their p05..p95 band is <= maxGatingFails",
+    "maxGatingFails": 5,
+    "gatingMetricCount": 17,
+    "leaveOneOut": {
+      "note": "each corpus track scored against a band built from the other tracks",
+      "failCounts": {
+        "3xblast-pop-punk-1.wav": 5,
+        "celestial-8bit-thing.wav": 5,
+        "celestial-pulsar.wav": 2,
+        "celestial-summer-sunday.wav": 7,
+        "centurion-delayed-chips.wav": 1,
+        "centurion-unstable-field.wav": 0,
+        "congus-lasso-lady.wav": 1,
+        "congus-napping-cloud.wav": 3,
+        "hydrogene-mechanical-complex.wav": 3,
+        "hydrogene-perilous-dungeon.wav": 1,
+        "junkala-adv-bossfight.wav": 2,
+        "junkala-adv-stage1.wav": 2,
+        "junkala-level1.wav": 3,
+        "junkala-level2.wav": 0,
+        "junkala-level3.wav": 3,
+        "junkala-title-screen.wav": 2,
+        "nene-theme-song-8bit.wav": 0,
+        "obscure-moon-chime.wav": 2,
+        "pmiller-nes-jazz.wav": 1,
+        "randommind-old-tower-inn.wav": 4,
+        "sketchy-boss.wav": 1,
+        "sketchy-mars.wav": 2,
+        "sketchy-mercury.wav": 1,
+        "sketchy-venus.wav": 4,
+        "skrjablin-c64-uptempo.wav": 1,
+        "springspring-great-boss.wav": 2,
+        "tinyworlds-happy-adventure.wav": 2,
+        "wolfgang-battle-loop.wav": 2,
+        "wolfgang-haunted-house.wav": 4,
+        "zane-100-victories.wav": 0,
+        "zane-aura-horizon.wav": 5,
+        "zane-dizzy-racing.wav": 2,
+        "zane-face-the-facts.wav": 3,
+        "zane-insect-factory.wav": 5,
+        "zane-poker-night.wav": 2,
+        "zane-sinister-abode.wav": 2,
+        "zane-space-cadet.wav": 0,
+        "zane-starlight-city.wav": 1
+      },
+      "mean": 2.263157894736842,
+      "median": 2,
+      "max": 7,
+      "acceptedAtThisBudget": 37
+    }
+  }
+}

@@ -1,0 +1,2406 @@
+{
+  "version": "budget-pixel-v2",
+  "forBand": "docs/band-pixel-v2.json",
+  "bandVersion": "pixel-v2",
+  "method": "Leave-one-out across the band's own crops. For each crop i the p05/p95 band is rebuilt from the other N-1 crops (identical widening rule, via metrics.mjs bandIntervals) and crop i is scored against it. The budget is p95 of the resulting fail-count distribution, rounded up. Mirrors the audio side (docs/BAR.md): an all-pass gate rejects genuine work.",
+  "sampling": {
+    "crops": 128,
+    "size": 320,
+    "seed": "fixel-band-v1",
+    "inset": 24,
+    "rng": "src/core/rng.js Rng(seed).stream(\"crops\")"
+  },
+  "source": "refs/EBY-LA-Hot-Dog-175k.png",
+  "gate": "hardFail",
+  "gateComment": "Score with tools/metrics.mjs --band <band> --budget <file.png>. ACCEPT when the number of HARD failures (out of band on the side the band file calls a real craft defect) is <= budget.hardFail. Advisory-side out-of-band readings are not defects and are not counted, exactly as in printScore. The gate reads the median-of-crops composite, which is what metrics.mjs --band already scores.",
+  "budget": {
+    "hardFail": 31,
+    "anyFail": 22,
+    "clusterFail": 15
+  },
+  "budgetDerivation": {
+    "looP95": 19.299999999999983,
+    "looBudget": 20,
+    "widenedToAcceptGenuineWork": 11,
+    "widenComment": "The leave-one-out p95 over crops of a single artwork is 20. That budget rejects genuine work in the same craft family (refs/C3L Lufthansa Frankfurt Pixorama 45k.png = 27), because crop-to-crop variation within one artwork is a strict subset of artwork-to-artwork variation and the LOO corpus contains exactly one artwork. Widened to the smallest integer that accepts every --accept file, and no further.",
+    "rejectMargin": 17,
+    "separatesAcceptFromReject": true
+  },
+  "validity": {
+    "usableAsFloorGate": true,
+    "usableAsScore": false,
+    "inversions": [
+      {
+        "generator": "out/look/r2check.png",
+        "beats": "refs/C3L Lufthansa Frankfurt Pixorama 45k.png",
+        "by": 8
+      }
+    ],
+    "comment": "RANKING INVERTED: a --generator file scores FEWER hard fails than genuine work in the same craft family. The count therefore measures proximity to this band's centre, not craft. Use the budget only to reject things outside the family; use the HARD-FAIL LIST, never the count, to say how good something is. This is BAR.md's \"weight the hard-fail list; never the pass count\" showing up as a measurement rather than as advice."
+  },
+  "looDistribution": {
+    "hardFail": {
+      "n": 128,
+      "min": 0,
+      "p25": 1,
+      "p50": 3,
+      "p75": 6,
+      "p90": 13.299999999999997,
+      "p95": 19.299999999999983,
+      "max": 40,
+      "mean": 5.40625
+    },
+    "anyFail": {
+      "n": 128,
+      "min": 0,
+      "p25": 1,
+      "p50": 4,
+      "p75": 8,
+      "p90": 14,
+      "p95": 21.299999999999983,
+      "max": 41,
+      "mean": 6.25
+    },
+    "clusterFail": {
+      "n": 128,
+      "min": 0,
+      "p25": 1,
+      "p50": 3,
+      "p75": 6,
+      "p90": 10.299999999999997,
+      "p95": 14.649999999999991,
+      "max": 30,
+      "mean": 4.3515625
+    }
+  },
+  "looAcceptance": {
+    "crops": 128,
+    "acceptedAtHardBudget": 125,
+    "acceptedAtClusterBudget": 123,
+    "clearingAllSixtyHard": 20,
+    "clearingAllSixtyIncludingAdvisory": 12
+  },
+  "calibration": [
+    {
+      "expect": "accept",
+      "file": "refs/C3L Lufthansa Frankfurt Pixorama 45k.png",
+      "size": {
+        "w": 476,
+        "h": 583
+      },
+      "gateValue": 31,
+      "compositeHardFail": 27,
+      "compositeAnyFail": 29,
+      "compositeClusterFail": 19,
+      "worst": [
+        {
+          "key": "tileRepeat.largestCluster",
+          "dist": 1.4999999999999998
+        },
+        {
+          "key": "slope.corrDx0Share",
+          "dist": 1.4758849902307005
+        },
+        {
+          "key": "slope.corr2v3",
+          "dist": 0.9539106053771481
+        },
+        {
+          "key": "outline.run1Share",
+          "dist": 0.6515425917771306
+        },
+        {
+          "key": "colorsPerTile.median16",
+          "dist": -0.5
+        }
+      ],
+      "perCropHard": {
+        "n": 128,
+        "min": 24,
+        "p25": 28,
+        "p50": 31,
+        "p75": 36,
+        "p90": 39,
+        "p95": 40,
+        "max": 41,
+        "mean": 32.0390625
+      },
+      "perCropCluster": {
+        "n": 128,
+        "min": 18,
+        "p25": 20,
+        "p50": 22,
+        "p75": 27,
+        "p90": 29,
+        "p95": 30,
+        "max": 31,
+        "mean": 23.265625
+      }
+    },
+    {
+      "expect": "reject",
+      "file": "refs/Shift-Bild-03.png",
+      "size": {
+        "w": 669,
+        "h": 859
+      },
+      "gateValue": 48,
+      "compositeHardFail": 47,
+      "compositeAnyFail": 51,
+      "compositeClusterFail": 37,
+      "worst": [
+        {
+          "key": "tileRepeat.largestCluster",
+          "dist": 98.125
+        },
+        {
+          "key": "tileRepeat.pMaxCluster",
+          "dist": 11.920837124658783
+        },
+        {
+          "key": "tileRepeat.fracNonUnique",
+          "dist": 11.318181818181818
+        },
+        {
+          "key": "runLen.p99",
+          "dist": 11.026143790849687
+        },
+        {
+          "key": "palette.top1Share",
+          "dist": 9.214121652106149
+        }
+      ],
+      "perCropHard": {
+        "n": 128,
+        "min": 46,
+        "p25": 47,
+        "p50": 48,
+        "p75": 49,
+        "p90": 49,
+        "p95": 49.64999999999999,
+        "max": 52,
+        "mean": 47.9375
+      },
+      "perCropCluster": {
+        "n": 128,
+        "min": 36,
+        "p25": 37,
+        "p50": 38,
+        "p75": 38,
+        "p90": 39,
+        "p95": 39,
+        "max": 41,
+        "mean": 37.6484375
+      }
+    },
+    {
+      "expect": "generator",
+      "file": "out/look/r2check.png",
+      "size": {
+        "w": 1600,
+        "h": 1100
+      },
+      "gateValue": 23,
+      "compositeHardFail": 21,
+      "compositeAnyFail": 23,
+      "compositeClusterFail": 18,
+      "worst": [
+        {
+          "key": "edge.fracAA",
+          "dist": 1.55728037232723
+        },
+        {
+          "key": "tileRepeat.largestCluster",
+          "dist": 1.25
+        },
+        {
+          "key": "outline.run1Share",
+          "dist": -1.1905777588114146
+        },
+        {
+          "key": "outline.blackMediatedSame",
+          "dist": -0.7107471242582873
+        },
+        {
+          "key": "slope.corrDx0Share",
+          "dist": 0.6336980403930438
+        }
+      ],
+      "perCropHard": {
+        "n": 128,
+        "min": 17,
+        "p25": 21,
+        "p50": 23,
+        "p75": 25,
+        "p90": 26.299999999999997,
+        "p95": 30.64999999999999,
+        "max": 33,
+        "mean": 23.2578125
+      },
+      "perCropCluster": {
+        "n": 128,
+        "min": 14,
+        "p25": 18,
+        "p50": 20,
+        "p75": 21,
+        "p90": 22.299999999999997,
+        "p95": 24,
+        "max": 26,
+        "mean": 19.53125
+      }
+    }
+  ],
+  "correlation": {
+    "linkageThreshold": 0.95,
+    "duplicateThreshold": 0.99,
+    "clusterCount": 49,
+    "clusters": [
+      {
+        "id": 0,
+        "size": 7,
+        "members": [
+          "changeRate.h",
+          "changeRate.v",
+          "changeRate.combined",
+          "runLen.mean",
+          "runLen.fracGt8",
+          "vGrad.rowMean",
+          "vGrad.colMean"
+        ]
+      },
+      {
+        "id": 1,
+        "size": 5,
+        "members": [
+          "colorsPerTile.mean16",
+          "colorsPerTile.mean32",
+          "palette.distinct",
+          "palette.n90",
+          "palette.n99"
+        ]
+      },
+      {
+        "id": 2,
+        "size": 2,
+        "members": [
+          "slope.r1",
+          "slope.r2"
+        ]
+      },
+      {
+        "id": 3,
+        "size": 1,
+        "members": [
+          "runLen.median"
+        ]
+      },
+      {
+        "id": 4,
+        "size": 1,
+        "members": [
+          "runLen.p90"
+        ]
+      },
+      {
+        "id": 5,
+        "size": 1,
+        "members": [
+          "runLen.p99"
+        ]
+      },
+      {
+        "id": 6,
+        "size": 1,
+        "members": [
+          "runLen.fracGt16"
+        ]
+      },
+      {
+        "id": 7,
+        "size": 1,
+        "members": [
+          "colorsPerTile.median16"
+        ]
+      },
+      {
+        "id": 8,
+        "size": 1,
+        "members": [
+          "colorsPerTile.median32"
+        ]
+      },
+      {
+        "id": 9,
+        "size": 1,
+        "members": [
+          "palette.n50"
+        ]
+      },
+      {
+        "id": 10,
+        "size": 1,
+        "members": [
+          "palette.top1Share"
+        ]
+      },
+      {
+        "id": 11,
+        "size": 1,
+        "members": [
+          "hue.buckets1pct"
+        ]
+      },
+      {
+        "id": 12,
+        "size": 1,
+        "members": [
+          "hue.meanSat"
+        ]
+      },
+      {
+        "id": 13,
+        "size": 1,
+        "members": [
+          "hue.fracNearGrey"
+        ]
+      },
+      {
+        "id": 14,
+        "size": 1,
+        "members": [
+          "edge.fracLowContrast"
+        ]
+      },
+      {
+        "id": 15,
+        "size": 1,
+        "members": [
+          "edge.fracAA"
+        ]
+      },
+      {
+        "id": 16,
+        "size": 1,
+        "members": [
+          "edge.fracHard"
+        ]
+      },
+      {
+        "id": 17,
+        "size": 1,
+        "members": [
+          "edge.meanDelta"
+        ]
+      },
+      {
+        "id": 18,
+        "size": 1,
+        "members": [
+          "tileRepeat.fracNonUnique"
+        ]
+      },
+      {
+        "id": 19,
+        "size": 1,
+        "members": [
+          "tileRepeat.largestCluster"
+        ]
+      },
+      {
+        "id": 20,
+        "size": 1,
+        "members": [
+          "flat.frac3x3"
+        ]
+      },
+      {
+        "id": 21,
+        "size": 1,
+        "members": [
+          "flat.largestRegion"
+        ]
+      },
+      {
+        "id": 22,
+        "size": 1,
+        "members": [
+          "vGrad.rowMin64"
+        ]
+      },
+      {
+        "id": 23,
+        "size": 1,
+        "members": [
+          "vGrad.rowMin64Ratio"
+        ]
+      },
+      {
+        "id": 24,
+        "size": 1,
+        "members": [
+          "vGrad.colMin64"
+        ]
+      },
+      {
+        "id": 25,
+        "size": 1,
+        "members": [
+          "vGrad.colMin64Ratio"
+        ]
+      },
+      {
+        "id": 26,
+        "size": 1,
+        "members": [
+          "slope.r3"
+        ]
+      },
+      {
+        "id": 27,
+        "size": 1,
+        "members": [
+          "slope.r4"
+        ]
+      },
+      {
+        "id": 28,
+        "size": 1,
+        "members": [
+          "slope.r5plus"
+        ]
+      },
+      {
+        "id": 29,
+        "size": 1,
+        "members": [
+          "slope.corr2v1"
+        ]
+      },
+      {
+        "id": 30,
+        "size": 1,
+        "members": [
+          "slope.corr2v3"
+        ]
+      },
+      {
+        "id": 31,
+        "size": 1,
+        "members": [
+          "slope.corrDx0Share"
+        ]
+      },
+      {
+        "id": 32,
+        "size": 1,
+        "members": [
+          "flat.frac5x5"
+        ]
+      },
+      {
+        "id": 33,
+        "size": 1,
+        "members": [
+          "dither.rate"
+        ]
+      },
+      {
+        "id": 34,
+        "size": 1,
+        "members": [
+          "outline.darkShare"
+        ]
+      },
+      {
+        "id": 35,
+        "size": 1,
+        "members": [
+          "outline.run1Share"
+        ]
+      },
+      {
+        "id": 36,
+        "size": 1,
+        "members": [
+          "outline.run12Share"
+        ]
+      },
+      {
+        "id": 37,
+        "size": 1,
+        "members": [
+          "outline.run12PixShare"
+        ]
+      },
+      {
+        "id": 38,
+        "size": 1,
+        "members": [
+          "outline.blackMediatedDiff"
+        ]
+      },
+      {
+        "id": 39,
+        "size": 1,
+        "members": [
+          "outline.blackMediatedSame"
+        ]
+      },
+      {
+        "id": 40,
+        "size": 1,
+        "members": [
+          "outline.mediationGap"
+        ]
+      },
+      {
+        "id": 41,
+        "size": 1,
+        "members": [
+          "shade.lumaRatioMedian"
+        ]
+      },
+      {
+        "id": 42,
+        "size": 1,
+        "members": [
+          "shade.lumaRatioP25"
+        ]
+      },
+      {
+        "id": 43,
+        "size": 1,
+        "members": [
+          "shade.lumaRatioP75"
+        ]
+      },
+      {
+        "id": 44,
+        "size": 1,
+        "members": [
+          "shade.hueRotMedian"
+        ]
+      },
+      {
+        "id": 45,
+        "size": 1,
+        "members": [
+          "shade.hueRotAbsMedian"
+        ]
+      },
+      {
+        "id": 46,
+        "size": 1,
+        "members": [
+          "shade.sampleShare"
+        ]
+      },
+      {
+        "id": 47,
+        "size": 1,
+        "members": [
+          "tileRepeat.pNearDupFrac"
+        ]
+      },
+      {
+        "id": 48,
+        "size": 1,
+        "members": [
+          "tileRepeat.pMaxCluster"
+        ]
+      }
+    ],
+    "duplicatePairs": [
+      {
+        "a": "changeRate.combined",
+        "b": "vGrad.rowMean",
+        "r": 0.999995351027843,
+        "spearman": 0.9999370536531771
+      },
+      {
+        "a": "changeRate.combined",
+        "b": "vGrad.colMean",
+        "r": 0.9999890970226812,
+        "spearman": 0.9999027192821828
+      },
+      {
+        "a": "vGrad.rowMean",
+        "b": "vGrad.colMean",
+        "r": 0.999983188465119,
+        "spearman": 0.999896996887017
+      },
+      {
+        "a": "changeRate.h",
+        "b": "runLen.mean",
+        "r": -0.9969985411483606,
+        "spearman": -1
+      },
+      {
+        "a": "colorsPerTile.mean16",
+        "b": "colorsPerTile.mean32",
+        "r": 0.9912138429220897,
+        "spearman": 0.9891915014409277
+      }
+    ]
+  },
+  "perMetricLooFails": {
+    "changeRate.h": {
+      "hard": 15,
+      "any": 15
+    },
+    "changeRate.v": {
+      "hard": 14,
+      "any": 14
+    },
+    "changeRate.combined": {
+      "hard": 15,
+      "any": 15
+    },
+    "runLen.mean": {
+      "hard": 15,
+      "any": 15
+    },
+    "runLen.median": {
+      "hard": 1,
+      "any": 1
+    },
+    "runLen.p90": {
+      "hard": 8,
+      "any": 8
+    },
+    "runLen.p99": {
+      "hard": 13,
+      "any": 13
+    },
+    "runLen.fracGt8": {
+      "hard": 15,
+      "any": 15
+    },
+    "runLen.fracGt16": {
+      "hard": 14,
+      "any": 14
+    },
+    "colorsPerTile.mean16": {
+      "hard": 14,
+      "any": 14
+    },
+    "colorsPerTile.median16": {
+      "hard": 7,
+      "any": 7
+    },
+    "colorsPerTile.mean32": {
+      "hard": 14,
+      "any": 14
+    },
+    "colorsPerTile.median32": {
+      "hard": 13,
+      "any": 13
+    },
+    "palette.distinct": {
+      "hard": 15,
+      "any": 15
+    },
+    "palette.n50": {
+      "hard": 8,
+      "any": 8
+    },
+    "palette.n90": {
+      "hard": 12,
+      "any": 12
+    },
+    "palette.n99": {
+      "hard": 14,
+      "any": 14
+    },
+    "palette.top1Share": {
+      "hard": 7,
+      "any": 15
+    },
+    "hue.buckets1pct": {
+      "hard": 5,
+      "any": 5
+    },
+    "hue.meanSat": {
+      "hard": 14,
+      "any": 14
+    },
+    "hue.fracNearGrey": {
+      "hard": 14,
+      "any": 14
+    },
+    "edge.fracLowContrast": {
+      "hard": 15,
+      "any": 15
+    },
+    "edge.fracAA": {
+      "hard": 8,
+      "any": 16
+    },
+    "edge.fracHard": {
+      "hard": 14,
+      "any": 14
+    },
+    "edge.meanDelta": {
+      "hard": 14,
+      "any": 14
+    },
+    "tileRepeat.fracNonUnique": {
+      "hard": 8,
+      "any": 16
+    },
+    "tileRepeat.largestCluster": {
+      "hard": 5,
+      "any": 13
+    },
+    "flat.frac3x3": {
+      "hard": 15,
+      "any": 15
+    },
+    "flat.largestRegion": {
+      "hard": 2,
+      "any": 5
+    },
+    "vGrad.rowMean": {
+      "hard": 15,
+      "any": 15
+    },
+    "vGrad.rowMin64": {
+      "hard": 7,
+      "any": 14
+    },
+    "vGrad.rowMin64Ratio": {
+      "hard": 7,
+      "any": 15
+    },
+    "vGrad.colMean": {
+      "hard": 16,
+      "any": 16
+    },
+    "vGrad.colMin64": {
+      "hard": 7,
+      "any": 14
+    },
+    "vGrad.colMin64Ratio": {
+      "hard": 7,
+      "any": 14
+    },
+    "slope.r1": {
+      "hard": 15,
+      "any": 15
+    },
+    "slope.r2": {
+      "hard": 15,
+      "any": 15
+    },
+    "slope.r3": {
+      "hard": 15,
+      "any": 15
+    },
+    "slope.r4": {
+      "hard": 15,
+      "any": 15
+    },
+    "slope.r5plus": {
+      "hard": 8,
+      "any": 16
+    },
+    "slope.corr2v1": {
+      "hard": 14,
+      "any": 14
+    },
+    "slope.corr2v3": {
+      "hard": 14,
+      "any": 14
+    },
+    "slope.corrDx0Share": {
+      "hard": 16,
+      "any": 16
+    },
+    "flat.frac5x5": {
+      "hard": 14,
+      "any": 14
+    },
+    "dither.rate": {
+      "hard": 7,
+      "any": 14
+    },
+    "outline.darkShare": {
+      "hard": 15,
+      "any": 15
+    },
+    "outline.run1Share": {
+      "hard": 14,
+      "any": 14
+    },
+    "outline.run12Share": {
+      "hard": 7,
+      "any": 14
+    },
+    "outline.run12PixShare": {
+      "hard": 8,
+      "any": 16
+    },
+    "outline.blackMediatedDiff": {
+      "hard": 15,
+      "any": 15
+    },
+    "outline.blackMediatedSame": {
+      "hard": 15,
+      "any": 15
+    },
+    "outline.mediationGap": {
+      "hard": 14,
+      "any": 14
+    },
+    "shade.lumaRatioMedian": {
+      "hard": 11,
+      "any": 11
+    },
+    "shade.lumaRatioP25": {
+      "hard": 10,
+      "any": 10
+    },
+    "shade.lumaRatioP75": {
+      "hard": 16,
+      "any": 16
+    },
+    "shade.hueRotMedian": {
+      "hard": 12,
+      "any": 12
+    },
+    "shade.hueRotAbsMedian": {
+      "hard": 7,
+      "any": 10
+    },
+    "shade.sampleShare": {
+      "hard": 14,
+      "any": 14
+    },
+    "tileRepeat.pNearDupFrac": {
+      "hard": 7,
+      "any": 14
+    },
+    "tileRepeat.pMaxCluster": {
+      "hard": 7,
+      "any": 11
+    }
+  },
+  "perCrop": [
+    {
+      "i": 0,
+      "x": 716,
+      "y": 121,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "slope.r1"
+      ]
+    },
+    {
+      "i": 1,
+      "x": 356,
+      "y": 224,
+      "anyFail": 3,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "edge.meanDelta"
+      ]
+    },
+    {
+      "i": 2,
+      "x": 696,
+      "y": 201,
+      "anyFail": 0,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 3,
+      "x": 643,
+      "y": 260,
+      "anyFail": 0,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 4,
+      "x": 472,
+      "y": 391,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "hue.meanSat"
+      ]
+    },
+    {
+      "i": 5,
+      "x": 416,
+      "y": 186,
+      "anyFail": 1,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 6,
+      "x": 364,
+      "y": 373,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "slope.r4"
+      ]
+    },
+    {
+      "i": 7,
+      "x": 185,
+      "y": 61,
+      "anyFail": 0,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 8,
+      "x": 781,
+      "y": 458,
+      "anyFail": 31,
+      "hardFail": 29,
+      "clusterFail": 22,
+      "worst": [
+        "slope.r1",
+        "colorsPerTile.median16",
+        "outline.blackMediatedDiff"
+      ]
+    },
+    {
+      "i": 9,
+      "x": 409,
+      "y": 246,
+      "anyFail": 2,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 10,
+      "x": 819,
+      "y": 429,
+      "anyFail": 38,
+      "hardFail": 37,
+      "clusterFail": 26,
+      "worst": [
+        "slope.r1",
+        "shade.hueRotMedian",
+        "slope.r2"
+      ]
+    },
+    {
+      "i": 11,
+      "x": 418,
+      "y": 214,
+      "anyFail": 4,
+      "hardFail": 3,
+      "clusterFail": 3,
+      "worst": [
+        "shade.sampleShare",
+        "shade.lumaRatioP75",
+        "outline.blackMediatedSame"
+      ]
+    },
+    {
+      "i": 12,
+      "x": 550,
+      "y": 185,
+      "anyFail": 2,
+      "hardFail": 2,
+      "clusterFail": 2,
+      "worst": [
+        "hue.buckets1pct",
+        "outline.blackMediatedDiff"
+      ]
+    },
+    {
+      "i": 13,
+      "x": 88,
+      "y": 211,
+      "anyFail": 4,
+      "hardFail": 4,
+      "clusterFail": 4,
+      "worst": [
+        "slope.corr2v3",
+        "outline.run12Share",
+        "slope.corr2v1"
+      ]
+    },
+    {
+      "i": 14,
+      "x": 701,
+      "y": 115,
+      "anyFail": 0,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 15,
+      "x": 783,
+      "y": 110,
+      "anyFail": 4,
+      "hardFail": 4,
+      "clusterFail": 4,
+      "worst": [
+        "slope.r3",
+        "edge.meanDelta",
+        "runLen.fracGt16"
+      ]
+    },
+    {
+      "i": 16,
+      "x": 35,
+      "y": 426,
+      "anyFail": 6,
+      "hardFail": 5,
+      "clusterFail": 5,
+      "worst": [
+        "outline.mediationGap",
+        "outline.blackMediatedSame",
+        "slope.r4"
+      ]
+    },
+    {
+      "i": 17,
+      "x": 479,
+      "y": 336,
+      "anyFail": 0,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 18,
+      "x": 690,
+      "y": 387,
+      "anyFail": 11,
+      "hardFail": 11,
+      "clusterFail": 10,
+      "worst": [
+        "vGrad.colMin64Ratio",
+        "vGrad.colMin64",
+        "tileRepeat.fracNonUnique"
+      ]
+    },
+    {
+      "i": 19,
+      "x": 280,
+      "y": 120,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "outline.mediationGap"
+      ]
+    },
+    {
+      "i": 20,
+      "x": 844,
+      "y": 429,
+      "anyFail": 41,
+      "hardFail": 40,
+      "clusterFail": 30,
+      "worst": [
+        "slope.r1",
+        "shade.hueRotMedian",
+        "slope.r2"
+      ]
+    },
+    {
+      "i": 21,
+      "x": 112,
+      "y": 38,
+      "anyFail": 6,
+      "hardFail": 4,
+      "clusterFail": 3,
+      "worst": [
+        "hue.buckets1pct",
+        "slope.r2",
+        "slope.r1"
+      ]
+    },
+    {
+      "i": 22,
+      "x": 491,
+      "y": 76,
+      "anyFail": 9,
+      "hardFail": 9,
+      "clusterFail": 8,
+      "worst": [
+        "edge.fracLowContrast",
+        "slope.r5plus",
+        "edge.fracHard"
+      ]
+    },
+    {
+      "i": 23,
+      "x": 303,
+      "y": 409,
+      "anyFail": 0,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 24,
+      "x": 105,
+      "y": 35,
+      "anyFail": 5,
+      "hardFail": 2,
+      "clusterFail": 2,
+      "worst": [
+        "slope.r2",
+        "edge.fracAA"
+      ]
+    },
+    {
+      "i": 25,
+      "x": 161,
+      "y": 454,
+      "anyFail": 13,
+      "hardFail": 10,
+      "clusterFail": 10,
+      "worst": [
+        "shade.lumaRatioP25",
+        "hue.fracNearGrey",
+        "slope.corrDx0Share"
+      ]
+    },
+    {
+      "i": 26,
+      "x": 455,
+      "y": 291,
+      "anyFail": 2,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "outline.run1Share"
+      ]
+    },
+    {
+      "i": 27,
+      "x": 668,
+      "y": 76,
+      "anyFail": 14,
+      "hardFail": 13,
+      "clusterFail": 6,
+      "worst": [
+        "palette.n99",
+        "palette.n90",
+        "palette.distinct"
+      ]
+    },
+    {
+      "i": 28,
+      "x": 56,
+      "y": 289,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "shade.hueRotMedian"
+      ]
+    },
+    {
+      "i": 29,
+      "x": 659,
+      "y": 75,
+      "anyFail": 14,
+      "hardFail": 12,
+      "clusterFail": 5,
+      "worst": [
+        "palette.n99",
+        "palette.n90",
+        "palette.distinct"
+      ]
+    },
+    {
+      "i": 30,
+      "x": 72,
+      "y": 100,
+      "anyFail": 6,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "hue.fracNearGrey"
+      ]
+    },
+    {
+      "i": 31,
+      "x": 162,
+      "y": 271,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "shade.sampleShare"
+      ]
+    },
+    {
+      "i": 32,
+      "x": 665,
+      "y": 231,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "outline.blackMediatedSame"
+      ]
+    },
+    {
+      "i": 33,
+      "x": 107,
+      "y": 309,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "shade.hueRotMedian"
+      ]
+    },
+    {
+      "i": 34,
+      "x": 787,
+      "y": 225,
+      "anyFail": 6,
+      "hardFail": 6,
+      "clusterFail": 6,
+      "worst": [
+        "tileRepeat.pMaxCluster",
+        "runLen.p99",
+        "vGrad.rowMin64"
+      ]
+    },
+    {
+      "i": 35,
+      "x": 286,
+      "y": 387,
+      "anyFail": 3,
+      "hardFail": 2,
+      "clusterFail": 2,
+      "worst": [
+        "slope.r3",
+        "outline.mediationGap"
+      ]
+    },
+    {
+      "i": 36,
+      "x": 165,
+      "y": 224,
+      "anyFail": 2,
+      "hardFail": 2,
+      "clusterFail": 2,
+      "worst": [
+        "slope.corr2v3",
+        "shade.sampleShare"
+      ]
+    },
+    {
+      "i": 37,
+      "x": 270,
+      "y": 218,
+      "anyFail": 3,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "edge.meanDelta"
+      ]
+    },
+    {
+      "i": 38,
+      "x": 37,
+      "y": 24,
+      "anyFail": 16,
+      "hardFail": 13,
+      "clusterFail": 12,
+      "worst": [
+        "outline.blackMediatedSame",
+        "outline.run12Share",
+        "outline.darkShare"
+      ]
+    },
+    {
+      "i": 39,
+      "x": 319,
+      "y": 424,
+      "anyFail": 1,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 40,
+      "x": 289,
+      "y": 350,
+      "anyFail": 3,
+      "hardFail": 2,
+      "clusterFail": 2,
+      "worst": [
+        "slope.r4",
+        "slope.r3"
+      ]
+    },
+    {
+      "i": 41,
+      "x": 561,
+      "y": 27,
+      "anyFail": 22,
+      "hardFail": 20,
+      "clusterFail": 14,
+      "worst": [
+        "runLen.p90",
+        "colorsPerTile.median16",
+        "outline.darkShare"
+      ]
+    },
+    {
+      "i": 42,
+      "x": 251,
+      "y": 264,
+      "anyFail": 8,
+      "hardFail": 5,
+      "clusterFail": 3,
+      "worst": [
+        "runLen.mean",
+        "palette.n90",
+        "changeRate.h"
+      ]
+    },
+    {
+      "i": 43,
+      "x": 325,
+      "y": 408,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "slope.corr2v1"
+      ]
+    },
+    {
+      "i": 44,
+      "x": 56,
+      "y": 343,
+      "anyFail": 0,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 45,
+      "x": 479,
+      "y": 400,
+      "anyFail": 3,
+      "hardFail": 2,
+      "clusterFail": 2,
+      "worst": [
+        "shade.sampleShare",
+        "hue.meanSat"
+      ]
+    },
+    {
+      "i": 46,
+      "x": 473,
+      "y": 78,
+      "anyFail": 11,
+      "hardFail": 11,
+      "clusterFail": 8,
+      "worst": [
+        "edge.fracLowContrast",
+        "slope.corrDx0Share",
+        "edge.fracHard"
+      ]
+    },
+    {
+      "i": 47,
+      "x": 219,
+      "y": 208,
+      "anyFail": 3,
+      "hardFail": 3,
+      "clusterFail": 3,
+      "worst": [
+        "slope.corr2v3",
+        "outline.run1Share",
+        "shade.sampleShare"
+      ]
+    },
+    {
+      "i": 48,
+      "x": 411,
+      "y": 132,
+      "anyFail": 0,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 49,
+      "x": 796,
+      "y": 29,
+      "anyFail": 7,
+      "hardFail": 7,
+      "clusterFail": 7,
+      "worst": [
+        "flat.largestRegion",
+        "slope.r3",
+        "runLen.p99"
+      ]
+    },
+    {
+      "i": 50,
+      "x": 353,
+      "y": 54,
+      "anyFail": 2,
+      "hardFail": 2,
+      "clusterFail": 2,
+      "worst": [
+        "shade.hueRotAbsMedian",
+        "vGrad.rowMin64Ratio"
+      ]
+    },
+    {
+      "i": 51,
+      "x": 82,
+      "y": 75,
+      "anyFail": 10,
+      "hardFail": 6,
+      "clusterFail": 6,
+      "worst": [
+        "colorsPerTile.median32",
+        "palette.n50",
+        "palette.n90"
+      ]
+    },
+    {
+      "i": 52,
+      "x": 203,
+      "y": 438,
+      "anyFail": 6,
+      "hardFail": 3,
+      "clusterFail": 3,
+      "worst": [
+        "hue.fracNearGrey",
+        "shade.lumaRatioP25",
+        "shade.lumaRatioMedian"
+      ]
+    },
+    {
+      "i": 53,
+      "x": 425,
+      "y": 325,
+      "anyFail": 6,
+      "hardFail": 5,
+      "clusterFail": 3,
+      "worst": [
+        "runLen.p90",
+        "outline.run1Share",
+        "runLen.fracGt8"
+      ]
+    },
+    {
+      "i": 54,
+      "x": 90,
+      "y": 102,
+      "anyFail": 6,
+      "hardFail": 3,
+      "clusterFail": 3,
+      "worst": [
+        "colorsPerTile.median32",
+        "flat.frac5x5",
+        "edge.fracAA"
+      ]
+    },
+    {
+      "i": 55,
+      "x": 138,
+      "y": 87,
+      "anyFail": 4,
+      "hardFail": 4,
+      "clusterFail": 3,
+      "worst": [
+        "hue.meanSat",
+        "hue.fracNearGrey",
+        "slope.r2"
+      ]
+    },
+    {
+      "i": 56,
+      "x": 120,
+      "y": 493,
+      "anyFail": 17,
+      "hardFail": 15,
+      "clusterFail": 15,
+      "worst": [
+        "shade.hueRotMedian",
+        "slope.r4",
+        "shade.sampleShare"
+      ]
+    },
+    {
+      "i": 57,
+      "x": 698,
+      "y": 284,
+      "anyFail": 2,
+      "hardFail": 2,
+      "clusterFail": 2,
+      "worst": [
+        "vGrad.colMin64Ratio",
+        "shade.lumaRatioP75"
+      ]
+    },
+    {
+      "i": 58,
+      "x": 688,
+      "y": 84,
+      "anyFail": 6,
+      "hardFail": 6,
+      "clusterFail": 4,
+      "worst": [
+        "slope.r3",
+        "palette.n99",
+        "slope.corrDx0Share"
+      ]
+    },
+    {
+      "i": 59,
+      "x": 440,
+      "y": 305,
+      "anyFail": 3,
+      "hardFail": 2,
+      "clusterFail": 2,
+      "worst": [
+        "outline.run1Share",
+        "outline.mediationGap"
+      ]
+    },
+    {
+      "i": 60,
+      "x": 221,
+      "y": 212,
+      "anyFail": 3,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "slope.corr2v3"
+      ]
+    },
+    {
+      "i": 61,
+      "x": 814,
+      "y": 65,
+      "anyFail": 5,
+      "hardFail": 5,
+      "clusterFail": 5,
+      "worst": [
+        "slope.r3",
+        "flat.largestRegion",
+        "runLen.fracGt16"
+      ]
+    },
+    {
+      "i": 62,
+      "x": 591,
+      "y": 271,
+      "anyFail": 6,
+      "hardFail": 6,
+      "clusterFail": 5,
+      "worst": [
+        "runLen.fracGt16",
+        "runLen.fracGt8",
+        "runLen.p99"
+      ]
+    },
+    {
+      "i": 63,
+      "x": 280,
+      "y": 280,
+      "anyFail": 4,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "slope.r3"
+      ]
+    },
+    {
+      "i": 64,
+      "x": 829,
+      "y": 106,
+      "anyFail": 6,
+      "hardFail": 6,
+      "clusterFail": 6,
+      "worst": [
+        "runLen.p99",
+        "colorsPerTile.median32",
+        "runLen.fracGt16"
+      ]
+    },
+    {
+      "i": 65,
+      "x": 427,
+      "y": 87,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "edge.fracLowContrast"
+      ]
+    },
+    {
+      "i": 66,
+      "x": 842,
+      "y": 113,
+      "anyFail": 6,
+      "hardFail": 6,
+      "clusterFail": 6,
+      "worst": [
+        "tileRepeat.pMaxCluster",
+        "slope.r4",
+        "runLen.p99"
+      ]
+    },
+    {
+      "i": 67,
+      "x": 93,
+      "y": 85,
+      "anyFail": 9,
+      "hardFail": 6,
+      "clusterFail": 5,
+      "worst": [
+        "palette.n90",
+        "slope.r2",
+        "edge.fracAA"
+      ]
+    },
+    {
+      "i": 68,
+      "x": 277,
+      "y": 476,
+      "anyFail": 9,
+      "hardFail": 7,
+      "clusterFail": 7,
+      "worst": [
+        "slope.corr2v1",
+        "dither.rate",
+        "slope.r4"
+      ]
+    },
+    {
+      "i": 69,
+      "x": 492,
+      "y": 154,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "slope.r3"
+      ]
+    },
+    {
+      "i": 70,
+      "x": 634,
+      "y": 175,
+      "anyFail": 7,
+      "hardFail": 6,
+      "clusterFail": 6,
+      "worst": [
+        "palette.n50",
+        "runLen.p99",
+        "runLen.fracGt8"
+      ]
+    },
+    {
+      "i": 71,
+      "x": 778,
+      "y": 245,
+      "anyFail": 16,
+      "hardFail": 16,
+      "clusterFail": 11,
+      "worst": [
+        "tileRepeat.pMaxCluster",
+        "shade.lumaRatioMedian",
+        "vGrad.rowMin64"
+      ]
+    },
+    {
+      "i": 72,
+      "x": 694,
+      "y": 385,
+      "anyFail": 14,
+      "hardFail": 14,
+      "clusterFail": 10,
+      "worst": [
+        "vGrad.colMin64Ratio",
+        "vGrad.colMin64",
+        "tileRepeat.pNearDupFrac"
+      ]
+    },
+    {
+      "i": 73,
+      "x": 83,
+      "y": 117,
+      "anyFail": 5,
+      "hardFail": 3,
+      "clusterFail": 3,
+      "worst": [
+        "edge.fracAA",
+        "flat.frac5x5",
+        "runLen.fracGt8"
+      ]
+    },
+    {
+      "i": 74,
+      "x": 513,
+      "y": 338,
+      "anyFail": 1,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 75,
+      "x": 521,
+      "y": 39,
+      "anyFail": 11,
+      "hardFail": 11,
+      "clusterFail": 8,
+      "worst": [
+        "outline.darkShare",
+        "hue.buckets1pct",
+        "slope.r5plus"
+      ]
+    },
+    {
+      "i": 76,
+      "x": 753,
+      "y": 267,
+      "anyFail": 13,
+      "hardFail": 13,
+      "clusterFail": 7,
+      "worst": [
+        "tileRepeat.pMaxCluster",
+        "runLen.fracGt8",
+        "flat.frac5x5"
+      ]
+    },
+    {
+      "i": 77,
+      "x": 480,
+      "y": 432,
+      "anyFail": 2,
+      "hardFail": 2,
+      "clusterFail": 2,
+      "worst": [
+        "shade.sampleShare",
+        "hue.meanSat"
+      ]
+    },
+    {
+      "i": 78,
+      "x": 602,
+      "y": 57,
+      "anyFail": 20,
+      "hardFail": 18,
+      "clusterFail": 11,
+      "worst": [
+        "runLen.median",
+        "runLen.p90",
+        "outline.darkShare"
+      ]
+    },
+    {
+      "i": 79,
+      "x": 827,
+      "y": 470,
+      "anyFail": 36,
+      "hardFail": 35,
+      "clusterFail": 24,
+      "worst": [
+        "shade.hueRotMedian",
+        "changeRate.v",
+        "slope.r1"
+      ]
+    },
+    {
+      "i": 80,
+      "x": 339,
+      "y": 143,
+      "anyFail": 4,
+      "hardFail": 3,
+      "clusterFail": 3,
+      "worst": [
+        "palette.n50",
+        "edge.meanDelta",
+        "slope.corr2v1"
+      ]
+    },
+    {
+      "i": 81,
+      "x": 415,
+      "y": 182,
+      "anyFail": 0,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 82,
+      "x": 212,
+      "y": 93,
+      "anyFail": 3,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "hue.fracNearGrey"
+      ]
+    },
+    {
+      "i": 83,
+      "x": 264,
+      "y": 482,
+      "anyFail": 9,
+      "hardFail": 6,
+      "clusterFail": 6,
+      "worst": [
+        "slope.corr2v1",
+        "dither.rate",
+        "slope.corr2v3"
+      ]
+    },
+    {
+      "i": 84,
+      "x": 267,
+      "y": 127,
+      "anyFail": 3,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 85,
+      "x": 94,
+      "y": 279,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "shade.hueRotMedian"
+      ]
+    },
+    {
+      "i": 86,
+      "x": 409,
+      "y": 467,
+      "anyFail": 7,
+      "hardFail": 4,
+      "clusterFail": 4,
+      "worst": [
+        "slope.r4",
+        "slope.corr2v3",
+        "edge.fracLowContrast"
+      ]
+    },
+    {
+      "i": 87,
+      "x": 211,
+      "y": 63,
+      "anyFail": 0,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 88,
+      "x": 104,
+      "y": 109,
+      "anyFail": 8,
+      "hardFail": 5,
+      "clusterFail": 5,
+      "worst": [
+        "runLen.fracGt8",
+        "flat.frac5x5",
+        "slope.r2"
+      ]
+    },
+    {
+      "i": 89,
+      "x": 268,
+      "y": 164,
+      "anyFail": 4,
+      "hardFail": 4,
+      "clusterFail": 4,
+      "worst": [
+        "edge.meanDelta",
+        "palette.n50",
+        "outline.run1Share"
+      ]
+    },
+    {
+      "i": 90,
+      "x": 480,
+      "y": 411,
+      "anyFail": 2,
+      "hardFail": 2,
+      "clusterFail": 2,
+      "worst": [
+        "shade.sampleShare",
+        "hue.meanSat"
+      ]
+    },
+    {
+      "i": 91,
+      "x": 690,
+      "y": 253,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "vGrad.colMin64Ratio"
+      ]
+    },
+    {
+      "i": 92,
+      "x": 708,
+      "y": 387,
+      "anyFail": 23,
+      "hardFail": 23,
+      "clusterFail": 16,
+      "worst": [
+        "vGrad.colMin64Ratio",
+        "colorsPerTile.median16",
+        "slope.r2"
+      ]
+    },
+    {
+      "i": 93,
+      "x": 380,
+      "y": 429,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "slope.corr2v1"
+      ]
+    },
+    {
+      "i": 94,
+      "x": 216,
+      "y": 465,
+      "anyFail": 8,
+      "hardFail": 5,
+      "clusterFail": 5,
+      "worst": [
+        "slope.r4",
+        "shade.lumaRatioP25",
+        "hue.fracNearGrey"
+      ]
+    },
+    {
+      "i": 95,
+      "x": 548,
+      "y": 494,
+      "anyFail": 11,
+      "hardFail": 9,
+      "clusterFail": 9,
+      "worst": [
+        "dither.rate",
+        "outline.blackMediatedSame",
+        "tileRepeat.largestCluster"
+      ]
+    },
+    {
+      "i": 96,
+      "x": 331,
+      "y": 174,
+      "anyFail": 7,
+      "hardFail": 6,
+      "clusterFail": 6,
+      "worst": [
+        "palette.n50",
+        "slope.corrDx0Share",
+        "edge.meanDelta"
+      ]
+    },
+    {
+      "i": 97,
+      "x": 224,
+      "y": 108,
+      "anyFail": 0,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 98,
+      "x": 45,
+      "y": 266,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "shade.hueRotMedian"
+      ]
+    },
+    {
+      "i": 99,
+      "x": 572,
+      "y": 55,
+      "anyFail": 26,
+      "hardFail": 24,
+      "clusterFail": 15,
+      "worst": [
+        "runLen.p90",
+        "outline.darkShare",
+        "changeRate.h"
+      ]
+    },
+    {
+      "i": 100,
+      "x": 169,
+      "y": 69,
+      "anyFail": 2,
+      "hardFail": 2,
+      "clusterFail": 2,
+      "worst": [
+        "hue.fracNearGrey",
+        "hue.meanSat"
+      ]
+    },
+    {
+      "i": 101,
+      "x": 381,
+      "y": 49,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "vGrad.rowMin64Ratio"
+      ]
+    },
+    {
+      "i": 102,
+      "x": 839,
+      "y": 177,
+      "anyFail": 7,
+      "hardFail": 7,
+      "clusterFail": 7,
+      "worst": [
+        "slope.r3",
+        "tileRepeat.pMaxCluster",
+        "edge.fracAA"
+      ]
+    },
+    {
+      "i": 103,
+      "x": 730,
+      "y": 184,
+      "anyFail": 3,
+      "hardFail": 3,
+      "clusterFail": 3,
+      "worst": [
+        "vGrad.rowMin64Ratio",
+        "edge.meanDelta",
+        "slope.r4"
+      ]
+    },
+    {
+      "i": 104,
+      "x": 459,
+      "y": 27,
+      "anyFail": 13,
+      "hardFail": 12,
+      "clusterFail": 6,
+      "worst": [
+        "edge.fracLowContrast",
+        "changeRate.h",
+        "runLen.mean"
+      ]
+    },
+    {
+      "i": 105,
+      "x": 98,
+      "y": 271,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "shade.hueRotMedian"
+      ]
+    },
+    {
+      "i": 106,
+      "x": 507,
+      "y": 331,
+      "anyFail": 1,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 107,
+      "x": 91,
+      "y": 388,
+      "anyFail": 4,
+      "hardFail": 4,
+      "clusterFail": 4,
+      "worst": [
+        "outline.mediationGap",
+        "outline.blackMediatedSame",
+        "shade.lumaRatioMedian"
+      ]
+    },
+    {
+      "i": 108,
+      "x": 607,
+      "y": 289,
+      "anyFail": 4,
+      "hardFail": 3,
+      "clusterFail": 3,
+      "worst": [
+        "runLen.p99",
+        "outline.blackMediatedSame",
+        "runLen.fracGt16"
+      ]
+    },
+    {
+      "i": 109,
+      "x": 225,
+      "y": 38,
+      "anyFail": 2,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 110,
+      "x": 669,
+      "y": 365,
+      "anyFail": 5,
+      "hardFail": 5,
+      "clusterFail": 5,
+      "worst": [
+        "vGrad.colMin64Ratio",
+        "outline.mediationGap",
+        "vGrad.colMin64"
+      ]
+    },
+    {
+      "i": 111,
+      "x": 582,
+      "y": 129,
+      "anyFail": 7,
+      "hardFail": 7,
+      "clusterFail": 5,
+      "worst": [
+        "runLen.p99",
+        "runLen.fracGt8",
+        "outline.darkShare"
+      ]
+    },
+    {
+      "i": 112,
+      "x": 31,
+      "y": 315,
+      "anyFail": 2,
+      "hardFail": 2,
+      "clusterFail": 2,
+      "worst": [
+        "shade.hueRotMedian",
+        "outline.run1Share"
+      ]
+    },
+    {
+      "i": 113,
+      "x": 447,
+      "y": 43,
+      "anyFail": 4,
+      "hardFail": 4,
+      "clusterFail": 4,
+      "worst": [
+        "edge.fracLowContrast",
+        "slope.corrDx0Share",
+        "slope.r5plus"
+      ]
+    },
+    {
+      "i": 114,
+      "x": 754,
+      "y": 244,
+      "anyFail": 3,
+      "hardFail": 3,
+      "clusterFail": 3,
+      "worst": [
+        "tileRepeat.pMaxCluster",
+        "shade.lumaRatioP75",
+        "outline.run12PixShare"
+      ]
+    },
+    {
+      "i": 115,
+      "x": 738,
+      "y": 291,
+      "anyFail": 17,
+      "hardFail": 17,
+      "clusterFail": 11,
+      "worst": [
+        "runLen.p90",
+        "colorsPerTile.median16",
+        "shade.lumaRatioMedian"
+      ]
+    },
+    {
+      "i": 116,
+      "x": 398,
+      "y": 93,
+      "anyFail": 0,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 117,
+      "x": 624,
+      "y": 271,
+      "anyFail": 3,
+      "hardFail": 2,
+      "clusterFail": 2,
+      "worst": [
+        "runLen.fracGt16",
+        "outline.blackMediatedSame"
+      ]
+    },
+    {
+      "i": 118,
+      "x": 430,
+      "y": 180,
+      "anyFail": 1,
+      "hardFail": 0,
+      "clusterFail": 0,
+      "worst": []
+    },
+    {
+      "i": 119,
+      "x": 516,
+      "y": 410,
+      "anyFail": 8,
+      "hardFail": 7,
+      "clusterFail": 7,
+      "worst": [
+        "shade.sampleShare",
+        "runLen.p99",
+        "hue.meanSat"
+      ]
+    },
+    {
+      "i": 120,
+      "x": 595,
+      "y": 79,
+      "anyFail": 11,
+      "hardFail": 10,
+      "clusterFail": 7,
+      "worst": [
+        "outline.darkShare",
+        "palette.n99",
+        "palette.distinct"
+      ]
+    },
+    {
+      "i": 121,
+      "x": 297,
+      "y": 160,
+      "anyFail": 5,
+      "hardFail": 5,
+      "clusterFail": 5,
+      "worst": [
+        "palette.n50",
+        "edge.meanDelta",
+        "outline.run1Share"
+      ]
+    },
+    {
+      "i": 122,
+      "x": 501,
+      "y": 440,
+      "anyFail": 3,
+      "hardFail": 3,
+      "clusterFail": 3,
+      "worst": [
+        "shade.sampleShare",
+        "hue.meanSat",
+        "slope.corr2v3"
+      ]
+    },
+    {
+      "i": 123,
+      "x": 300,
+      "y": 373,
+      "anyFail": 1,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "slope.r3"
+      ]
+    },
+    {
+      "i": 124,
+      "x": 718,
+      "y": 455,
+      "anyFail": 14,
+      "hardFail": 14,
+      "clusterFail": 12,
+      "worst": [
+        "tileRepeat.largestCluster",
+        "slope.r1",
+        "slope.r2"
+      ]
+    },
+    {
+      "i": 125,
+      "x": 207,
+      "y": 237,
+      "anyFail": 2,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "shade.sampleShare"
+      ]
+    },
+    {
+      "i": 126,
+      "x": 381,
+      "y": 267,
+      "anyFail": 3,
+      "hardFail": 1,
+      "clusterFail": 1,
+      "worst": [
+        "outline.darkShare"
+      ]
+    },
+    {
+      "i": 127,
+      "x": 185,
+      "y": 142,
+      "anyFail": 4,
+      "hardFail": 4,
+      "clusterFail": 4,
+      "worst": [
+        "outline.run1Share",
+        "hue.fracNearGrey",
+        "slope.corr2v3"
+      ]
+    }
+  ]
+}

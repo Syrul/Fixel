@@ -1,0 +1,1223 @@
+{
+  "version": "pixel-v2",
+  "note": "Derived from seeded interior crops of the reference only. Every band is two-sided on purpose: a density floor alone is cleared by uniform RGB noise, so every floor has a matching ceiling. Metrics whose other bound is not a genuine defect carry oneSidedInPractice + comment.",
+  "source": "refs/EBY-LA-Hot-Dog-175k.png",
+  "sourceSize": {
+    "w": 1189,
+    "h": 840
+  },
+  "sampling": {
+    "crops": 128,
+    "size": 320,
+    "seed": "fixel-band-v1",
+    "inset": 24,
+    "rng": "src/core/rng.js Rng(seed).stream(\"crops\")"
+  },
+  "bandFrom": [
+    "p05",
+    "p95"
+  ],
+  "degenerateBandsWidened": 1,
+  "metrics": {
+    "changeRate.h": {
+      "band": [
+        0.2666345023510972,
+        0.32461206896551725
+      ],
+      "p05": 0.2666345023510972,
+      "p25": 0.2788009404388715,
+      "p50": 0.29160952194357365,
+      "p75": 0.3096346003134796,
+      "p95": 0.32461206896551725,
+      "min": 0.24573863636363635,
+      "max": 0.338891065830721,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "sparse (flat fills, empty sky)",
+        "failsHigh": "noise / dither"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "changeRate.v": {
+      "band": [
+        0.24518025078369907,
+        0.3363077978056426
+      ],
+      "p05": 0.24518025078369907,
+      "p25": 0.27279094827586203,
+      "p50": 0.2899294670846395,
+      "p75": 0.3090443769592477,
+      "p95": 0.3363077978056426,
+      "min": 0.1988244514106583,
+      "max": 0.34516065830721004,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "sparse",
+        "failsHigh": "noise / dither"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "changeRate.combined": {
+      "band": [
+        0.25683557014106584,
+        0.3300548589341693
+      ],
+      "p05": 0.25683557014106584,
+      "p25": 0.2753220513322884,
+      "p50": 0.2904217280564263,
+      "p75": 0.30909458268025075,
+      "p95": 0.3300548589341693,
+      "min": 0.22228154388714733,
+      "max": 0.3420258620689655,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "sparse",
+        "failsHigh": "noise / dither"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "runLen.mean": {
+      "band": [
+        3.060700702455605,
+        3.718491913791244
+      ],
+      "p05": 3.060700702455605,
+      "p25": 3.207270047889276,
+      "p50": 3.403412596295844,
+      "p75": 3.558053763590527,
+      "p95": 3.718491913791244,
+      "min": 2.93292089133299,
+      "max": 4.030702617594962,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "noise (every pixel its own run)",
+        "failsHigh": "sparse (long flat runs)"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "runLen.median": {
+      "band": [
+        1.5,
+        2.5
+      ],
+      "p05": 2,
+      "p25": 2,
+      "p50": 2,
+      "p75": 2,
+      "p95": 2,
+      "min": 1,
+      "max": 2,
+      "widenedFromDegenerate": "p05 === p95 (2); widened by +/- 0.5 (half the observed quantisation step) so the band has non-zero width.",
+      "detects": {
+        "failsLow": "noise",
+        "failsHigh": "sparse"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "runLen.p90": {
+      "band": [
+        7,
+        9
+      ],
+      "p05": 7,
+      "p25": 7,
+      "p50": 8,
+      "p75": 9,
+      "p95": 9,
+      "min": 6,
+      "max": 10,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "noise",
+        "failsHigh": "sparse"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "runLen.p99": {
+      "band": [
+        20,
+        27.64999999999999
+      ],
+      "p05": 20,
+      "p25": 21.75,
+      "p50": 22,
+      "p75": 23,
+      "p95": 27.64999999999999,
+      "min": 19,
+      "max": 30,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "noise",
+        "failsHigh": "sparse (big dead slabs)"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "runLen.fracGt8": {
+      "band": [
+        0.35088330078125,
+        0.45632373046875
+      ],
+      "p05": 0.35088330078125,
+      "p25": 0.3679296875,
+      "p50": 0.39567382812499996,
+      "p75": 0.43044433593750003,
+      "p95": 0.45632373046875,
+      "min": 0.335947265625,
+      "max": 0.501435546875,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "noise",
+        "failsHigh": "sparse"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "runLen.fracGt16": {
+      "band": [
+        0.1253779296875,
+        0.22796630859375
+      ],
+      "p05": 0.1253779296875,
+      "p25": 0.15264404296875,
+      "p50": 0.1636962890625,
+      "p75": 0.18132080078124999,
+      "p95": 0.22796630859375,
+      "min": 0.108212890625,
+      "max": 0.259267578125,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "noise",
+        "failsHigh": "sparse"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "colorsPerTile.mean16": {
+      "band": [
+        7.286125,
+        10.486
+      ],
+      "p05": 7.286125,
+      "p25": 8.074375,
+      "p50": 8.65375,
+      "p75": 9.48375,
+      "p95": 10.486,
+      "min": 6.325,
+      "max": 10.6275,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "empty / monotone tiles",
+        "failsHigh": "gradient or AA colour soup"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "colorsPerTile.median16": {
+      "band": [
+        7,
+        9
+      ],
+      "p05": 7,
+      "p25": 7,
+      "p50": 8,
+      "p75": 9,
+      "p95": 9,
+      "min": 6,
+      "max": 10,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "empty tiles",
+        "failsHigh": "colour soup"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "colorsPerTile.mean32": {
+      "band": [
+        14.6085,
+        22.7125
+      ],
+      "p05": 14.6085,
+      "p25": 16.59,
+      "p50": 18.18,
+      "p75": 20.4775,
+      "p95": 22.7125,
+      "min": 12.12,
+      "max": 23.94,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "empty tiles",
+        "failsHigh": "colour soup"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "colorsPerTile.median32": {
+      "band": [
+        13,
+        20.324999999999996
+      ],
+      "p05": 13,
+      "p25": 15,
+      "p50": 17,
+      "p75": 18.5,
+      "p95": 20.324999999999996,
+      "min": 10,
+      "max": 21.5,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "empty tiles",
+        "failsHigh": "colour soup"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "palette.distinct": {
+      "band": [
+        337.1,
+        747.3
+      ],
+      "p05": 337.1,
+      "p25": 410,
+      "p50": 499.5,
+      "p75": 631.25,
+      "p95": 747.3,
+      "min": 245,
+      "max": 827,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "too few colours to build a scene",
+        "failsHigh": "no palette discipline / AA"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "palette.n50": {
+      "band": [
+        13,
+        21
+      ],
+      "p05": 13,
+      "p25": 15,
+      "p50": 16,
+      "p75": 18,
+      "p95": 21,
+      "min": 11,
+      "max": 25,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "one colour eats the frame",
+        "failsHigh": "no dominant materials"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "palette.n90": {
+      "band": [
+        81.35,
+        160
+      ],
+      "p05": 81.35,
+      "p25": 93,
+      "p50": 115.5,
+      "p75": 138.25,
+      "p95": 160,
+      "min": 73,
+      "max": 178,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "few colours carrying everything (flat)",
+        "failsHigh": "colour soup"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "palette.n99": {
+      "band": [
+        204.7,
+        447.1499999999999
+      ],
+      "p05": 204.7,
+      "p25": 248.75,
+      "p50": 297.5,
+      "p75": 383.5,
+      "p95": 447.1499999999999,
+      "min": 168,
+      "max": 501,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "flat",
+        "failsHigh": "colour soup"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "palette.top1Share": {
+      "band": [
+        0.055345214843750004,
+        0.12677392578125
+      ],
+      "p05": 0.055345214843750004,
+      "p25": 0.06806884765625,
+      "p50": 0.0769287109375,
+      "p75": 0.09420166015625,
+      "p95": 0.12677392578125,
+      "min": 0.045615234375,
+      "max": 0.158984375,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "no dominant ground/structure tone",
+        "failsHigh": "ONE colour dominates: dead sky or slab"
+      },
+      "oneSidedInPractice": "high",
+      "comment": "Band is two-sided, but only the HIGH side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "hue.buckets1pct": {
+      "band": [
+        11,
+        18
+      ],
+      "p05": 11,
+      "p25": 13,
+      "p50": 14,
+      "p75": 15,
+      "p95": 18,
+      "min": 10,
+      "max": 19,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "monochrome / two-tone",
+        "failsHigh": "rainbow soup, no palette identity"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "hue.meanSat": {
+      "band": [
+        0.2861565916110684,
+        0.4039513857842937
+      ],
+      "p05": 0.2861565916110684,
+      "p25": 0.3097225045430586,
+      "p50": 0.33564606738384917,
+      "p75": 0.3591265575579752,
+      "p95": 0.4039513857842937,
+      "min": 0.2580603838560976,
+      "max": 0.4182099503558353,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "washed out",
+        "failsHigh": "oversaturated"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "hue.fracNearGrey": {
+      "band": [
+        0.50959130859375,
+        0.66954150390625
+      ],
+      "p05": 0.50959130859375,
+      "p25": 0.54107177734375,
+      "p50": 0.5907275390625,
+      "p75": 0.62275390625,
+      "p95": 0.66954150390625,
+      "min": 0.46767578125,
+      "max": 0.691005859375,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "no neutrals to hold the palette together",
+        "failsHigh": "grey mush"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "edge.fracLowContrast": {
+      "band": [
+        0.01419675702445522,
+        0.07621528804091336
+      ],
+      "p05": 0.01419675702445522,
+      "p25": 0.02406512786446728,
+      "p50": 0.033789347910966015,
+      "p75": 0.052564321485343096,
+      "p95": 0.07621528804091336,
+      "min": 0.005746752542666927,
+      "max": 0.09562135864015857,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "no shading vocabulary at all",
+        "failsHigh": "low-contrast mush (NOT proof of antialiasing — see edge.fracAA)"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "edge.fracAA": {
+      "band": [
+        0.009722165006681965,
+        0.019341625782262294
+      ],
+      "p05": 0.009722165006681965,
+      "p25": 0.011969781577411041,
+      "p50": 0.014309833976555785,
+      "p75": 0.016577417312980514,
+      "p95": 0.019341625782262294,
+      "min": 0.007485141158989599,
+      "max": 0.02196801548005236,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "not a defect — 0 is ideal",
+        "failsHigh": "ANTIALIASED / scaled / resampled output"
+      },
+      "oneSidedInPractice": "high",
+      "comment": "Band is two-sided, but only the HIGH side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "edge.fracHard": {
+      "band": [
+        0.829879366731011,
+        0.9238880509411648
+      ],
+      "p05": 0.829879366731011,
+      "p25": 0.8506529118091294,
+      "p50": 0.8780304301628536,
+      "p75": 0.9025497300676067,
+      "p95": 0.9238880509411648,
+      "min": 0.82081729345573,
+      "max": 0.9464363320295524,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "mushy, nothing reads as an edge",
+        "failsHigh": "high-contrast noise"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "edge.meanDelta": {
+      "band": [
+        192.69896057305954,
+        228.07407916150848
+      ],
+      "p05": 192.69896057305954,
+      "p25": 199.26732572578854,
+      "p50": 207.64493100003284,
+      "p75": 214.75903203336242,
+      "p95": 228.07407916150848,
+      "min": 187.60182474319114,
+      "max": 233.58105381403425,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "low-contrast mush",
+        "failsHigh": "contrast noise"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "tileRepeat.fracNonUnique": {
+      "band": [
+        0,
+        0.05062458908612755
+      ],
+      "p05": 0,
+      "p25": 0.005095332018408942,
+      "p50": 0.01282051282051282,
+      "p75": 0.023175542406311637,
+      "p95": 0.05062458908612755,
+      "min": 0,
+      "max": 0.055884286653517426,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "no evidence of stamping (not a defect)",
+        "failsHigh": "STAMPED / tiled generator"
+      },
+      "oneSidedInPractice": "high",
+      "comment": "Band is two-sided, but only the HIGH side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "tileRepeat.largestCluster": {
+      "band": [
+        0.0006574621959237344,
+        0.003287310979618672
+      ],
+      "p05": 0.0006574621959237344,
+      "p25": 0.0013149243918474688,
+      "p50": 0.0019723865877712033,
+      "p75": 0.0026298487836949377,
+      "p95": 0.003287310979618672,
+      "min": 0.0006574621959237344,
+      "max": 0.0046022353714661405,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "not a defect",
+        "failsHigh": "one stamp pasted everywhere"
+      },
+      "oneSidedInPractice": "high",
+      "comment": "Band is two-sided, but only the HIGH side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "flat.frac3x3": {
+      "band": [
+        0.295729005972865,
+        0.40533849531268545
+      ],
+      "p05": 0.295729005972865,
+      "p25": 0.3141687433250267,
+      "p50": 0.3353951584193663,
+      "p75": 0.3577637356117242,
+      "p95": 0.40533849531268545,
+      "min": 0.2790929947391321,
+      "max": 0.4517325264032277,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "nothing is flat: noise, not pixel art",
+        "failsHigh": "big empty flat areas"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "flat.largestRegion": {
+      "band": [
+        0.014482421875,
+        0.0312890625
+      ],
+      "p05": 0.014482421875,
+      "p25": 0.016142578125,
+      "p50": 0.0184765625,
+      "p75": 0.024350585937500002,
+      "p95": 0.0312890625,
+      "min": 0.012841796875,
+      "max": 0.064033203125,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "not a defect",
+        "failsHigh": "ONE enormous dead region (sky/ground)"
+      },
+      "oneSidedInPractice": "high",
+      "comment": "Band is two-sided, but only the HIGH side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "vGrad.rowMean": {
+      "band": [
+        0.2568364558651106,
+        0.33014506404501565
+      ],
+      "p05": 0.2568364558651106,
+      "p25": 0.27529177152780837,
+      "p50": 0.290419984203374,
+      "p75": 0.30911224925309455,
+      "p95": 0.33014506404501565,
+      "min": 0.22216825859370795,
+      "max": 0.34207544115266314,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "sparse",
+        "failsHigh": "noise"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "vGrad.rowMin64": {
+      "band": [
+        0.21009634194053212,
+        0.2874755477308294
+      ],
+      "p05": 0.21009634194053212,
+      "p25": 0.24696791862284811,
+      "p50": 0.25580741392801254,
+      "p75": 0.2696657374804382,
+      "p95": 0.2874755477308294,
+      "min": 0.17346439749608766,
+      "max": 0.3113751956181533,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "DEAD 64-row band (empty sky)",
+        "failsHigh": "not a defect"
+      },
+      "oneSidedInPractice": "low",
+      "comment": "Band is two-sided, but only the LOW side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "vGrad.rowMin64Ratio": {
+      "band": [
+        0.7819413337557077,
+        0.9386411963869237
+      ],
+      "p05": 0.7819413337557077,
+      "p25": 0.851732925671478,
+      "p50": 0.8910761387245929,
+      "p75": 0.9132120975938814,
+      "p95": 0.9386411963869237,
+      "min": 0.7639706022807595,
+      "max": 0.962595739887866,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "DEAD row band relative to own mean",
+        "failsHigh": "not a defect"
+      },
+      "oneSidedInPractice": "low",
+      "comment": "Band is two-sided, but only the LOW side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "vGrad.colMean": {
+      "band": [
+        0.2568688340422193,
+        0.3300494012490128
+      ],
+      "p05": 0.2568688340422193,
+      "p25": 0.2751347864266757,
+      "p50": 0.2904665891552728,
+      "p75": 0.3090742294239138,
+      "p95": 0.3300494012490128,
+      "min": 0.22216335280929725,
+      "max": 0.3422471436070268,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "sparse",
+        "failsHigh": "noise"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "vGrad.colMin64": {
+      "band": [
+        0.16628643388106418,
+        0.293641187402191
+      ],
+      "p05": 0.16628643388106418,
+      "p25": 0.21801031885758995,
+      "p50": 0.2412827660406885,
+      "p75": 0.2631125293427229,
+      "p95": 0.293641187402191,
+      "min": 0.15387812989045385,
+      "max": 0.30734057120500785,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "dead 64-column band (empty margin)",
+        "failsHigh": "not a defect"
+      },
+      "oneSidedInPractice": "low",
+      "comment": "Band is two-sided, but only the LOW side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "vGrad.colMin64Ratio": {
+      "band": [
+        0.6529929019087334,
+        0.916605822616937
+      ],
+      "p05": 0.6529929019087334,
+      "p25": 0.7674040673061053,
+      "p50": 0.8290188403280336,
+      "p75": 0.8791657900995425,
+      "p95": 0.916605822616937,
+      "min": 0.5857783232487349,
+      "max": 0.9464306855940603,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "dead column band relative to own mean",
+        "failsHigh": "not a defect"
+      },
+      "oneSidedInPractice": "low",
+      "comment": "Band is two-sided, but only the LOW side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "slope.r1": {
+      "band": [
+        0.1304469688315011,
+        0.33274036425243536
+      ],
+      "p05": 0.1304469688315011,
+      "p25": 0.15718577265080508,
+      "p50": 0.1885611700127829,
+      "p75": 0.22307405617583098,
+      "p95": 0.33274036425243536,
+      "min": 0.11068702290076336,
+      "max": 0.4670967741935484,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "no organic/45-deg forms at all",
+        "failsHigh": "angle soup, no dimetric discipline"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "slope.r2": {
+      "band": [
+        0.5586806437950022,
+        0.7766632088296569
+      ],
+      "p05": 0.5586806437950022,
+      "p25": 0.7023444260876406,
+      "p50": 0.7228968320835791,
+      "p75": 0.7481524202687388,
+      "p95": 0.7766632088296569,
+      "min": 0.44903225806451613,
+      "max": 0.7952047952047953,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "not 2:1 dimetric — wrong projection",
+        "failsHigh": "MECHANICAL: 100% 2:1, no gables or hips"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "slope.r3": {
+      "band": [
+        0.026566471682207507,
+        0.06193300685864627
+      ],
+      "p05": 0.026566471682207507,
+      "p25": 0.03173205902079142,
+      "p50": 0.035672409380298815,
+      "p75": 0.04708461852911665,
+      "p95": 0.06193300685864627,
+      "min": 0.021739130434782608,
+      "max": 0.1021978021978022,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "no shallow forms",
+        "failsHigh": "too many shallow slopes"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "slope.r4": {
+      "band": [
+        0.029803871078494488,
+        0.06432362874250205
+      ],
+      "p05": 0.029803871078494488,
+      "p25": 0.03681129435911973,
+      "p50": 0.04738072351020067,
+      "p75": 0.054327437757912364,
+      "p95": 0.06432362874250205,
+      "min": 0.022332506203473945,
+      "max": 0.09351145038167939,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "no shallow forms",
+        "failsHigh": "too many shallow slopes"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "slope.r5plus": {
+      "band": [
+        0.03358647690996306,
+        0.08028142520495551
+      ],
+      "p05": 0.03358647690996306,
+      "p25": 0.04267430800952507,
+      "p50": 0.051047250347429025,
+      "p75": 0.06310697491681912,
+      "p95": 0.08028142520495551,
+      "min": 0.02574002574002574,
+      "max": 0.09362549800796813,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "not a defect",
+        "failsHigh": "near-horizontal edges dominate"
+      },
+      "oneSidedInPractice": "high",
+      "comment": "Band is two-sided, but only the HIGH side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "slope.corr2v1": {
+      "band": [
+        1.087976314117912,
+        1.2861912013033707
+      ],
+      "p05": 1.087976314117912,
+      "p25": 1.1090057265785966,
+      "p50": 1.1333738225285082,
+      "p75": 1.2013058396687057,
+      "p95": 1.2861912013033707,
+      "min": 1.0823811809889583,
+      "max": 1.3351833714223529,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "outline steps at +/-1 not +/-2: wrong projection",
+        "failsHigh": "over-regular"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "slope.corr2v3": {
+      "band": [
+        1.2315823748143857,
+        1.4474468311005568
+      ],
+      "p05": 1.2315823748143857,
+      "p25": 1.2640006994815387,
+      "p50": 1.294035644314377,
+      "p75": 1.3664226388380187,
+      "p95": 1.4474468311005568,
+      "min": 1.1961932650073206,
+      "max": 1.4860374197151633,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "outline steps too shallow",
+        "failsHigh": "over-regular"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "slope.corrDx0Share": {
+      "band": [
+        0.14250421984322453,
+        0.17364200245224234
+      ],
+      "p05": 0.14250421984322453,
+      "p25": 0.14997823471407293,
+      "p50": 0.1582507185824618,
+      "p75": 0.16497392830703994,
+      "p95": 0.17364200245224234,
+      "min": 0.13955094991364422,
+      "max": 0.1807048611977153,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "no vertical z axis",
+        "failsHigh": "everything vertical, no diagonals"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "flat.frac5x5": {
+      "band": [
+        0.12277078993751,
+        0.22145639721198523
+      ],
+      "p05": 0.12277078993751,
+      "p25": 0.13629877022912995,
+      "p50": 0.14888940073706136,
+      "p75": 0.16316495753885596,
+      "p95": 0.22145639721198523,
+      "min": 0.11875100144207659,
+      "max": 0.24519307803236662,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "RENDERED/RESAMPLED: nothing holds 25 px at one value",
+        "failsHigh": "sparse: big empty facets"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "dither.rate": {
+      "band": [
+        0.015790430518568016,
+        0.024829748135336716
+      ],
+      "p05": 0.015790430518568016,
+      "p25": 0.01793417910594432,
+      "p50": 0.019373826908147523,
+      "p75": 0.02088963355312939,
+      "p95": 0.024829748135336716,
+      "min": 0.015074537396448541,
+      "max": 0.028390051198396243,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "not a defect",
+        "failsHigh": "DITHERED MUSH: density manufactured from checkerboard"
+      },
+      "oneSidedInPractice": "high",
+      "comment": "Band is two-sided, but only the HIGH side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "outline.darkShare": {
+      "band": [
+        0.1444560546875,
+        0.19560986328125
+      ],
+      "p05": 0.1444560546875,
+      "p25": 0.1529052734375,
+      "p50": 0.1623828125,
+      "p75": 0.1770654296875,
+      "p95": 0.19560986328125,
+      "min": 0.12080078125,
+      "max": 0.213046875,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "no outline system; shapes float untethered",
+        "failsHigh": "murky, too much near-black"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "outline.run1Share": {
+      "band": [
+        0.608375466879355,
+        0.6926482849827738
+      ],
+      "p05": 0.608375466879355,
+      "p25": 0.6265873535645495,
+      "p50": 0.6456868251355483,
+      "p75": 0.6711140058407786,
+      "p95": 0.6926482849827738,
+      "min": 0.593037902210008,
+      "max": 0.7138918972137442,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "outlines are not 1px",
+        "failsHigh": "no 2px horizontal runs: not 2:1 diagonals"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "outline.run12Share": {
+      "band": [
+        0.8704142885841677,
+        0.9151671778880432
+      ],
+      "p05": 0.8704142885841677,
+      "p25": 0.8819041549118614,
+      "p50": 0.8913455326746943,
+      "p75": 0.9008118028376257,
+      "p95": 0.9151671778880432,
+      "min": 0.8626940680247689,
+      "max": 0.9265423242467719,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "FAT OUTLINES or dark blobs",
+        "failsHigh": "not a defect"
+      },
+      "oneSidedInPractice": "low",
+      "comment": "Band is two-sided, but only the LOW side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "outline.run12PixShare": {
+      "band": [
+        0.5906149725025145,
+        0.7340077468181638
+      ],
+      "p05": 0.5906149725025145,
+      "p25": 0.6166451339618637,
+      "p50": 0.6523513724584382,
+      "p75": 0.6885687980470302,
+      "p95": 0.7340077468181638,
+      "min": 0.578510473235066,
+      "max": 0.780128080729672,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "fat outlines / dark material blobs",
+        "failsHigh": "not a defect"
+      },
+      "oneSidedInPractice": "low",
+      "comment": "Band is two-sided, but only the LOW side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "outline.blackMediatedDiff": {
+      "band": [
+        0.4088479051411772,
+        0.5733406125097223
+      ],
+      "p05": 0.4088479051411772,
+      "p25": 0.5014602024184183,
+      "p50": 0.5208127921479491,
+      "p75": 0.5421330696686988,
+      "p95": 0.5733406125097223,
+      "min": 0.33962488835963084,
+      "max": 0.6057050274941084,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "objects not separated by black",
+        "failsHigh": "black everywhere, no discrimination"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "outline.blackMediatedSame": {
+      "band": [
+        0.23029956979597574,
+        0.33332134292565946
+      ],
+      "p05": 0.23029956979597574,
+      "p25": 0.26888928780468935,
+      "p50": 0.29156912907377686,
+      "p75": 0.31303176941709654,
+      "p95": 0.33332134292565946,
+      "min": 0.19696736057568748,
+      "max": 0.36724745903339556,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "no interior structure lines",
+        "failsHigh": "black between faces of one object too"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "outline.mediationGap": {
+      "band": [
+        0.13838718451997364,
+        0.29234827545060027
+      ],
+      "p05": 0.13838718451997364,
+      "p25": 0.1899982834875136,
+      "p50": 0.22666621565722103,
+      "p75": 0.26263524037603925,
+      "p95": 0.29234827545060027,
+      "min": 0.10667145299655692,
+      "max": 0.3518917815767263,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "black used INDISCRIMINATELY: no object-vs-face distinction",
+        "failsHigh": "over-separated"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "shade.lumaRatioMedian": {
+      "band": [
+        0.6192953137004419,
+        0.7732910283443952
+      ],
+      "p05": 0.6192953137004419,
+      "p25": 0.6947016774419799,
+      "p50": 0.7325695063038072,
+      "p75": 0.7531584149390281,
+      "p95": 0.7732910283443952,
+      "min": 0.573860572912625,
+      "max": 0.7833383303924795,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "crushed face contrast",
+        "failsHigh": "faces do not read as separate planes"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "shade.lumaRatioP25": {
+      "band": [
+        0.540616866353403,
+        0.7037351518878395
+      ],
+      "p05": 0.540616866353403,
+      "p25": 0.584638453392451,
+      "p50": 0.6419423709789401,
+      "p75": 0.6783394533001225,
+      "p95": 0.7037351518878395,
+      "min": 0.48334669905453803,
+      "max": 0.7650289777058948,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "crushed",
+        "failsHigh": "no dark face"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "shade.lumaRatioP75": {
+      "band": [
+        0.7168410514012515,
+        0.8297981693224191
+      ],
+      "p05": 0.7168410514012515,
+      "p25": 0.7774984014153244,
+      "p50": 0.7848209370657941,
+      "p75": 0.7985515512998346,
+      "p95": 0.8297981693224191,
+      "min": 0.7108579649434984,
+      "max": 0.845060021079779,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "no light face",
+        "failsHigh": "faces too close in value"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "shade.hueRotMedian": {
+      "band": [
+        -2.619049072265625,
+        0.08371191024780228
+      ],
+      "p05": -2.619049072265625,
+      "p25": -1.2615203857421875,
+      "p50": -0.40224790573120117,
+      "p75": -0.004385948181152344,
+      "p95": 0.08371191024780228,
+      "min": -6.857143402099609,
+      "max": 0.49672698974609375,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "shadows rotate warm",
+        "failsHigh": "shadows rotate cool (toward blue)"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "shade.hueRotAbsMedian": {
+      "band": [
+        0.33116912841796875,
+        5.63828554153442
+      ],
+      "p05": 0.33116912841796875,
+      "p25": 1.6666717529296875,
+      "p50": 2.619049072265625,
+      "p75": 3.2529296875,
+      "p95": 5.63828554153442,
+      "min": 0.12237548828125,
+      "max": 7.58248233795166,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "not a defect — 0 is ideal",
+        "failsHigh": "HUE ROTATES IN SHADOW: procedural-shader tell"
+      },
+      "oneSidedInPractice": "high",
+      "comment": "Band is two-sided, but only the HIGH side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "shade.sampleShare": {
+      "band": [
+        0.010854476880877742,
+        0.02911295062695923
+      ],
+      "p05": 0.010854476880877742,
+      "p25": 0.01318328761755486,
+      "p50": 0.015967868338557994,
+      "p75": 0.018893269984326017,
+      "p95": 0.02911295062695923,
+      "min": 0.008801920062695924,
+      "max": 0.03471786833855799,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "no same-hue face ladder present at all",
+        "failsHigh": "everything is one hue"
+      },
+      "oneSidedInPractice": null,
+      "comment": "Both bounds are real: low = sparse/flat, high = noisy/soft."
+    },
+    "tileRepeat.pNearDupFrac": {
+      "band": [
+        0.038625904010519393,
+        0.2086127547666009
+      ],
+      "p05": 0.038625904010519393,
+      "p25": 0.0650887573964497,
+      "p50": 0.09171597633136094,
+      "p75": 0.11949375410913872,
+      "p95": 0.2086127547666009,
+      "min": 0.024326101249178174,
+      "max": 0.2518080210387903,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "not a defect",
+        "failsHigh": "STAMPED (recolour/jitter-proof)"
+      },
+      "oneSidedInPractice": "high",
+      "comment": "Band is two-sided, but only the HIGH side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    },
+    "tileRepeat.pMaxCluster": {
+      "band": [
+        0.0046022353714661405,
+        0.040729783037475334
+      ],
+      "p05": 0.0046022353714661405,
+      "p25": 0.009040105193951348,
+      "p50": 0.013149243918474688,
+      "p75": 0.016600920447074292,
+      "p95": 0.040729783037475334,
+      "min": 0.003287310979618672,
+      "max": 0.05391190006574622,
+      "widenedFromDegenerate": null,
+      "detects": {
+        "failsLow": "not a defect",
+        "failsHigh": "one stamp pasted everywhere (recolour/jitter-proof)"
+      },
+      "oneSidedInPractice": "high",
+      "comment": "Band is two-sided, but only the HIGH side is a real craft failure; an out-of-band reading on the other side is advisory, not a defect."
+    }
+  }
+}
