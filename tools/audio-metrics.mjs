@@ -1203,6 +1203,64 @@ function makeControls(outDir, sr = 44100, dur = 90) {
     for (let i = 0; i < n; i++) x[i] = barBuf[i % barN];
     writeWav(path.join(outDir, 'control-c-one-bar-loop.wav'), x, sr);
   }
+
+  // (d) FOUR bars, looped verbatim — the same fake as (c) with a longer loop.
+  //
+  // (c) is caught by `noveltyPerSecond` only because its loop is 2 s. Measured,
+  // that gate reads 0.000 for verbatim loops of period <= 3 s and 0.310-0.426
+  // at >= 4 s, because CFG.novHalfSec = 2.0 makes the novelty kernel exactly
+  // 4 s wide and the loop boundary starts landing inside it. The corpus band is
+  // 0.194..0.350, so a long enough verbatim loop scores INSIDE it on the gate
+  // whose entire job is to notice that nothing new ever happens.
+  //
+  // This control exists to keep that fact inside the calibration set rather than
+  // in a paragraph. It is deliberately a STRONGER fake than (c): four bars of
+  // I-vi-IV-V with a real melodic line over it, so the harmony moves, the
+  // interval distribution is populated, and only the verbatim repetition is
+  // wrong. If a future change makes the bar unable to catch this, the
+  // calibration says so on the next run.
+  {
+    const bpm = 120, beat = 60 / bpm, bar = 4 * beat;   // 2 s bar, 8 s phrase
+    const barN = Math.round(bar * sr);
+    const phraseN = barN * 4;
+    const buf = new Float32Array(phraseN);
+    // I - vi - IV - V in C, one bar each
+    const roots = [36, 33, 41, 43];
+    const lead = [
+      [60, 64, 67, 64, 72, 67, 64, 62],
+      [57, 60, 64, 60, 69, 64, 60, 59],
+      [65, 69, 72, 69, 77, 72, 69, 67],
+      [67, 71, 74, 71, 79, 74, 71, 67],
+    ];
+    const eighth = Math.round(barN / 8);
+    const quarter = Math.round(barN / 4);
+    for (let b = 0; b < 4; b++) {
+      const base = b * barN;
+      let ph = 0;
+      for (let k = 0; k < 8; k++) {
+        const f = midiHz(lead[b][k]);
+        for (let i = 0; i < eighth && base + k * eighth + i < phraseN; i++) {
+          const env = Math.min(1, i / 64) * Math.min(1, (eighth - i) / 200);
+          buf[base + k * eighth + i] += 0.35 * env * squareOsc(ph);
+          ph += f / sr;
+        }
+        ph = 0;
+      }
+      let bph = 0;
+      for (let k = 0; k < 4; k++) {
+        const f = midiHz(roots[b]);
+        for (let i = 0; i < quarter && base + k * quarter + i < phraseN; i++) {
+          const env = Math.min(1, i / 64) * Math.min(1, (quarter - i) / 400);
+          buf[base + k * quarter + i] += 0.35 * env * squareOsc(bph);
+          bph += f / sr;
+        }
+        bph = 0;
+      }
+    }
+    const x = new Float32Array(n);
+    for (let i = 0; i < n; i++) x[i] = buf[i % phraseN];
+    writeWav(path.join(outDir, 'control-d-long-loop.wav'), x, sr);
+  }
   return outDir;
 }
 

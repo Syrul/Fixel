@@ -31,22 +31,34 @@ mastered onto the corpus loudness median and still fail.
 
 A track PASSES if **at most 6 of the 14 gating metrics** fall outside their p05..p95 band.
 
+> ### What this gate costs, and what it now rests on — read this before the derivation
+>
+> **The budget was 5 and is now 6. That is a LOOSENING.** It moved as a consequence of the chroma
+> rebuild, in the same way `polyphony`'s band widened 78% the round before: **a detector that no
+> longer compresses its output spreads the corpus out.** `pitchClassEntropy`'s band width went
+> 0.528 → 0.618 and `chromaChangeRate`'s 0.586 → 0.888, which put a second track on 6 leave-one-out
+> failures and carried the p95 over the boundary. Corpus acceptance rose 37/38 → 38/38, and the
+> best-scoring fake's clearance over the budget fell **4 → 3**. A more permissive gate is exactly
+> what a synth tuned to the metric would want, so it is recorded at the top of this section rather
+> than the bottom.
+>
+> **THE CHROMA-DERIVED METRICS CARRY THE SEPARATION.** Five of the fourteen gates are fed by chroma —
+> `pitchClassEntropy` and `chromaChangeRate` directly, and `repeatStrength`, `novelFraction` and
+> `noveltyPerSecond` through the self-similarity feature, which is 12 dimensions of chroma to 4 of
+> band energy. Ablate all five and **the worst genuine corpus track and the best-scoring fake both
+> sit at 5 — a gap of exactly zero.** `polyphony`'s ablation left the bar comfortable; this one does
+> not. Stated plainly: **the bar is now materially more dependent on the instrument this project has
+> learned the least about**, and chroma is on its first correction where `polyphony` is on its
+> second.
+>
+> **A verbatim loop already passes.** `control-d-long-loop` is 90 seconds of the same four bars,
+> and it clears this gate. See the calibration section.
+
 The budget is not a guess; it is the p95 of the leave-one-out fail-count distribution of the corpus
 against itself. Demanding all 14 metrics be in band is the wrong gate and the corpus proves it: with
 14 two-sided p05..p95 bands a track is expected to miss ~1.4 by construction, and measured
 leave-one-out only **6 of 38** genuine CC0 chiptunes clear all 14. Mean leave-one-out failures per
 real track: **1.97**, max **6**. At a budget of 6, **38 of 38** real tracks are accepted.
-
-> **The budget was 5 and is now 6, and that is a LOOSENING — read it as a cost, not a result.**
-> It moved as a consequence of the chroma rebuild below, in the same way `polyphony`'s band widened
-> 78% in the round before: a detector that no longer compresses its output spreads the corpus out.
-> `pitchClassEntropy`'s band width went 0.528 → 0.618 and `chromaChangeRate`'s 0.586 → 0.888, which
-> put a second track on 6 leave-one-out failures and carried the p95 over the boundary.
->
-> **What it costs is stated in band-widths, not adjectives.** The best-scoring fake still misses 9
-> gating metrics, so its clearance over the budget fell from **4 to 3**. Corpus acceptance rose from
-> 37/38 to 38/38. A more permissive gate is exactly what a synth tuned to the metric would want, so
-> it is recorded here rather than in a footnote: *the separation is one notch narrower than it was.*
 
 > ~~"a track is expected to miss ~1.7"~~ and ~~"only 5 of 38 clear all 14"~~ — **CORRECTED.** Both
 > were carried over unchanged from the 17-gate derivation and never re-measured when the set was cut
@@ -351,13 +363,11 @@ metric appears to fire on the loop boundary once the loop period reaches the ker
 structure genuinely exists the metric is excellent — against real section-boundary rate it scores
 **r = 1.000 over six forms** — and then it inverts completely on the one case with no structure at all.
 
-**The adversarial consequence is concrete.** `control-c-one-bar-loop` is caught by this gate only
-because its loop is 2 s. **Lengthen that control's loop to 6 s and `noveltyPerSecond` flips from FAIL
-to PASS**, while the piece remains exactly as structureless. `repeatStrength` (0.965–0.977 against a
-band ceiling of 0.642) still catches it, so the bar as a whole holds — but this gate contributes
-nothing against a long-loop fake and actively vouches for it. A `control-d-long-loop` belongs in
-`corpus/controls/`. Not added this round: it is outside what was commissioned and it changes the
-calibration set, which is the lead's call.
+**The adversarial consequence is concrete, and it has since been built.** `control-c-one-bar-loop` is
+caught by this gate only because its loop is 2 s. `control-d-long-loop` is the same fake with an 8 s
+loop: `noveltyPerSecond` reads **0.310, inside the band**, and does not catch it. ~~`repeatStrength`
+still catches it, so the bar as a whole holds~~ — **the bar as a whole does NOT hold.** `control-d`
+scores 5 out-of-band metrics against a budget of 6 and **PASSES**. See the calibration section.
 
 ## The band
 
@@ -638,7 +648,7 @@ tremolos or adding `compand` expansion buys crest only by going near-silent betw
 frames — that is a property of having drums, not of mastering. Crest is non-gating, so no verdict
 depends on it.
 
-### Result: all three controls FAIL, at every variant
+### ~~Result: all three controls FAIL, at every variant~~ — FALSIFIED. Three fail; the fourth PASSES.
 
 | Control | variant | gating metrics out of band | budget | verdict |
 |---|---|---:|---:|:--|
@@ -648,6 +658,37 @@ depends on it.
 | control-b-random-notes | RMS dead centre | **10** | 6 | **FAIL** |
 | control-c-one-bar-loop | peak dead centre | **9** | 6 | **FAIL** |
 | control-c-one-bar-loop | RMS dead centre | **9** | 6 | **FAIL** |
+| **control-d-long-loop** | raw | **5** | 6 | **PASS** |
+| **control-d-long-loop** | peak dead centre | **6** | 6 | **PASS** |
+| **control-d-long-loop** | RMS dead centre | **6** | 6 | **PASS** |
+
+**`control-d-long-loop` is ninety seconds of the same four bars, and the bar accepts it.**
+
+It exists because `control-c` was caught by `noveltyPerSecond` **only because its loop happens to be
+2 s long** — measured, that gate reads 0.000 for verbatim loops of period ≤ 3 s and 0.310–0.426 at
+≥ 4 s, and `CFG.novHalfSec = 2.0` makes the novelty kernel exactly 4 s wide. So the most-cited result
+about this bar rested on an accident of the control's bar length. `control-d` is the same fake with
+an 8 s loop and a stronger phrase: four bars of I–vi–IV–V with a real melodic line, so the harmony
+moves and the interval distribution is populated. Only the verbatim repetition is wrong.
+
+**Of fourteen gates, exactly two respond to the repetition:**
+
+| | caught it | let it through |
+|---|---|---|
+| control-c (2 s loop), 10 fails | `pitchClassEntropy` −1.48, `leapFrac` +1.34, `noveltyPerSecond` −0.80, `chromaChangeRate` −0.53, `novelFraction` −0.40, `repeatStrength` +0.37, `stepFrac` −0.25, `beatStrength` +0.24, `spectralCentroidCV` −0.18, `bigLeapFrac` −0.15 | `onsetRate`, `spectralCentroidMean`, `polyphony`, `silenceFraction` |
+| **control-d (8 s loop), 5 fails** | `novelFraction` −0.65, `repeatStrength` +0.51, `beatStrength` +0.20, `spectralCentroidCV` −0.12, `spectralCentroidMean` +0.04 | `onsetRate`, **`pitchClassEntropy`**, **`chromaChangeRate`**, **`stepFrac`**, **`leapFrac`**, **`bigLeapFrac`**, `polyphony`, `silenceFraction`, **`noveltyPerSecond`** |
+
+Lengthening the loop from 2 s to 8 s and giving it a real phrase moves **five gates from FAIL to
+PASS** — the two chroma gates, all three melodic-interval gates, and `noveltyPerSecond`. Only
+`repeatStrength` and `novelFraction` are left doing work that is actually about repetition.
+
+**The budget change is not what causes this, and the honest split matters.** The raw variant scores
+5 and would have passed at the old budget of 5 as well. The two *mastered* variants score 6 and flip
+from FAIL to PASS specifically because the budget moved 5 → 6. So: the long-loop hole predates this
+round; the budget loosening widened it from one variant to three.
+
+This is the **inversion failure** — previously argued from arithmetic and one spliced experiment, now
+sitting in the calibration set as a control that anyone can re-run.
 
 For comparison, real corpus tracks average **1.97** out-of-band metrics (worst: 6).
 
@@ -736,8 +777,11 @@ swaps voices, which is why the corpus `bigLeapFrac` band is wide (0.064..0.502).
 air, which is worth having, but it is not a music test and should not be counted as one.
 
 **The margin over real music is real but not comfortable.** The worst genuine corpus track misses 6
-metrics; the best-scoring fake misses 9. The budget sits at 6 (it was 5 before the chroma rebuild —
-see the Acceptance rule). This band reliably rejects *crude*
+metrics; the best-scoring *crude* fake misses 9. The budget sits at 6 (it was 5 before the chroma
+rebuild — see the Acceptance rule). ~~This band reliably rejects crude fakes~~ **and only crude
+fakes: `control-d-long-loop`, a verbatim 8-second loop of competent-looking harmony, misses 5 and
+passes.** The paragraph below predicted that "a more competent fake would very plausibly land under
+the budget while still being bad music". It did not need to be more competent than four bars. This band reliably rejects *crude*
 fakes — a drone, a random-note generator, a single looped bar. A more competent fake (Markov-chain
 melody over a ii-V-I with a genuine repeated 8-bar section and a couple of timbre changes) would
 very plausibly land under the budget while still being bad music. **This is a floor, not a ceiling:
@@ -986,11 +1030,15 @@ margin.**
 >
 > Not re-run against the synth here: its output has been substantially rewritten
 > this round, so the 1.4545 s splice experiment above cannot be reproduced, and
-> driving the synth is not the bar owner's to do. The synthetic loops used for
-> the `noveltyPerSecond` measurement fail 10-12 gates on unrelated grounds — they
-> are single-instrument sketches — so they are evidence about `noveltyPerSecond`
-> and about nothing else. **The inversion claim stands unrefuted and is now
-> likelier, not less likely, to hold.** The builder's symbolically-generated loop, which has no splice, is the
+> driving the synth is not the bar owner's to do.
+>
+> **It no longer needs the synth.** `control-d-long-loop` is now in the
+> calibration set: four bars of I-vi-IV-V looped verbatim for 90 s, no splice
+> artefact because it is rendered as one buffer and repeated. It scores **5
+> out-of-band metrics against a budget of 6 and PASSES**, and only
+> `repeatStrength` and `novelFraction` respond to the repetition at all.
+> **The inversion failure is no longer an argument. It is a control, and it
+> passes.** The builder's symbolically-generated loop, which has no splice, is the
 clean test and its PASS stands.
 
 **Conclusion: the audio fail-count does not discriminate music from a verbatim
