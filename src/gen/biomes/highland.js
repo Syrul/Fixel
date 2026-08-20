@@ -1501,7 +1501,7 @@ function cableLine(cv, iso, C, st, T, F, A, W, H, S, tag, seen, TL0) {
 // the edge of the wood is ragged in two directions at once.
 
 function scatterHighland(stage, X) {
-  const { C, cv, rng, iso, W, S, seedN, tag, tagRaw } = stage;
+  const { C, cv, rng, iso, W, H, S, seedN, tag, tagRaw } = stage;
   const { T, F, TN, TRK, tw, hero, seen, TL0, RIB0, FAN0, A0, A1, B0, B1, regOf } = X;
   const ss = rng.stream('scatter');
   const S2 = seedN ^ 0x2f13;
@@ -1618,6 +1618,16 @@ function scatterHighland(stage, X) {
   });
 
   // ---- cairns on the tops: the one place-kind this ground can honestly make
+  //
+  // AND, ON ONE HIGHLAND IN TWENTY, ONE OF THOSE TOPS CARRIES SOMETHING ELSE.
+  // The eligible sites are collected as the lattice walks them and the stone
+  // goes on the one NEAREST THE MIDDLE OF THE FRAME rather than the first the
+  // walk happens to reach — the lattice starts at a world corner, so "first"
+  // means "off to one side", and an easter egg nobody can see is not one. The
+  // cairn is still drawn at that site: a cairn at the foot of the stone is what
+  // the place would actually have.
+  const eye = (h3(seedN, 3301, 0x5e1) % 20) === 0;
+  let eyeAt = null, eyeD = 1e18;
   lattice(46, 0.88, S2 + 51, (x, y, hh) => {
     const z = T.surfaceZ(x, y);
     if (T.isWet(x, y) || onHero(x, y)) return;
@@ -1630,7 +1640,17 @@ function scatterHighland(stage, X) {
     const reg = regOf(F.ch(CH_RA), F.ch(CH_RB));
     cv.t = tag();
     P.cairn(cv, iso, C, ss, x, y, z, { tone: BOUL[reg], R: 1.4 + ((hh >>> 6) & 7) * 0.16 });
+    if (!eye) return;
+    const p = iso.proj(x, y, z);
+    const dx = p[0] - W * 0.5, dy = p[1] - H * 0.46;
+    const dd = dx * dx + dy * dy;
+    if (dd < eyeD) { eyeD = dd; eyeAt = [x, y, z, reg, hh]; }
   });
+  if (eyeAt) {
+    cv.t = tag();
+    P.holedStone(cv, iso, C, eyeAt[0] + 3.4, eyeAt[1] + 2.2, T.surfaceZ(eyeAt[0] + 3.4, eyeAt[1] + 2.2),
+      { tone: BOUL[eyeAt[3]], seed: (eyeAt[4] ^ S2) >>> 0 });
+  }
 
   // ---- sheep on the enclosed pasture, in twos and threes
   lattice(15, 0.85, S2 + 67, (x, y, hh) => {

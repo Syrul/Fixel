@@ -559,6 +559,82 @@ export function bothy(cv, iso, C, st, x, y, z, w, d, o = {}) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// THE EYE STONE — the biome's easter egg, and it is INVENTED rather than
+// recalled.
+//
+// The content law is absolute and an easter egg is the likeliest place in this
+// project to break it, so this one is drawn away from every real form on
+// purpose: it is not a circle, not a trilithon, not a recognisable outline. It
+// is TWO stacked slabs, the upper one narrower and offset, so the silhouette is
+// asymmetric and belongs to nothing; and the opening is a tall LENS rather than
+// a round perforation, cut off-centre and high. Nobody looks at it and says
+// "that is a reference to X", because there is no X.
+//
+// IT IS A GENUINE VOID, which is the only other thing in this generator that
+// draws one besides the viaduct's arches. The terrain is drawn before every
+// prop, so a shader returning -1 leaves the hillside behind the stone standing
+// in the buffer — the hole is a hole because nothing was written there, not
+// because something sky-coloured was. On a night highland with a lit tarn below
+// it, the thing you see through the eye is the water.
+//
+// THE NEAR ARRIS SURVIVES BECAUSE THE LENS CANNOT REACH IT. `box()` draws the
+// vertical corner at (x + w, y + d) after the faces, with `putZ`, so a hole that
+// touched u = w would have a black line ruled down the middle of it. The lens is
+// confined to the middle half of the face and the arris is at its edge.
+export function holedStone(cv, iso, C, x, y, z, o = {}) {
+  const g = o.tone;
+  const seed = o.seed | 0;
+  const u1s = (n) => ((h3(seed, n, 0x5e1) >>> 8) / 16777216);
+  // The plinth: shorter, wider, and it is what stops the upper slab reading as
+  // a slab standing on nothing.
+  const bw = 3.4 + u1s(1) * 1.6, bd = 1.5 + u1s(2) * 0.7;
+  const bh = 1.1 + u1s(3) * 0.9;
+  drawBox(cv, iso, x, y, z - 0.4, bw, bd, bh + 0.4, { top: g.l, left: g.r, right: g.k });
+  // The stone. Offset on the plinth, narrower, and tall enough to be the thing
+  // in the frame you look at rather than a rock.
+  const w = 2.9 + u1s(4) * 0.9, d = 1.05 + u1s(5) * 0.35;
+  const h = 6.4 + u1s(6) * 2.6;
+  const ox = (bw - w) * (0.22 + u1s(7) * 0.56), oy = (bd - d) * 0.5;
+  const sx0 = x + ox, sy0 = y + oy, sz0 = z + bh;
+  const FL = leftFace(iso, sy0 + d, sx0, sz0);
+  const FR = rightFace(iso, sx0 + w, sy0, sz0);
+  const q = FL.q === undefined ? 1 : FL.q;
+  // The lens: an ellipse squared along v, which turns a circle into a pointed
+  // oval — high on the stone, off the centre line, and never wider than the
+  // middle half of the face.
+  const cu = w * (0.40 + u1s(8) * 0.20), cv0 = h * (0.58 + u1s(9) * 0.14);
+  const ru = w * 0.23, rv = h * 0.15;
+  const lens = (u, v) => {
+    const a = (u - cu) / ru, b = (v - cv0) / rv;
+    const r = a * a + b * b * b * b;
+    if (r < 1) return -1;                       // through, to the hillside
+    if (r < 1.9) return g.k;                    // the reveal, one stone-dark rim
+    return 0;
+  };
+  // Weathering, in the stone's own family and nothing else: two flat fields and
+  // a lichen scatter, so a thirty-pixel face is not one flat region.
+  const skin = (F, base, lit, dark) => (px, py) => {
+    const u = F.au * px + F.bu * py + F.cu, v = F.av * px + F.bv * py + F.cv;
+    const c = lens(u, v);
+    if (c !== 0) return c > 0 ? c : -1;
+    // A vertical cleavage line — the one mark that says this was split off a
+    // bed rather than carved — and it is the material's own dark, never ink.
+    if (Math.abs(u - w * (0.62 + u1s(10) * 0.2)) < 0.5 * q && v > h * 0.18) return dark;
+    // ONE FLAT CELL PER FOUR SCREEN PIXELS, NOT PER TWO. At 2.2 per world unit
+    // the cells were 1.8 px and the face came out mottled — orphan speckle, the
+    // named round-1 defect, on the one object in the frame a viewer is meant to
+    // look at. 1.1 puts the cells at 3.6 px, which reads as weathering.
+    const k = h3(Math.floor(u * 1.1), Math.floor(v * 1.1), seed + 3) & 15;
+    return k < 3 ? lit : k < 6 ? dark : base;
+  };
+  box(cv, iso, sx0, sy0, sz0, w, d, h, {
+    top: g.t,
+    left: skin(FL, g.l, g.t, g.r),
+    right: skin(FR, g.r, g.l, g.k),
+  });
+}
+
 /** Stacked cordwood against a gable — a highland yard is never empty. */
 export function logStack(cv, iso, C, st, x, y, z, o = {}) {
   const g = o.tone;
