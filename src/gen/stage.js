@@ -170,10 +170,43 @@ export function makeStage(seed, opts = {}) {
   // Tags are handed out monotonically and never reused. The side table that
   // records which of them opt out of the silhouette sweep grows with them, so
   // there is no ceiling to run into and no modulo to wrap through.
+  //
+  // THE ALLOCATOR HAD NO CEILING AND THE STORAGE STILL DID, WHICH IS WORSE THAN
+  // THE MODULO IT REPLACED. The old counter wrapped at 65534, which at least
+  // aliased inside the range the buffer could hold. Once the wrap was removed,
+  // nothing bounded the counter and nothing checked that `cv.tag` could hold
+  // what it was handed — and a typed-array store TRUNCATES rather than throwing.
+  // Two objects that collide on a truncated tag have no keyline drawn between
+  // them, silently, and no gate in this harness can see a missing keyline.
+  //
+  // THE CEILING IS READ OFF THE STORAGE RATHER THAN WRITTEN DOWN A SECOND TIME.
+  // `TAG_STORE` is whatever `cv.tag` actually is, so the guard cannot drift away
+  // from the buffer it is guarding: if anyone ever gives `TaggedCanvas` a
+  // narrower array again — or deletes the override and inherits `Canvas`'s
+  // `Uint16Array` — this throws at exactly the tag the truncation used to start
+  // at, instead of quietly losing outlines. A constant here would have gone
+  // stale the first time the storage moved, which is how the defect arrived.
+  //
+  // THE SECOND CEILING IS `outlinePass`'s MEMORY, and it is the one that can
+  // realistically bind. That sweep allocates four Int32Arrays of `nTags + 1`, so
+  // a runaway tag count is 16 bytes per tag of transient allocation before it is
+  // a correctness problem. 1 << 20 is 16 MB and about twenty times the worst
+  // measured seed; nothing legitimate approaches it, and a scene that does has a
+  // bug rather than a lot of objects.
+  const TAG_STORE = (2 ** (8 * cv.tag.BYTES_PER_ELEMENT)) - 1;
+  const TAG_CEIL = Math.min(TAG_STORE, (1 << 20) - 1);
   let tagN = 0;
   let noOutline = new Uint8Array(1 << 14);
   const tag = () => {
     tagN++;
+    if (tagN > TAG_CEIL) {
+      throw new Error(
+        `tag ${tagN} exceeds the ceiling ${TAG_CEIL} at ${W}x${H} ` +
+        `(storage ${cv.tag.constructor.name} holds ${TAG_STORE}). A tag written past ` +
+        `the width of cv.tag TRUNCATES silently, and two objects sharing a tag lose the ` +
+        `keyline between them — a defect no gate in this harness can see. Widen the ` +
+        `tag array in src/core/canvas.js and the override in TaggedCanvas together.`);
+    }
     if (tagN >= noOutline.length) {
       const grown = new Uint8Array(noOutline.length * 2);
       grown.set(noOutline);
@@ -238,6 +271,15 @@ export function makeStage(seed, opts = {}) {
       // outlines hold still" a consequence of the arithmetic rather than a rule
       // somebody has to remember.
       if (frames > 1) cv.anim = anim.finish(cv, C.black);
+      // THE TAG COUNT RIDES OUT ON THE CANVAS SO IT CAN BE MEASURED RATHER THAN
+      // ASSERTED. `renderScene` returns the canvas, not the stage, so without
+      // this the only way to characterise headroom is to re-implement the
+      // dispatcher in a script — which is a second copy of the thing being
+      // measured. Same grounds as `lampSet` being exported: it changes no pixel
+      // by being reachable, and a ceiling nobody can measure the distance to is
+      // a ceiling nobody knows they are near.
+      cv.tagN = tagN;
+      cv.tagCeil = TAG_CEIL;
       return cv;
     },
   };
