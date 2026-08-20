@@ -9,6 +9,11 @@ import { pickBiome } from '../gen/biome-mix.js';
 import { pickConditions, conditionLabel } from '../gen/conditions.js';
 import { FPS, frameAt } from '../core/frame.js';
 import { paintFrame, dirtyBands, loopBytes } from '../core/anim.js';
+// Vercel Analytics. Loaded once at startup and never touched again — it runs
+// outside the rAF, so the "a still post schedules no frame" property holds.
+import { inject } from '@vercel/analytics';
+
+inject({ mode: import.meta.env.PROD ? 'production' : 'development' });
 
 const FEED = document.getElementById('feed');
 const HUD = document.getElementById('hud');
