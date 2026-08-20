@@ -1140,3 +1140,25 @@ been validated. But this cannot sit as a footnote, and it is commissioned as its
 the same ablation discipline. One promising asymmetry to start from: **unlike the voice count,
 chroma DOES respond to `NC` — 97% at 16384** — so the cheap fix that was unavailable to the
 counter may be available here.
+
+## How to cite the `HARMONIC_SHADOW` removal — the two halves must stay apart
+
+There are two independent arguments for removing that rule, and **only one of them
+is currently trustworthy**:
+
+| the argument | rests on | status |
+|---|---|---|
+| the rule **fired on 87%** of harmony notes and **achieved its purpose on 17%** of those | a firing-rate count over the symbolic score | **sound. Does not touch chroma at all.** |
+| removing it did not move `pitchClassEntropy`, which sits at 2.771 | the chroma detector | **not yet trustworthy — 60% correct below 124 Hz** |
+
+The removal stands, on the first row alone. But the tempting shorthand is
+**"we measured it and removed it"**, and that sentence quietly borrows credibility
+from the untrustworthy half. Cite the firing rate, not the entropy, until the
+chroma task reports.
+
+The same caution applies to the refutation of the chord-vocabulary hypothesis. It
+was refuted at 2.771 — a chroma reading. If the corrected detector moves that
+number, the refutation is re-opened, and the `theory.js` comment claiming those
+chromatic degrees were added to lift entropy becomes live again rather than
+merely wrong. **A conclusion inherits the reliability of its weakest instrument,
+and it keeps inheriting it until that instrument is fixed.**

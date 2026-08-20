@@ -76,6 +76,42 @@ const FRAME_SET = K > 1
 
 function sha(f) { return createHash('sha256').update(readFileSync(f)).digest('hex'); }
 
+/**
+ * A CHILD THAT CRASHES IS NOT AUTOMATICALLY A BUG IN THE GENERATOR.
+ *
+ * The digest bracket below catches a torn tree by comparing before and after —
+ * but it only runs if this file SURVIVES to compare. A builder saving a module
+ * mid-run leaves a half-written file on disk, the child fails to import it, and
+ * `execFileSync` throws. Before this guard existed the exception propagated
+ * uncaught and the run died printing an ESM stack trace, which reads as a code
+ * bug in somebody's generator rather than as the race it is.
+ *
+ * That happened, was briefly diagnosed as a real import failure, and passed on
+ * a re-run once the tree went quiet. **A guard that misreports its own failure
+ * mode as somebody else's bug is standing rule 11's category**, and it is worse
+ * than the bug it hides because it sends the next reader to the wrong file.
+ *
+ * So a child failure re-checks the digest FIRST and answers the only question
+ * that matters: did the ground move under us, or is this real?
+ */
+function bail(err, seed, frame) {
+  const after = treeHash().digest;
+  rmSync(TMP, { recursive: true, force: true });
+  if (after !== TREE_BEFORE) {
+    console.error(`\nTORN RUN: a render child failed AND the source tree moved during verification`);
+    console.error(`  ${TREE_BEFORE} -> ${after}`);
+    console.error(`  (child was seed ${seed}, frame ${frame})`);
+    console.error('A half-written module does not import. THIS RESULT IS VOID, NOT A FAILURE —');
+    console.error('do not go looking for a bug in the generator. Serialise writers, then re-run.');
+    process.exit(2);
+  }
+  console.error(`\nVERIFY FAILED: a render child exited non-zero while the tree was STABLE.`);
+  console.error(`  tree ${TREE_BEFORE} before and after, so this is NOT a race — it is real.`);
+  console.error(`  child was seed ${seed}, frame ${frame}`);
+  console.error(String(err && err.message ? err.message : err));
+  process.exit(1);
+}
+
 function render(seed, out, frame) {
   const a = [
     path.join(REPO, 'tools/render.mjs'),
@@ -83,7 +119,11 @@ function render(seed, out, frame) {
   ];
   if (K > 1) a.push('--frames', String(K), '--frame', String(frame));
   if (BIOME) a.push('--biome', BIOME);
-  execFileSync('node', a, { cwd: REPO, stdio: ['ignore', 'pipe', 'inherit'] });
+  try {
+    execFileSync('node', a, { cwd: REPO, stdio: ['ignore', 'pipe', 'inherit'] });
+  } catch (e) {
+    bail(e, seed, frame);
+  }
 }
 
 // The tree digest brackets the whole run. If it moves, this gate proves
