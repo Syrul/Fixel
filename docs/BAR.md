@@ -899,7 +899,7 @@ what a palm looks like at this scale anyway.
 
 # Standing rule 11: every instrument in this repo has been wrong at least once
 
-Not a series of anecdotes any more. Five, across three subsystems, and **every one was caught
+Not a series of anecdotes any more. Six, across three subsystems, and **every one was caught
 by looking at the OUTPUT rather than at the number**:
 
 1. **WSOLA manufacturing transients** — `atempo` invalidated the tempo resampling test;
@@ -914,6 +914,11 @@ by looking at the OUTPUT rather than at the number**:
 5. **`tools/strip.mjs` reading island quantiles off the wrong end of a descending sort** —
    printing p50 4 and p90 2. A p90 below the median is not a distribution; it is an indexing
    bug wearing a finding's clothes, and it was one report away from being quoted.
+6. **The `polyphony` metric reporting its own plateau width rather than the voice count** —
+   caught by plotting the salience curve for a single known note rather than by reading the
+   number. The salience response to ONE note is a plateau 3-4 semitones wide, so two notes
+   closer than that merge into a single local maximum: **voices are lost at exactly the
+   intervals chords are built from.** Sines at midi 64 and 67 returned one voice.
 
 **A number you have not seen the shape of is a number you do not have.** Plot it, strip it,
 render it, sort it and read both ends — before it goes in a table.
@@ -1044,3 +1049,94 @@ surface moves toward that colour rather than around a wheel toward it.
 **Reporting a defect you were not asked to fix, in a file you own, without fixing
 it in the same commit, is correct behaviour** — and it is what let this be scoped,
 measured and gated instead of arriving as an untested side effect of a lamp fix.
+
+---
+
+# The `polyphony` rebuild — and why nothing had to be retracted
+
+`polyphony` is one of the six metrics that caught all three synthetic controls on both
+mastering variants, so a broken `polyphony` would have meant part of the bar's teeth were
+imaginary. It was broken. **The teeth were not imaginary, and the ablation is why we can say
+so rather than hope so.**
+
+## The answer to "did any past conclusion rest on it": no, and here is the test
+
+Not "the bias was symmetric across corpus and Fixel, so it probably cancels" — that was the
+available hand-waving answer and it is not a finding. Instead the metric was **ablated to worth
+nothing at all**, and the controls re-scored:
+
+> **With `polyphony` contributing zero, nine of nine synthetic controls still fail, by 4-8
+> metrics clear of budget.**
+
+That is a stronger result than symmetry would have been, because it does not depend on the
+broken metric behaving consistently. Two numbers were retracted in place — struck, not deleted,
+per this file's convention.
+
+## It falsified the bug report it was handed, and the falsification WAS the mechanism
+
+The defect was reported as "a 392 Hz sine produces no candidate at all". **It does not vanish.
+It returns one candidate, mislabelled as midi 66.** A wrong candidate, not a missing one — and
+that distinction is the whole diagnosis, because a missing candidate points at a detection
+threshold while a mislabelled one points at the plateau. **Chasing the reported cause would have
+fixed the wrong thing.** It said so and declined to fix the defect as described.
+
+Reproducing a bug before fixing it is standing practice here. This is the case that shows why:
+the report was *nearly* right, and nearly right is where the wasted round lives.
+
+## The obvious fix would have made it worse, in the stratum that matters
+
+Raising `CFG.NC` is the fix everyone would try first. Measured across a sweep: exactness
+**plateaus at 64%**, and the wide-register stratum **DEGRADES, 43% -> 37%**. The mechanism is
+specific and worth carrying: sharper frequency resolution lands a bass note's true harmonics
+*precisely* on the suppression stencil, so it deletes genuine upper voices. **Measured rather
+than assumed, and the assumption was wrong.**
+
+## A stale number that flattered us — read this next to standing rule 12
+
+Two figures in `docs/AUDIO-MEASURED.md` were carried unchanged from the 17-gate era into the
+14-gate one: "only 5 of 38 genuine tracks clear all 14" and "a track is expected to miss ~1.7 by
+construction". Measured now, they are **9 of 38** and **1.4**.
+
+> **The error flattered the argument, which is the direction a stale number is least likely to
+> be questioned.**
+
+Both stale figures made the all-pass gate look more absurd and the budget look better justified
+— i.e. they supported the conclusion the document was already making. Standing rule 12 says a
+disclosed compromise carries its magnitude; this is its sibling: **a number that agrees with you
+is the one to re-derive**, because nobody audits a number that is making their case for them.
+
+## `HARMONIC_SHADOW` partially rehabilitated — the intent was sound, the stencil was weak
+
+The band owner corrected **itself** here, and the correction goes against the simpler story.
+Over 6 roots x 4 timbres x 3 balances, the stencil intervals genuinely *were* worse for the
+shipped counter — **37% against 51%**. Its own earlier n=1 probe had said the opposite and was
+wrong.
+
+So the honest statement is **not** "the rule was pointless". The compromise was **aimed in the
+right direction**; the stencil was simply a weak predictor of which intervals actually get lost:
+`+12` scored 54%, while `+10`, `+13` and `+18` — none of them avoided by the stencil — scored
+35-40%. The removal stands and was correct, on the separate ground that the rule fired on 87% of
+harmony notes and achieved its purpose on 17% of those. **A compromise can be well aimed and
+still be worth deleting**, and that is a different sentence from "it never did anything".
+
+## The two self-caveats, kept verbatim because they are the load-bearing part
+
+- The rebuilt counter is **73% exact — reported, not claimed as solved.** It still under-counts
+  dense mixtures by 0.9 voices at five notes, with the low register worst at **53%**.
+- **A re-derive is not an independent test.** The corpus defined the band it is then scored
+  against, so **the leave-one-out column is the number to read**, not the in-band count.
+
+## THE OPEN DEFECT, deliberately not fixed, and it is larger than the one that was
+
+**The same plateau mislabels PITCH: 85% correct overall, and 60% correct below 124 Hz.** That
+feeds `pitchClassEntropy` and `chromaChangeRate` — two more load-bearing gates.
+
+> **Every entropy reading in this audio investigation rests on a chroma detector that is 60%
+> right in the bass.** That includes the readings that refuted the chord-vocabulary hypothesis
+> at 2.771, and the readings that justified removing `HARMONIC_SHADOW`.
+
+Stopping was correct: fixing chroma moves five gating metrics at once, and only the counter had
+been validated. But this cannot sit as a footnote, and it is commissioned as its own task with
+the same ablation discipline. One promising asymmetry to start from: **unlike the voice count,
+chroma DOES respond to `NC` — 97% at 16384** — so the cheap fix that was unavailable to the
+counter may be available here.
