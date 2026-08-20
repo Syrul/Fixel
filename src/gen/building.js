@@ -80,22 +80,15 @@ const EMIT_L = 0.74;
  * across it would have been worse — an inverse function across a sign flip is a
  * bug generator. A lamp is simply not a surface, so the ambient does not apply.
  *
- * BUT THE OLD NOTE'S DISCIPLINE IS STILL RIGHT, AND IT NOW POINTS AT A DIFFERENT
- * NUMBER. With the night pull skipped, hue 38 is no longer a boundary a lamp can
- * reach — but the weather veil in `condLight` is deliberately NOT skipped, and it
- * pulls toward 214 under overcast, rain, snow and fog. Its antipode is 34, and
- * the old range 27-37.4 STRADDLED it. Measured on the built palette at
- * night+fog, that split the six seeds into hue 340.8-344.7 and hue 82.7 — two
- * lamps whose mints differ by a fifth of a degree rendering 262 degrees apart.
- * Exactly the coin-flip the old note refused to allow, relocated by this fix
- * from the night pull to the veil. So the top of the range is 33.0: still a
- * filament, and clear of 34 with a degree of margin. This is a BOUND, not a
- * pre-compensation — nothing here inverts the veil, it just declines to sit on
- * the one hue where the veil's own arithmetic is discontinuous.
- *
- * The other two lamps do not need it. 146-172 and 196-216 are nowhere near 34,
- * and straddling the veil's TARGET (214) is harmless — a target is an attractor
- * approached continuously from both sides. Only the antipode is a cliff.
+ * THE RANGE IS BACK TO ITS FULL WIDTH, AND THE CAP THAT NARROWED IT IS DELETED.
+ * For one commit the top of this range was 33.0, because skipping the night pull
+ * left the weather veil's own antipode at 34 as the boundary a lamp could still
+ * reach, and 27-37.4 straddled it: at night+fog six seeds split into hue
+ * 340.8-344.7 and hue 82.7, mints a fifth of a degree apart rendering 262
+ * degrees apart. `condLight` no longer rotates hue at all — it mixes toward the
+ * condition's colour, which has no antipode — so the cliff the cap was standing
+ * back from does not exist. Standing rule 13: delete what a compensation was
+ * compensating for, rather than leaving two mechanisms that cancel.
  *
  * WHY THE LIGHTNESS IS NO LONGER 0.99. That was pre-compensation for the very
  * compression the flag now skips: `l = 0.07 + (l - 0.07) * 0.58` put a 0.99
@@ -125,7 +118,7 @@ export function lampSet(C) {
     Math.round(C.paintRate * 1e5));
   const j = (n, lo, hi) => lo + ((h3(sk, n, 17) & 1023) / 1024) * (hi - lo);
   return [
-    C.mk(j(1, 27, 33.0), j(2, 0.56, 0.80), EMIT_L, true),  // filament, a warm room
+    C.mk(j(1, 27, 37.4), j(2, 0.56, 0.80), EMIT_L, true),  // filament, a warm room
     C.mk(j(3, 146, 172), j(4, 0.26, 0.46), EMIT_L, true),  // a fluorescent tube
     C.mk(j(5, 196, 216), j(6, 0.03, 0.11), EMIT_L, true),  // a cold screen or landing
   ];

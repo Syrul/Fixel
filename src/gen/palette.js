@@ -82,18 +82,117 @@ export const WALL_KEYS = ['concrete', 'pave', 'cream', 'white', 'stone', 'taupe'
   'stone', 'cream', 'white', 'glass', 'teal'];
 
 /**
- * Shortest-arc hue pull toward a target, by a fraction `k`.
+ * HOW A CONDITION CARRIES A PIGMENT TOWARD ITS OWN COLOUR.
  *
- * MUST take the signed difference modulo 360, and this generator has already
- * shipped the bug where it did not: pulling hue 350 toward 10 the naive way
- * travels 340 degrees the wrong way round the wheel and lands nowhere near the
- * target. A pull is how conditions tint a pigment WITHOUT flattening it — every
- * family keeps its own hue and its own separation from its neighbours, it is
- * just carried some of the way toward the light's colour.
+ * THIS REPLACES A HUE ROTATION, AND THE OPERATOR WAS THE BUG — not its
+ * parameters, not the families it was applied to.
+ *
+ * What used to be here took the shortest arc around the hue wheel toward the
+ * condition's hue. That is wrong in a way that is invisible until a pigment
+ * sits opposite the target, and then it is spectacular. Rotating hue 30 toward
+ * 214 travels through 340 — MAGENTA, a colour present in neither the pigment
+ * nor the fog. And the arc changes sign at the ANTIPODE, so the operator is
+ * discontinuous there: with the veil's target at 214, mint hue 33.9 landed at
+ * 345.3 and 34.1 landed at 82.7. Two-tenths of a degree in, 262 degrees out.
+ *
+ * It shipped. Measured on rendered night+fog posts: amber read 310-326, orange
+ * 301-317, terra 297-314, wood 304-320 — a magenta city. `sandy` straddled the
+ * NIGHT antipode at 38 and read hue 66 on one seed and 347 on another: the same
+ * family, two seeds, opposite sides of the wheel. `golden` has the same cliff at
+ * 214, which is where `metal` (210), `steel` (212), `slate` (215) and `rubber`
+ * (220) all sit, at the stronger 0.30 neutral rate.
+ *
+ * FOG DOES NOT ROTATE A SURFACE'S HUE. IT MIXES ITS OWN COLOUR IN FRONT OF IT.
+ * That is Koschmieder, the same law that justifies keeping the veil on emitters:
+ * what reaches the eye is the pigment attenuated toward the medium's radiance.
+ * A warm tone washed by cool fog therefore travels toward the fog's colour
+ * THROUGH GREY, because that is what desaturation is. There is no antipode in a
+ * mix and no branch: the output colour is continuous in every input.
+ *
+ * MIXED IN LINEAR LIGHT, and the reason is that the thing being modelled is
+ * light adding and attenuating, which is linear — sRGB's transfer curve is a
+ * storage convention, not physics. Both endpoints are built at the SAME
+ * lightness `l`, so the mix carries hue and chroma and leaves the ladder alone:
+ * this file's oldest rule is that the luma ratio belongs to the light and the
+ * pigment's colour belongs to the pigment, and they must vary independently.
+ * That also makes the linear-vs-encoded choice principled rather than
+ * load-bearing — with equal endpoint lightness the two agree closely, so the
+ * physically honest one costs nothing.
+ *
+ * Returns [hue, saturation]. BOTH come from the mix, never one of them: near
+ * the grey crossing the hue angle is ill-conditioned, and reading the hue from
+ * the mix while taking saturation from somewhere else would amplify an
+ * arbitrary angle back into a visible colour — the antipode bug rebuilt from
+ * parts. Where the mix lands exactly on grey the hue is genuinely undefined, so
+ * it takes the target's, which is the direction it was travelling.
  */
-function pullHue(h, target, k) {
-  let d = ((target - h) % 360 + 540) % 360 - 180;
-  return h + d * k;
+// HOW SATURATED EACH CONDITION'S OWN LIGHT IS.
+//
+// A rotation needed only a hue, because it never asked what colour the light
+// WAS — it just dragged the pigment's angle. A mix has to know, and these are
+// that missing half.
+//
+// SKY_C IS HIGH ON PURPOSE, AND THE THRESHOLD IS ARITHMETIC RATHER THAN TASTE.
+// A mix at strength k leaves a neutral with roughly `(1-k)s + k*SKY_C` of
+// chroma, so for the night sky to COLOUR a grey wall instead of bleaching it,
+// SKY_C has to clear `s/k`: with the neutral rate at 0.30 and the neutral
+// families sitting near s = 0.08, that is 0.27 merely to break even. Anything
+// at or below it makes night a desaturator — which is precisely why the old
+// code carried an `s * 1.15 + 0.03` boost bolted to a rotation that could not
+// add chroma. One mix now does both jobs.
+//
+// Calibrated on the closest-pair statistic over 8 seeds, because that is the
+// gate this quantity actually binds: at 0.30 it fell to 0.0708 against a 0.0950
+// baseline, and at 0.60 it is 0.0940 — level — while night+fog IMPROVES from
+// 0.0557 to 0.0588. At the low lightness the night ramp works at, a
+// 0.60-saturation blue is a deep navy, not a garish one.
+//
+// THE VEIL IS THE OPPOSITE CASE AND IS DELIBERATELY BELOW BREAK-EVEN. Fog and
+// overcast are SUPPOSED to drain colour — that is what losing the horizon looks
+// like — so VEIL_C sits under `s/k` and the mix desaturates, on purpose. It is
+// 0.20 rather than 0.10 because 0.10 bought nothing: day+fog 0.0870 -> 0.1004
+// and night+rain 0.0814 -> 0.1076 going from 0.10 to 0.20, against baselines of
+// 0.0662 and 0.0882.
+//
+// SUN_C AT 0.85 IS THE ONE VALUE HERE THAT WAS NOT PICKED AT ITS METRIC MAXIMUM.
+// The sweep kept improving past it (0.62 -> 0.1377, 0.78 -> 0.1481, 0.85 ->
+// 0.1666, 0.92 -> 0.1737 against a 0.1576 baseline), and 0.92 is a
+// near-monochromatic orange that no low sun is. 0.85 clears the baseline and is
+// still a colour a sun can be; taking 0.92 would have been tuning to the gate.
+//
+// DUST_C IS ANCHORED TO THE MATERIAL, NOT TO THE SWEEP, because the sweep did
+// not discriminate: 0.22, 0.30, 0.40, 0.55 and 0.70 gave 0.0903, 0.0799, 0.0886,
+// 0.0817 and 0.0780, which is noise in a min-over-28-pairs at n=8 rather than a
+// trend (standing rule 10). Airborne dust is sand, and `sandy` in the table
+// above is s = 0.38, so it is 0.40 and the residual -0.005 against baseline is
+// reported as within noise rather than tuned away.
+const SKY_C = 0.60;    // a night sky: blue, and not grey — skyglow has colour
+const SUN_C = 0.85;    // a low sun: the most saturated light in the set
+const VEIL_C = 0.20;   // overcast, rain, snow, fog: near-neutral by definition
+const HAZE_C = 0.22;   // haze keeps a warm cast
+const DUST_C = 0.40;   // dust is a MATERIAL in the air, and it is sand-coloured
+const SNOW_C = 0.12;   // settled snow: barely blue, mostly value
+
+const toLin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+const toEnc = (v) => 255 * (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
+
+function mixToward(h, s, l, th, ts, k) {
+  if (!(k > 0)) return [h, s];
+  if (k > 1) k = 1;
+  const a = hsl(h, s, l), b = hsl(th, ts, l);
+  const r = toEnc(toLin(a[0]) + (toLin(b[0]) - toLin(a[0])) * k);
+  const g = toEnc(toLin(a[1]) + (toLin(b[1]) - toLin(a[1])) * k);
+  const u = toEnc(toLin(a[2]) + (toLin(b[2]) - toLin(a[2])) * k);
+  const mx = Math.max(r, g, u), mn = Math.min(r, g, u);
+  const d = mx - mn;
+  const L = (mx + mn) / 510;
+  if (d < 1e-9) return [th, 0];
+  const S = d / 255 / (1 - Math.abs(2 * L - 1));
+  let H;
+  if (mx === r) H = 60 * (((g - u) / d) % 6);
+  else if (mx === g) H = 60 * ((u - r) / d + 2);
+  else H = 60 * ((r - g) / d + 4);
+  return [((H % 360) + 360) % 360, Math.max(0, Math.min(1, S))];
 }
 
 /**
@@ -154,11 +253,10 @@ function condLight(h, s, l, cond, neutral, emissive) {
   // accents are, because a painted red awning is still red after dark and a
   // grey wall is not still grey — it is whatever colour the sky is.
   if (emissive) {
-    // A source keeps its own hue, its own saturation and its own value. There
-    // is NO pre-compensation here and there must never be one: the warm band
-    // is unreachable at night because hue 38 is the antipode of 218, where
-    // `pullHue`'s shortest arc changes sign, and an inverse function across a
-    // sign flip is a bug generator. The fix is to not apply the pull at all.
+    // A source keeps its own hue, its own saturation and its own value, and
+    // that is true of the mix above exactly as it was of the rotation it
+    // replaced: an emitter is not lit by the sky, whatever operator the sky
+    // uses. There is NO pre-compensation here and there must never be one.
   } else if (cond.night) {
     // THE NUMBERS HERE ARE SET BY A MEASUREMENT, NOT BY HOW DARK NIGHT LOOKS.
     //
@@ -178,16 +276,27 @@ function condLight(h, s, l, cond, neutral, emissive) {
     // histogram, two bits a channel, so its resolution in the dark quadrant is
     // genuinely poor and it OVERSTATES how far two night scenes have converged.
     // The direction is real, the magnitude is partly the instrument.
+    //
+    // The hue and the saturation are now ONE operation — a mix toward the
+    // night sky's own colour — because in a real mix they are. A grey wall
+    // takes the sky's colour and gains chroma; a painted red awning is still
+    // red after dark and only loses some. That difference used to be two
+    // hand-set lines (`s * 1.15 + 0.03` against `s * 0.84`) and it now falls
+    // out of the same mix run at two strengths, which is why the neutral and
+    // accent rates survive unchanged.
     const AMB = 0.07;
-    h = pullHue(h, 218, neutral ? 0.30 : 0.16);
-    s = neutral ? s * 1.15 + 0.03 : s * 0.84;
+    [h, s] = mixToward(h, s, l, 218, SKY_C, neutral ? 0.30 : 0.16);
     l = AMB + (l - AMB) * 0.58;
   } else if (cond.warmth > 0) {
     // GOLDEN. A low sun is warm and it lifts the lit faces rather than the
     // whole ramp — which is why it is a ladder change and not a tint.
+    //
+    // The rotation's cliff sat at 214 here, which is exactly where this table
+    // keeps `metal` (210), `steel` (212), `slate` (215) and `rubber` (220) —
+    // four neutrals, at the stronger 0.30 neutral rate, on both sides of it.
     const w = cond.warmth;
-    h = pullHue(h, 34, (neutral ? 0.30 : 0.14) * w);
-    s = Math.min(1, s * (1 + 0.34 * w) + (neutral ? 0.045 * w : 0));
+    [h, s] = mixToward(h, s, l, 34, SUN_C, (neutral ? 0.30 : 0.14) * w);
+    s = Math.min(1, s * (1 + 0.34 * w));
     l = l * (1 + 0.08 * w);
   }
 
@@ -199,8 +308,16 @@ function condLight(h, s, l, cond, neutral, emissive) {
   if (cond.overcast > 0) {
     const o = cond.overcast;
     const tgt = cond.weather === 'dust' ? 34 : cond.weather === 'haze' ? 40 : 214;
-    h = pullHue(h, tgt, 0.30 * o);
-    s = s * (1 - 0.42 * o) + (cond.weather === 'dust' ? 0.05 * o : 0);
+    const tgtC = cond.weather === 'dust' ? DUST_C : cond.weather === 'haze' ? HAZE_C : VEIL_C;
+    // THE MIX IS THE WHOLE CHROMATIC OPERATION — there is no separate drain.
+    // The rotation needed one, because rotating a hue cannot desaturate and the
+    // veil has to; a mix toward a near-neutral medium desaturates by doing what
+    // it already does. A first version of this kept `s * (1 - 0.18 * o)` on top
+    // out of caution and it was double-counting: measured on the closest-pair
+    // statistic over 8 seeds, dropping it moved day+fog from 0.0753 to 0.0870
+    // against a 0.0662 baseline, i.e. the extra drain was spending variety to
+    // buy nothing. Standing rule 13 again — delete the compensation.
+    [h, s] = mixToward(h, s, l, tgt, tgtC, 0.30 * o);
     // Toward the fog's own value rather than simply up: a fog lightens a dark
     // material and slightly darkens a white one, because both approach the
     // scattering medium.
@@ -257,8 +374,18 @@ function condMaterial(h, s, l, cond, key) {
   // SETTLED SNOW. A cover, not a tint: the ground families become snow and keep
   // only a trace of what they were, while walls and metal are untouched.
   if (cond.settled > 0 && GROUND.has(key)) {
-    h = pullHue(h, 212, 0.55);
-    s = s * 0.30;
+    // Snow is a COVER, so this is the strongest mix in the file at 0.55 — and
+    // it had the rotation's cliff at 32, with `taupe` (30) on one side and
+    // `stone` (36), `roadD` (38), `road` (40), `sandy` (40) and `pave` (46) on
+    // the other. Every ground family a snowfall actually lands on sat within a
+    // few degrees of it.
+    // The residual drain is 0.55 where it was 0.30, because the mix now does
+    // part of that job itself: a cover this opaque should end up near-neutral,
+    // and crushing to 0.30 ON TOP of a 0.55 mix would take the ground past
+    // neutral into dead grey. Measured on `sandy` (s = 0.38), the two land at
+    // 0.130 against 0.114 — the same snow, arrived at once instead of twice.
+    [h, s] = mixToward(h, s, l, 212, SNOW_C, 0.55);
+    s = s * 0.55;
     l = l + (0.93 - l) * 0.72;
   }
   return [h, s, l];
