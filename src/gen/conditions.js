@@ -129,6 +129,36 @@ export function pickConditions(seed, biome = null) {
  * through here, so there is one definition of what a condition means.
  */
 export function resolveConditions(time, weather, b) {
+  // AN UNKNOWN NAME IS REFUSED HERE, AT THE ONE PLACE THAT CANNOT BE BYPASSED.
+  //
+  // This function used to validate nothing, and `docs/CRAFT.md` records what
+  // that cost: any unknown time fell through to `daySun 0.10` and any unknown
+  // weather fell through to the FOG branch, so `--time nite --weather rian`
+  // rendered a silent night and printed `nite/rian` back at you. A 56-render
+  // calibration sweep was VOIDED by it, via a zsh word-splitting mistake that
+  // handed every render `--time "day clear" --weather ""`.
+  //
+  // `tools/render.mjs` and `tools/strip.mjs` were then each given their own
+  // guard, which fixed the two doors anyone had walked through and left the
+  // room open. IT HAPPENED AGAIN, IN THIS SESSION, to a scratch instrument
+  // driven by the same zsh mistake: five different condition cells printed five
+  // byte-identical tables, and it was caught by noticing they were identical
+  // rather than by any exit code. Four copies of a validator at four callers is
+  // four things that can go stale; the resolver is the one place that cannot be
+  // walked around, so the check belongs here and the callers' guards become a
+  // better error message rather than the only line of defence.
+  //
+  // A THROW RATHER THAN A FALLBACK, on this repo's standing rule about silent
+  // discards: a tool that echoes your typo back as a successful parameter is
+  // worse than one that crashes. Nothing reachable can trip it — `pickConditions`
+  // draws from the weighted tables above, and every tool validates before
+  // calling — so this changes no pixel and refuses only a mistake.
+  if (!TIME_KEYS.includes(time)) {
+    throw new Error(`unknown time "${time}"; one of: ${TIME_KEYS.join(' ')}`);
+  }
+  if (!WEATHER_KEYS.includes(weather)) {
+    throw new Error(`unknown weather "${weather}"; one of: ${WEATHER_KEYS.join(' ')}`);
+  }
 
   // ---- the interactions, resolved once, here -----------------------------
   //
