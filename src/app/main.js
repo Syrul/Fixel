@@ -12,8 +12,10 @@ import { paintFrame, dirtyBands, loopBytes } from '../core/anim.js';
 // Vercel Analytics. Loaded once at startup and never touched again — it runs
 // outside the rAF, so the "a still post schedules no frame" property holds.
 import { inject } from '@vercel/analytics';
+import { injectSpeedInsights } from '@vercel/speed-insights';
 
 inject({ mode: import.meta.env.PROD ? 'production' : 'development' });
+injectSpeedInsights();
 
 const FEED = document.getElementById('feed');
 const HUD = document.getElementById('hud');
