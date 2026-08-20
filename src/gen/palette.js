@@ -284,7 +284,12 @@ function condLight(h, s, l, cond, neutral, emissive) {
     // hand-set lines (`s * 1.15 + 0.03` against `s * 0.84`) and it now falls
     // out of the same mix run at two strengths, which is why the neutral and
     // accent rates survive unchanged.
-    const AMB = 0.07;
+    // THE FLOOR IS A CONDITION, NOT A CONSTANT. It was 0.07 here; a night under
+    // a fog or cloud deck is brighter than a clear one because the deck
+    // scatters ground light back down, and `conditions.js` resolves that
+    // interaction beside the golden/fog one it already owned. 0.07 on a clear
+    // night, so clear nights are untouched.
+    const AMB = cond.ambient === undefined ? 0.07 : cond.ambient;
     [h, s] = mixToward(h, s, l, 218, SKY_C, neutral ? 0.30 : 0.16);
     l = AMB + (l - AMB) * 0.58;
   } else if (cond.warmth > 0) {
@@ -338,7 +343,12 @@ function condLight(h, s, l, cond, neutral, emissive) {
     // different condition — and it matters more here, because the variety gate
     // binds on the MINIMUM pairwise distance, not the median. A feature that
     // improves the average and wrecks the worst case makes the feed worse.
-    const veil = cond.night ? 0.16 : 0.82;
+    // AND THE VEIL'S OWN VALUE AT NIGHT IS THE AMBIENT, NOT A SECOND CONSTANT.
+    // It was 0.16, which is below the floor the night branch now lands on under
+    // a layer — so the veil pulled the picture back DOWN through the floor that
+    // had just been raised, and the two mechanisms fought. A fog deck cannot be
+    // darker than the glow it is made of. One quantity, read in both places.
+    const veil = cond.night ? (cond.ambient === undefined ? 0.16 : cond.ambient + 0.06) : 0.82;
     const veilK = cond.weather === 'fog' ? 0.38 : cond.weather === 'haze' ? 0.26 : 0.18;
     l = l + (veil - l) * veilK * o;
     if (cond.weather === 'fog') s *= 0.86;

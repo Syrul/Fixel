@@ -163,6 +163,49 @@ export function resolveConditions(time, weather, b) {
   const wet = weather === 'rain' ? 1 : weather === 'fog' ? 0.35
     : weather === 'snow' ? 0.5 : 0;
 
+  // NIGHT UNDER A LAYER IS BRIGHTER THAN CLEAR NIGHT, NOT DARKER, and this is
+  // the third interaction that only exists because time and weather are one
+  // module. It has exactly the shape of the golden/fog cancellation above: two
+  // conditions that each darken, which must not simply be applied twice.
+  //
+  // A fog or cloud deck TRAPS ground light and scatters it back down. That is
+  // why an overcast night sky glows orange over a city and a clear one is
+  // black, and `palette.js` already states the daylight half of it — "fog is
+  // BRIGHT, not dark, and that is the part procedural weather usually gets
+  // backwards". After dark the generator was getting the same thing backwards
+  // in the other direction: night compressed the ramp toward 0.07, and then
+  // the veil pulled what was left toward 0.16, and nothing floored the result.
+  //
+  // Measured, on highland at night+fog, which is where it is worst because the
+  // terrain is the whole frame and there are no lit windows in it: 99.1% of the
+  // picture sat below luma 48 and the ENTIRE tonal range lived in three 16-wide
+  // luma bins. Eight different seeds were 0.0006 apart on the cross-seed
+  // histogram — indistinguishable, the "two unrelated scenes converge on the
+  // colour of the dark" failure in its most complete form, worse than the
+  // 0.0035 that first raised it.
+  //
+  // So the ambient floor is a CONDITION, resolved here once, rather than the
+  // module constant `AMB = 0.07` that `palette.js` used to hold. Clear night is
+  // unchanged by construction: overcastness is 0, so the floor is still 0.07
+  // and every clear-night post renders exactly as before.
+  //
+  // 0.16 IS A KNEE BETWEEN TWO ANCHORS, not a number that looked right. Swept
+  // over 8 seeds at 0.08 / 0.12 / 0.16 / 0.20:
+  //
+  //   * the LOWER anchor is variety. Highland night+fog has to be as
+  //     distinguishable seed-to-seed as city night+fog already was, which is a
+  //     closest-pair of 0.0557. It reads 0.0133, 0.0246, 0.0566, 0.0581 — so
+  //     anything below 0.16 leaves the highland collapse only partly fixed.
+  //   * the UPPER anchor is that a foggy night must still be darker than a
+  //     clear day. City night+fog whole-frame darkShare runs 15.5-23.0% at 0.16
+  //     against day's 13.7-17.3%, and per-crop 17.9-28.9% against day's
+  //     15.8-24.6% — darker on both. At 0.20 it falls to 14.4-16.2%, INSIDE the
+  //     day range, and a night stops reading as a night.
+  //
+  // Both anchors are held at 0.16 and the upper one fails at 0.20, so the knee
+  // is where the sweep put it rather than where it would have been guessed.
+  const ambient = time === 'night' ? 0.07 + 0.16 * overcastness : 0.07;
+
   return {
     time, weather, biome: b,
     night: time === 'night',
@@ -174,6 +217,10 @@ export function resolveConditions(time, weather, b) {
     warmth,
     /** Wet ground, 0 to 1. Its effect INVERTS at night; see palette.js. */
     wet,
+    /** The floor every tone approaches, in HSL lightness. Rises at night under
+     *  a layer, because the layer scatters ground light back down. 0.07 on a
+     *  clear night and by day, which is the value this used to be fixed at. */
+    ambient,
     /** Ground cover, for snow. Not the falling layer — the layer already down. */
     settled: weather === 'snow' ? 1 : 0,
     /** Whether a moving layer is drawn in front of the scene. */
