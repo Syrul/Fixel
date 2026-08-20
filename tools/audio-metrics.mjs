@@ -896,22 +896,73 @@ function analyzeWindow(x, sr) {
     for (let j = a; j <= b; j++) if (dp[j] >= 0) w.push(dp[j]);
     dpf[i] = w.length ? Math.round(median(w)) : -1;
   }
+  // A run of stable detected pitch shorter than ~70 ms is not accepted as a
+  // note — it is usually the tracker sliding between two pitches rather than a
+  // note that was played.
+  //
+  // THE DISCARD USED TO BE SILENT, AND SILENT DISCARDS HERE INVENT DATA. The
+  // rejected run was simply skipped, which made the notes on either side of it
+  // ADJACENT, and the interval between them was then counted as a melodic
+  // interval that was never played. Measured on the corpus, **58% of all runs
+  // are discarded** (per track 31%-72%), so the majority of intervals in the
+  // old distribution were manufactured by this loop rather than played.
+  //
+  // A discard now BREAKS the chain: the note before and the note after are not
+  // considered adjacent, and no interval is emitted across the gap. That yields
+  // fewer intervals and no invented ones. Held out from tuning, slope of
+  // reading vs known interval content, melody over bass and harmony:
+  //     notes/s     joined (old)              broken (now)
+  //       4/s       0.965 / 0.961 / 0.979     0.997 / 0.989 / 1.000
+  //       8/s       0.941 / 0.900 / 0.935     0.971 / 0.941 / 0.967
+  //      12/s       0.831 / 0.765 / 0.854     0.919 / 0.873 / 0.940
+  //      16/s       0.550 / 0.381 / 0.556     0.805 / 0.718 / 0.786
+  // Better at every rate tested and much better where the discard is frequent.
+  // 16 notes/s is still only ~0.75, and that residual is detection failure
+  // rather than fabrication.
   const minNoteFrames = Math.max(2, Math.round(0.06 * fps2));
-  const notes = [];
+  const notes = [];               // null marks a discarded run, i.e. a gap
+  let droppedRuns = 0, totalRuns = 0;
   let cur = -1, run = 0;
   for (let i = 0; i <= dpf.length; i++) {
     const v = i < dpf.length ? dpf[i] : -2;
     if (v === cur) { run++; continue; }
-    if (cur >= 0 && run >= minNoteFrames) { if (!notes.length || notes[notes.length - 1] !== cur) notes.push(cur); }
+    if (cur >= 0) {
+      totalRuns++;
+      if (run >= minNoteFrames) {
+        if (!notes.length || notes[notes.length - 1] !== cur) notes.push(cur);
+      } else {
+        droppedRuns++;
+        if (notes.length && notes[notes.length - 1] !== null) notes.push(null);
+      }
+    }
     cur = v; run = 1;
   }
   const intervals = [];
-  for (let i = 1; i < notes.length; i++) { const d = Math.abs(notes[i] - notes[i - 1]); if (d >= 1 && d <= 36) intervals.push(d); }
+  for (let i = 1; i < notes.length; i++) {
+    if (notes[i] === null || notes[i - 1] === null) continue;   // do not span a gap
+    const d = Math.abs(notes[i] - notes[i - 1]);
+    if (d >= 1 && d <= 36) intervals.push(d);
+  }
+  R.droppedRunFraction = totalRuns ? droppedRuns / totalRuns : 0;
+  // REFUSE RATHER THAN FABRICATE. The old code reported 0.000 for all three
+  // fractions whenever no interval survived, and 0.000 is not a measurement of
+  // step density — it is the absence of one. It then scored as three
+  // out-of-band FAILs, i.e. the right verdict for the wrong reason.
+  //
+  // A fraction over fewer than MIN_INTERVALS carries a binomial standard error
+  // above ~0.14, a third of the narrowest of these three bands, so it is not a
+  // reading either. Measured across all 116 corpus windows the minimum is 18
+  // intervals and the median is 61, so this threshold never fires on real
+  // chiptune — which is also why a window that cannot reach it is scored as a
+  // FAIL rather than excused: 116 of 116 windows of genuine music clear it, so
+  // failing to is itself out of band. See scoreAgainstBand.
+  const MIN_INTERVALS = 12;
   const nI = intervals.length;
-  R.stepFrac = nI ? intervals.filter(d => d <= 2).length / nI : 0;
-  R.leapFrac = nI ? intervals.filter(d => d >= 3 && d <= 7).length / nI : 0;
-  R.bigLeapFrac = nI ? intervals.filter(d => d > 7).length / nI : 0;
-  R.noteCount = notes.length;
+  const enough = nI >= MIN_INTERVALS;
+  R.stepFrac = enough ? intervals.filter(d => d <= 2).length / nI : null;
+  R.leapFrac = enough ? intervals.filter(d => d >= 3 && d <= 7).length / nI : null;
+  R.bigLeapFrac = enough ? intervals.filter(d => d > 7).length / nI : null;
+  R.noteCount = notes.filter(v => v !== null).length;
   R.intervalCount = nI;
 
   // ---- structural features, self-similarity, novelty --------------------
@@ -1045,7 +1096,7 @@ const GATING = [
   'polyphony', 'silenceFraction', 'noveltyPerSecond',
 ];
 const NON_GATING = ['peakDbfs', 'rmsDbfs', 'crestFactorDb'];
-const INFO = ['ioiEntropy', 'spectralCentroidVar', 'ioiMedian', 'chromaFlux', 'repeatLagSec', 'noteCount', 'intervalCount'];
+const INFO = ['ioiEntropy', 'spectralCentroidVar', 'ioiMedian', 'chromaFlux', 'repeatLagSec', 'noteCount', 'intervalCount', 'droppedRunFraction'];
 
 function analyzeFile(file) {
   const { samples, sampleRate: sr } = readWav(file);
@@ -1065,7 +1116,12 @@ function analyzeFile(file) {
   if (!perWindow.length) throw new Error(`${file}: too short to analyse`);
   const keys = [...GATING, ...NON_GATING, ...INFO];
   const track = {};
-  for (const k of keys) track[k] = median(perWindow.map(w => w[k] ?? 0));
+  for (const k of keys) {
+    // a metric that refused to report in a window contributes nothing to the
+    // track's median; a metric that refused in EVERY window stays refused.
+    const vals = perWindow.map(w => w[k]).filter(v => v !== null && v !== undefined);
+    track[k] = vals.length ? median(vals) : (perWindow.some(w => w[k] === null) ? null : 0);
+  }
   const ih = new Float64Array(24);
   for (const w of perWindow) if (w._ioiHist) for (let i = 0; i < 24; i++) ih[i] += w._ioiHist[i];
   return {
@@ -1086,8 +1142,8 @@ function analyzeFile(file) {
 function emitBand(results) {
   const band = { version: 1, generated: new Date().toISOString(), method: 'p05..p95 across corpus tracks; per-track value = median across 30 s windows', windowSeconds: CFG.windowSeconds, corpusSize: results.length, tracks: results.map(r => r.file), gating: {}, nonGating: {} };
   for (const k of GATING) {
-    const vals = results.map(r => r.metrics[k]);
-    band.gating[k] = { lo: percentile(vals, 0.05), hi: percentile(vals, 0.95), median: median(vals), min: Math.min(...vals), max: Math.max(...vals) };
+    const vals = results.map(r => r.metrics[k]).filter(v => v !== null && v !== undefined);
+    band.gating[k] = { lo: percentile(vals, 0.05), hi: percentile(vals, 0.95), median: median(vals), min: Math.min(...vals), max: Math.max(...vals), measuredOn: vals.length };
   }
 
   // ACCEPTANCE RULE, derived by leave-one-out on the corpus itself.
@@ -1106,9 +1162,10 @@ function emitBand(results) {
     const others = results.filter((_, j) => j !== i);
     let n = 0;
     for (const k of GATING) {
-      const vals = others.map(t => t.metrics[k]);
+      const vals = others.map(t => t.metrics[k]).filter(x => x !== null && x !== undefined);
       const lo = percentile(vals, 0.05), hi = percentile(vals, 0.95);
       const v = r.metrics[k];
+      if (v === null || v === undefined) { n++; continue; }   // refused = out of band
       if (v < lo || v > hi) n++;
     }
     return n;
@@ -1134,11 +1191,20 @@ function emitBand(results) {
 function scoreAgainstBand(result, band) {
   const rows = [];
   let fails = 0;
+  let refused = 0;
   for (const k of GATING) {
     const v = result.metrics[k];
     const b = band.gating[k];
     if (!b) continue;
     const width = (b.hi - b.lo) || 1e-9;
+    // A refusal is NOT a pass. Every one of the 116 corpus windows produces a
+    // reading, so input that cannot be measured is itself out of band — but it
+    // is reported as its own state so nobody reads it as a measured failure.
+    if (v === null || v === undefined) {
+      fails++; refused++;
+      rows.push({ metric: k, value: null, lo: b.lo, hi: b.hi, pass: false, refused: true, distBandWidths: 0, gating: true });
+      continue;
+    }
     let dist = 0, pass = true;
     if (v < b.lo) { dist = (v - b.lo) / width; pass = false; }
     else if (v > b.hi) { dist = (v - b.hi) / width; pass = false; }
@@ -1156,7 +1222,7 @@ function scoreAgainstBand(result, band) {
     rows.push({ metric: k, value: v, lo: b.lo, hi: b.hi, pass: dist === 0, distBandWidths: dist, gating: false });
   }
   const budget = band.acceptance ? band.acceptance.maxGatingFails : 0;
-  return { file: result.file, gatingFails: fails, maxGatingFails: budget, verdict: fails <= budget ? 'PASS' : 'FAIL', rows };
+  return { file: result.file, gatingFails: fails, refusedGates: refused, maxGatingFails: budget, verdict: fails <= budget ? 'PASS' : 'FAIL', rows };
 }
 
 // ---------------------------------------------------------------------------
@@ -1436,7 +1502,7 @@ function selfTest() {
 // CLI
 // ---------------------------------------------------------------------------
 
-const fmt = (v, d = 3) => (Number.isFinite(v) ? v.toFixed(d) : String(v));
+const fmt = (v, d = 3) => (Number.isFinite(v) ? v.toFixed(d) : v === null ? 'refused' : String(v));
 
 function printSingle(r) {
   console.log(`\n${r.file}  (${r.durationSec.toFixed(1)} s, ${r.sampleRate} Hz, ${r.windows} x ${r.windowSeconds}s window${r.windows > 1 ? 's' : ''}, median across windows)\n`);
@@ -1450,12 +1516,14 @@ function printSingle(r) {
 }
 
 function printScore(s) {
-  console.log(`\n${s.file} — ${s.verdict} (${s.gatingFails} gating metric${s.gatingFails === 1 ? '' : 's'} out of band; budget is ${s.maxGatingFails})\n`);
+  console.log(`\n${s.file} — ${s.verdict} (${s.gatingFails} gating metric${s.gatingFails === 1 ? '' : 's'} out of band; budget is ${s.maxGatingFails}${s.refusedGates ? `; ${s.refusedGates} of them REFUSED to report` : ''})\n`);
   console.log('  metric                        value        band(lo..hi)              result    dist(bandwidths)');
   for (const r of s.rows) {
-    const tag = r.gating ? (r.pass ? 'PASS' : 'FAIL') : (r.pass ? 'in   ' : 'out  ');
+    const tag = r.refused ? 'NO READ' : r.gating ? (r.pass ? 'PASS' : 'FAIL') : (r.pass ? 'in   ' : 'out  ');
     const label = r.gating ? r.metric : r.metric + ' *';
-    console.log(`  ${label.padEnd(28)} ${fmt(r.value).padStart(10)}   ${(fmt(r.lo) + ' .. ' + fmt(r.hi)).padStart(22)}   ${tag.padEnd(8)} ${(r.distBandWidths >= 0 ? '+' : '') + fmt(r.distBandWidths, 2)}`);
+    const val = r.refused ? 'refused' : fmt(r.value);
+    const dist = r.refused ? '  (too few intervals to report)' : (r.distBandWidths >= 0 ? '+' : '') + fmt(r.distBandWidths, 2);
+    console.log(`  ${label.padEnd(28)} ${val.padStart(10)}   ${(fmt(r.lo) + ' .. ' + fmt(r.hi)).padStart(22)}   ${tag.padEnd(8)} ${dist}`);
   }
   console.log('  * = NON-GATING loudness metric (limiter-fakeable); shown for transparency, never gates.');
 }

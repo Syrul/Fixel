@@ -409,13 +409,11 @@ to reject accompaniment partials (0.40) and a slightly wider window (±15). Held
 | low melody 48..67 | 0.023 → 0.891 | 0.056 → 0.886 | −0.000 → 0.905 |
 | high melody 67..91 | 0.860 → 0.979 | 0.784 → 0.986 | 0.737 → 1.006 |
 
-**Two residuals, both real.** Fast passages still break it: at 16 notes/second the rebuilt slopes are
-0.539 / 0.374 / 0.566, because a note must hold a stable detected pitch for ~70 ms
-(`minNoteFrames`) to be counted at all and anything shorter is silently dropped, joining its
-neighbours into an interval that was never played. At 12 notes/s it is 0.831 / 0.778 / 0.847 and at
-8/s and slower ≥ 0.899; the corpus `onsetRate` band is 4.58–9.59/s, so most corpus material sits in
-the good range and chiptune arpeggios do not. And it is timbre-dependent: square 0.972, pulse25
-0.841, triangle 0.807, sawtooth 0.774. Reported, not solved.
+**Two residuals, both real.** ~~Fast passages still break it: at 16 notes/second the rebuilt slopes
+are 0.539 / 0.374 / 0.566~~ — **that residual was the silent discard described in the next section,
+and it is now largely fixed: 16 notes/s reads 0.805 / 0.718 / 0.786 and 12 notes/s 0.919 / 0.873 /
+0.940.** It is still the worst stratum. And it is timbre-dependent: square 0.972, pulse25 0.841,
+triangle 0.807, sawtooth 0.774. Reported, not solved.
 
 **Blast radius: exactly three metrics.** All eleven others are byte-identical across the 38 corpus
 tracks — including `polyphony`, both chroma gates and all three structural gates.
@@ -447,6 +445,76 @@ genuine-to-fake gap from 0 to 1.** By the retirement rule at the top of this sec
 (a) and (b) and fails (c). It is left gating and flagged: the case for demoting it to reported-only
 is real but rests on four controls, which is not a sample.
 
+### The note-segmentation floor invented 58% of the intervals it reported — FIXED
+
+Found while measuring the melodic rebuild's residual at high note rates, and it is a correctness bug
+rather than a calibration question: **it fabricated data.**
+
+A run of stable detected pitch shorter than ~70 ms (`minNoteFrames`) is not accepted as a note — it
+is usually the tracker sliding between two pitches. The rejected run was then **silently skipped**,
+which made the notes on either side of it adjacent, and the gap between them was counted as a
+melodic interval **that was never played**.
+
+**Measured on the corpus, 58% of all runs are discarded** — per track 31% to 72%. So the majority of
+the intervals in the old distribution were manufactured by that loop rather than played. This is the
+**fourth silent discard this project has shipped**, after the fractional typed-array index, the
+float32 depth comparison and the five-argument call to a four-parameter function. All four reported
+success while doing nothing.
+
+**The fix is to stop spanning the gap.** A discarded run now breaks the interval chain: the note
+before and the note after are not treated as adjacent and no interval is emitted across them. Fewer
+intervals, none invented. Held out from tuning, slope of reading vs known interval content, melody
+over bass and harmony:
+
+| notes/s | joined (old) | broken (now) |
+|---:|---|---|
+| 4 | 0.965 / 0.961 / 0.979 | **0.997 / 0.989 / 1.000** |
+| 8 | 0.941 / 0.900 / 0.935 | **0.971 / 0.941 / 0.967** |
+| 12 | 0.831 / 0.765 / 0.854 | **0.919 / 0.873 / 0.940** |
+| 16 | 0.550 / 0.381 / 0.556 | **0.805 / 0.718 / 0.786** |
+
+Better at every rate tested, and much better where the discard is frequent. 16 notes/s is still only
+~0.75, and that residual is detection failure rather than fabrication.
+
+**And it refuses rather than fabricating at the other end.** The old code reported `0.000` for all
+three fractions when no interval survived at all. `0.000` is not a measurement of step density, it is
+the absence of one — and it then scored as three out-of-band FAILs, i.e. the right verdict for the
+wrong reason. A fraction over fewer than 12 intervals carries a binomial standard error above 0.14,
+about a third of the narrowest of these bands, so it is not a reading either. Below that threshold
+the three metrics now report **`refused`**, and the scorer prints `NO READ` and says how many gates
+declined:
+
+```
+control-a-sustained-square.wav — FAIL (13 gating metrics out of band; budget is 6; 3 of them REFUSED to report)
+  stepFrac      refused    0.037 .. 0.424   NO READ   (too few intervals to report)
+```
+
+A refusal still counts toward the fail budget, and that is a deliberate choice with evidence behind
+it: **all 116 corpus windows clear the threshold, minimum 18 intervals, median 61.** Input that
+cannot produce twelve melodic intervals in thirty seconds is therefore out of band for chiptune in
+its own right. Excusing it instead would hand any fake a way to shed three gates by having no
+trackable melody.
+
+**THE PRICE, REPORTED RATHER THAN ABSORBED.** Removing the invented intervals shrinks the sample per
+track — median 61 intervals where the old code claimed ~100 — and all three bands widen:
+
+| | before | after |
+|---|---|---|
+| `stepFrac` width | 0.387 | 0.403 |
+| `leapFrac` width | 0.318 | 0.350 |
+| **`bigLeapFrac` width** | **0.372** | **0.489** |
+
+`bigLeapFrac` is now wider than it was before *either* melodic fix (0.438 originally). Part of that
+is sampling: binomial error at n=61 is ±0.064 against ±0.050 at n=100, which propagates to roughly
+0.394 of the 0.489. **The remainder is not explained by noise**, and the honest reading is that the
+surviving intervals are a different and truer population than the fabricated ones — but this round
+cannot separate those two contributions, so the narrowing reported for `bigLeapFrac` last round
+should not be quoted without this alongside it.
+
+Budget holds at **6**, leave-one-out mean 1.97 → 2.03, worst genuine 7, corpus accepted 37/38, and
+**all twelve control variants still FAIL**. Blast radius is again exactly these three metrics; the
+other eleven are byte-identical.
+
 ## The band
 
 | Metric | p05 | p95 | median | min | max | Gates? |
@@ -455,9 +523,9 @@ is real but rests on four controls, which is not a sample.
 | `beatStrength` | 0.282 | 0.816 | 0.701 | 0.122 | 0.837 | yes |
 | `pitchClassEntropy` | 2.821 | 3.438 | 3.291 | 2.630 | 3.470 | yes |
 | `chromaChangeRate` | 0.735 | 1.624 | 1.170 | 0.704 | 1.654 | yes |
-| `stepFrac` | 0.037 | 0.424 | 0.188 | 0.014 | 0.671 | yes |
-| `leapFrac` | 0.197 | 0.515 | 0.311 | 0.064 | 0.530 | yes |
-| `bigLeapFrac` | 0.300 | 0.672 | 0.461 | 0.196 | 0.749 | yes |
+| `stepFrac` | 0.058 | 0.462 | 0.223 | 0.005 | 0.697 | yes |
+| `leapFrac` | 0.138 | 0.487 | 0.297 | 0.067 | 0.557 | yes |
+| `bigLeapFrac` | 0.233 | 0.721 | 0.422 | 0.131 | 0.734 | yes |
 | `repeatStrength` | 0.177 | 0.709 | 0.392 | 0.168 | 0.793 | yes |
 | `novelFraction` | 0.357 | 0.882 | 0.757 | 0.343 | 0.920 | yes |
 | `spectralCentroidMean` | 2201.520 | 4670.696 | 3489.504 | 1284.874 | 5427.580 | yes |
@@ -520,44 +588,44 @@ Values are the median across each track's 30 s windows.
 
 | Track | `stepFrac` | `leapFrac` | `bigLeapFrac` | `repeatStrength` | `novelFraction` | `noveltyPerSecond` |
 |---|---:|---:|---:|---:|---:|---:|
-| 3xblast-pop-punk-1 | 0.182 | 0.235 | 0.583 | 0.168 | 0.920 | 0.271 |
-| celestial-8bit-thing | 0.127 | 0.321 | 0.552 | 0.793 | 0.350 | 0.394 |
-| celestial-pulsar | 0.326 | 0.281 | 0.393 | 0.501 | 0.676 | 0.309 |
-| celestial-summer-sunday | 0.671 | 0.064 | 0.266 | 0.695 | 0.358 | 0.310 |
-| centurion-delayed-chips | 0.351 | 0.342 | 0.307 | 0.430 | 0.705 | 0.288 |
-| centurion-unstable-field | 0.179 | 0.376 | 0.456 | 0.438 | 0.729 | 0.271 |
-| congus-lasso-lady | 0.217 | 0.383 | 0.400 | 0.178 | 0.838 | 0.366 |
-| congus-napping-cloud | 0.174 | 0.336 | 0.465 | 0.321 | 0.755 | 0.232 |
-| hydrogene-mechanical-complex | 0.247 | 0.248 | 0.504 | 0.340 | 0.807 | 0.287 |
-| hydrogene-perilous-dungeon | 0.367 | 0.296 | 0.318 | 0.269 | 0.780 | 0.252 |
-| junkala-adv-bossfight | 0.092 | 0.314 | 0.594 | 0.255 | 0.879 | 0.252 |
-| junkala-adv-stage1 | 0.127 | 0.204 | 0.669 | 0.253 | 0.790 | 0.232 |
-| junkala-level1 | 0.162 | 0.514 | 0.324 | 0.384 | 0.730 | 0.349 |
-| junkala-level2 | 0.093 | 0.216 | 0.691 | 0.431 | 0.761 | 0.194 |
-| junkala-level3 | 0.178 | 0.256 | 0.567 | 0.399 | 0.832 | 0.232 |
-| junkala-title-screen | 0.038 | 0.481 | 0.481 | 0.323 | 0.782 | 0.191 |
-| nene-theme-song-8bit | 0.110 | 0.314 | 0.573 | 0.342 | 0.739 | 0.155 |
-| obscure-moon-chime | 0.237 | 0.315 | 0.409 | 0.453 | 0.757 | 0.290 |
-| pmiller-nes-jazz | 0.032 | 0.413 | 0.556 | 0.546 | 0.480 | 0.385 |
-| randommind-old-tower-inn | 0.311 | 0.213 | 0.509 | 0.424 | 0.543 | 0.387 |
-| sketchy-boss | 0.214 | 0.158 | 0.628 | 0.324 | 0.771 | 0.349 |
-| sketchy-mars | 0.014 | 0.237 | 0.749 | 0.464 | 0.603 | 0.176 |
-| sketchy-mercury | 0.237 | 0.306 | 0.456 | 0.466 | 0.753 | 0.155 |
-| sketchy-venus | 0.172 | 0.522 | 0.306 | 0.792 | 0.343 | 0.278 |
-| skrjablin-c64-uptempo | 0.423 | 0.239 | 0.338 | 0.219 | 0.757 | 0.271 |
-| springspring-great-boss | 0.230 | 0.530 | 0.196 | 0.523 | 0.763 | 0.329 |
-| tinyworlds-happy-adventure | 0.114 | 0.305 | 0.581 | 0.654 | 0.531 | 0.294 |
-| wolfgang-battle-loop | 0.229 | 0.429 | 0.343 | 0.412 | 0.555 | 0.267 |
-| wolfgang-haunted-house | 0.433 | 0.208 | 0.359 | 0.405 | 0.575 | 0.331 |
-| zane-100-victories | 0.190 | 0.389 | 0.423 | 0.483 | 0.616 | 0.290 |
-| zane-aura-horizon | 0.183 | 0.410 | 0.396 | 0.498 | 0.709 | 0.232 |
-| zane-dizzy-racing | 0.272 | 0.325 | 0.414 | 0.270 | 0.875 | 0.232 |
-| zane-face-the-facts | 0.226 | 0.416 | 0.405 | 0.170 | 0.898 | 0.310 |
-| zane-insect-factory | 0.197 | 0.298 | 0.520 | 0.328 | 0.797 | 0.349 |
-| zane-poker-night | 0.140 | 0.249 | 0.612 | 0.361 | 0.766 | 0.174 |
-| zane-sinister-abode | 0.186 | 0.341 | 0.396 | 0.357 | 0.808 | 0.271 |
-| zane-space-cadet | 0.239 | 0.262 | 0.498 | 0.272 | 0.876 | 0.271 |
-| zane-starlight-city | 0.155 | 0.308 | 0.513 | 0.218 | 0.852 | 0.290 |
+| 3xblast-pop-punk-1 | 0.225 | 0.209 | 0.566 | 0.168 | 0.920 | 0.271 |
+| celestial-8bit-thing | 0.242 | 0.424 | 0.333 | 0.793 | 0.350 | 0.394 |
+| celestial-pulsar | 0.318 | 0.303 | 0.379 | 0.501 | 0.676 | 0.309 |
+| celestial-summer-sunday | 0.697 | 0.067 | 0.236 | 0.695 | 0.358 | 0.310 |
+| centurion-delayed-chips | 0.474 | 0.314 | 0.212 | 0.430 | 0.705 | 0.288 |
+| centurion-unstable-field | 0.225 | 0.384 | 0.401 | 0.438 | 0.729 | 0.271 |
+| congus-lasso-lady | 0.222 | 0.278 | 0.500 | 0.178 | 0.838 | 0.366 |
+| congus-napping-cloud | 0.153 | 0.363 | 0.452 | 0.321 | 0.755 | 0.232 |
+| hydrogene-mechanical-complex | 0.176 | 0.140 | 0.684 | 0.340 | 0.807 | 0.287 |
+| hydrogene-perilous-dungeon | 0.389 | 0.306 | 0.250 | 0.269 | 0.780 | 0.252 |
+| junkala-adv-bossfight | 0.129 | 0.300 | 0.572 | 0.255 | 0.879 | 0.252 |
+| junkala-adv-stage1 | 0.152 | 0.121 | 0.727 | 0.253 | 0.790 | 0.232 |
+| junkala-level1 | 0.213 | 0.395 | 0.412 | 0.384 | 0.730 | 0.349 |
+| junkala-level2 | 0.122 | 0.200 | 0.633 | 0.431 | 0.761 | 0.194 |
+| junkala-level3 | 0.176 | 0.275 | 0.549 | 0.399 | 0.832 | 0.232 |
+| junkala-title-screen | 0.071 | 0.357 | 0.571 | 0.323 | 0.782 | 0.191 |
+| nene-theme-song-8bit | 0.124 | 0.324 | 0.567 | 0.342 | 0.739 | 0.155 |
+| obscure-moon-chime | 0.320 | 0.295 | 0.356 | 0.453 | 0.757 | 0.290 |
+| pmiller-nes-jazz | 0.049 | 0.268 | 0.683 | 0.546 | 0.480 | 0.385 |
+| randommind-old-tower-inn | 0.392 | 0.195 | 0.432 | 0.424 | 0.543 | 0.387 |
+| sketchy-boss | 0.286 | 0.152 | 0.562 | 0.324 | 0.771 | 0.349 |
+| sketchy-mars | 0.005 | 0.260 | 0.734 | 0.464 | 0.603 | 0.176 |
+| sketchy-mercury | 0.441 | 0.254 | 0.305 | 0.466 | 0.753 | 0.155 |
+| sketchy-venus | 0.208 | 0.545 | 0.247 | 0.792 | 0.343 | 0.278 |
+| skrjablin-c64-uptempo | 0.459 | 0.161 | 0.344 | 0.219 | 0.757 | 0.271 |
+| springspring-great-boss | 0.301 | 0.557 | 0.131 | 0.523 | 0.763 | 0.329 |
+| tinyworlds-happy-adventure | 0.060 | 0.220 | 0.720 | 0.654 | 0.531 | 0.294 |
+| wolfgang-battle-loop | 0.246 | 0.477 | 0.277 | 0.412 | 0.555 | 0.267 |
+| wolfgang-haunted-house | 0.404 | 0.200 | 0.396 | 0.405 | 0.575 | 0.331 |
+| zane-100-victories | 0.180 | 0.380 | 0.405 | 0.483 | 0.616 | 0.290 |
+| zane-aura-horizon | 0.217 | 0.444 | 0.383 | 0.498 | 0.709 | 0.232 |
+| zane-dizzy-racing | 0.329 | 0.254 | 0.380 | 0.270 | 0.875 | 0.232 |
+| zane-face-the-facts | 0.309 | 0.394 | 0.346 | 0.170 | 0.898 | 0.310 |
+| zane-insect-factory | 0.273 | 0.273 | 0.476 | 0.328 | 0.797 | 0.349 |
+| zane-poker-night | 0.122 | 0.338 | 0.546 | 0.361 | 0.766 | 0.174 |
+| zane-sinister-abode | 0.209 | 0.455 | 0.306 | 0.357 | 0.808 | 0.271 |
+| zane-space-cadet | 0.279 | 0.244 | 0.477 | 0.272 | 0.876 | 0.271 |
+| zane-starlight-city | 0.198 | 0.304 | 0.465 | 0.218 | 0.852 | 0.290 |
 
 ### Timbre, voices, silence
 
@@ -657,38 +725,38 @@ acceptance budget of 6 is derived from.
 | celestial-summer-sunday | 7 |
 | celestial-8bit-thing | 6 |
 | 3xblast-pop-punk-1 | 5 |
+| tinyworlds-happy-adventure | 5 |
 | sketchy-mars | 4 |
-| wolfgang-haunted-house | 4 |
+| junkala-adv-stage1 | 3 |
 | junkala-level3 | 3 |
 | sketchy-venus | 3 |
-| tinyworlds-happy-adventure | 3 |
+| wolfgang-battle-loop | 3 |
+| wolfgang-haunted-house | 3 |
 | zane-aura-horizon | 3 |
 | zane-face-the-facts | 3 |
 | zane-insect-factory | 3 |
 | celestial-pulsar | 2 |
+| centurion-delayed-chips | 2 |
 | congus-napping-cloud | 2 |
-| junkala-adv-stage1 | 2 |
-| junkala-level2 | 2 |
+| hydrogene-mechanical-complex | 2 |
 | obscure-moon-chime | 2 |
 | pmiller-nes-jazz | 2 |
 | randommind-old-tower-inn | 2 |
 | springspring-great-boss | 2 |
-| wolfgang-battle-loop | 2 |
 | zane-dizzy-racing | 2 |
 | congus-lasso-lady | 1 |
-| hydrogene-mechanical-complex | 1 |
 | junkala-adv-bossfight | 1 |
-| junkala-level1 | 1 |
-| junkala-title-screen | 1 |
+| junkala-level2 | 1 |
 | nene-theme-song-8bit | 1 |
-| sketchy-boss | 1 |
 | sketchy-mercury | 1 |
 | skrjablin-c64-uptempo | 1 |
 | zane-sinister-abode | 1 |
 | zane-starlight-city | 1 |
-| centurion-delayed-chips | 0 |
 | centurion-unstable-field | 0 |
 | hydrogene-perilous-dungeon | 0 |
+| junkala-level1 | 0 |
+| junkala-title-screen | 0 |
+| sketchy-boss | 0 |
 | zane-100-victories | 0 |
 | zane-poker-night | 0 |
 | zane-space-cadet | 0 |
@@ -730,12 +798,12 @@ depends on it.
 
 | Control | variant | gating metrics out of band | budget | verdict |
 |---|---|---:|---:|:--|
-| control-a-sustained-square | peak dead centre | **13** | 6 | **FAIL** |
-| control-a-sustained-square | RMS dead centre | **12** | 6 | **FAIL** |
+| control-a-sustained-square | peak dead centre | **13** *(3 refused)* | 6 | **FAIL** |
+| control-a-sustained-square | RMS dead centre | **12** *(3 refused)* | 6 | **FAIL** |
 | control-b-random-notes | peak dead centre | **8** | 6 | **FAIL** |
 | control-b-random-notes | RMS dead centre | **8** | 6 | **FAIL** |
-| control-c-one-bar-loop | peak dead centre | **10** | 6 | **FAIL** |
-| control-c-one-bar-loop | RMS dead centre | **10** | 6 | **FAIL** |
+| control-c-one-bar-loop | peak dead centre | **10** *(3 refused)* | 6 | **FAIL** |
+| control-c-one-bar-loop | RMS dead centre | **10** *(3 refused)* | 6 | **FAIL** |
 | control-d-long-loop | peak dead centre | **8** | 6 | **FAIL** |
 | control-d-long-loop | RMS dead centre | **8** | 6 | **FAIL** |
 
