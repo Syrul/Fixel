@@ -17,6 +17,7 @@ import { drawSlab, asShade } from '../core/iso.js';
 import { box, gable } from './draw.js';
 import { leftFace, rightFace, topFace, blitFace, textPanel } from './faces.js';
 import { h3, EMIT_L } from './palette.js';
+import { triPhase } from '../core/frame.js';
 import { textBitmap, scaleBitmap, coinWord, coinTag, signInk } from './font.js';
 import * as R from './props/roof.js';
 import * as S from './props/street.js';
@@ -218,6 +219,45 @@ function shopFam(o, bi) {
   return q < 5 ? o.roomW : q < 8 ? o.roomT : q < 13 ? o.lampA : o.lampB;
 }
 
+// ---------------------------------------------------------------------------
+// ONE ROOM IN THE FRAME HAS A SCREEN IN IT — city x night, and nothing else.
+//
+// The cheapest interesting thing a night city can do, and the strictest
+// possible reading of `blitAnim`'s contract even though this is a face shader
+// rather than a sprite: the window is the same rectangle in every frame, at the
+// same depth, under the same tag, and only what is BEHIND the glass changes.
+// Nothing moves. A room lit by a screen is the one light in a street that is
+// not constant, and at twelve pixels it is a thing a person finds rather than a
+// thing the feed has.
+//
+// RARE MEANS RARE, AND THE UNIT THAT MATTERS IS THE POST, NOT THE MASS. The
+// per-mass rate is 1 in 12, and that number is meaningless on its own: a
+// 440x1000 night city only puts ten or twenty visible masses in frame, and a
+// screen also needs `litAt` to agree that the cell it lands on is genuinely lit
+// — so the two rates compound in a way no amount of reasoning gets right.
+// MEASURED instead, over 32 forced night cities: 7 carry one, at 27-109 px.
+// Night is 12% of the feed and the city 33%, so a screen is on about one post
+// in 115. A sweep of 1-in-40 and 1-in-18 both gave 2 of 16 and 1-in-10 gave 4
+// of 16; 1 in 12 is where the post-level rate lands in the right decade.
+
+/**
+ * Which of the four screen tones is showing at frame `k`.
+ *
+ * TWO THRESHOLDED TRIANGLES, NOT A TABLE. `triPhase` is periodic with period 1
+ * in `phase(k)` and has no kick at the wrap, and a threshold of a periodic
+ * function is periodic — so the loop closes by arithmetic rather than by
+ * somebody having written `FRAMES` entries out and kept them in step with
+ * `FRAMES`. Two triangles at different offsets and different thresholds give
+ * four states in an order that does not read as a count, which is what a cut
+ * between shots looks like at eight frames a second.
+ *
+ * `ph` is the building's own offset, so two screens in one frame are not in
+ * step. It is hashed off the mass seed and costs no random draw.
+ */
+function tvRung(k, ph) {
+  return (triPhase(k, ph) > 0.5 ? 1 : 0) + (triPhase(k, ph + 0.375) > 0.62 ? 2 : 0);
+}
+
 /** Cast panels a couple of bays by a few floors, in the wall's own two steps. */
 function panelTone(o, bay, fl) {
   if (o.panelSpan <= 0) return o.wall;
@@ -239,6 +279,37 @@ function facade(F, o) {
   // right facades of one mass share every option except their width, so the
   // occupancy runs below have to be indexed against each face's own bay count.
   const nb = Math.max(1, Math.floor(o.W / o.bayU));
+
+  // ---- the screen room, resolved once per FACE and never per pixel.
+  //
+  // IT IS SEARCHED FOR A CELL THAT IS ALREADY LIT rather than lighting one.
+  // `litAt` composes three spatial structures — occupied floors, runs of
+  // adjacent bays, a stairwell riser — and a screen dropped on an arbitrary
+  // (bay, floor) would be a lit window with no floor around it, which is the
+  // unstructured scatter that whole system exists to avoid. So fourteen
+  // candidates are tried against `litAt` and the first that is genuinely lit
+  // wins; if none is, this face has no screen, which is the right answer for a
+  // dark building.
+  const A = o.A;
+  let tvB = -1, tvF = -1, tvV = null;
+  if (o.tv && o.faceK === o.tvFace) {
+    const nf = Math.max(1, Math.floor((o.H - o.groundH) / o.floorH));
+    for (let i = 0; i < 14 && tvB < 0; i++) {
+      const b = h3(o.seed, 9100 + i, 3) % nb;
+      const f = h3(o.seed, 9200 + i, 5) % nf;
+      if (litAt(o, nb, b, f)) { tvB = b; tvF = f; }
+    }
+    if (tvB >= 0) {
+      // K tones, starting at the stage's CURRENT frame, so entry 0 is always
+      // what this render draws and entry k is the frame k steps later. That is
+      // what keeps a `frames = 1` render and frame 0 of an animated one the
+      // same picture — the property every craft number in `docs/` rests on.
+      const K = A && A.frames > 1 ? A.frames : 1;
+      tvV = new Uint16Array(K);
+      for (let j = 0; j < K; j++) tvV[j] = o.tv[tvRung((A ? A.frame : 0) + j, o.tvPh)].t;
+    }
+  }
+
   return (sx, sy) => {
     const u = au * sx + cu;
     const v = av * sx + bv * sy + cv;
@@ -349,8 +420,20 @@ function facade(F, o) {
     // boundary and it was already ink, so a lit pane is still a framed hole in
     // a wall rather than a bright rectangle painted on one.
     const lf = o.night ? litFam(o, nb, bay, fl) : null;
-    if (o.centreMull && wx1 - wx0 > 3.6 && Math.abs(fu - o.bayU * 0.5) < 0.28 * q) return lf ? lf.k : o.glassK;
-    if (o.transom && wy1 - wy0 > 3.2 && Math.abs(fv - (wy0 + wy1) * 0.5) < 0.26 * q) return lf ? lf.k : o.glassK;
+    // The screen's own dark behind its glazing bars, for the same reason every
+    // other lit pane uses its lamp's: a bar is interior form and belongs to the
+    // material behind it, not to the shared ink. It is the STILL tone — a bar is
+    // a bar at every frame — so it is one of the pixels the recorder never sees.
+    const isTv = tvV !== null && bay === tvB && fl === tvF;
+    if (o.centreMull && wx1 - wx0 > 3.6 && Math.abs(fu - o.bayU * 0.5) < 0.28 * q) return isTv ? o.tv[0].k : (lf ? lf.k : o.glassK);
+    if (o.transom && wy1 - wy0 > 3.2 && Math.abs(fv - (wy0 + wy1) * 0.5) < 0.26 * q) return isTv ? o.tv[0].k : (lf ? lf.k : o.glassK);
+    if (isTv) {
+      // The recorder wants a SCREEN offset and the tag that is about to be
+      // written. `fillPoly` assigns the tag after the shader returns, so
+      // `cv.t` here is exactly what `AnimRec.finish` will find at this pixel.
+      if (A && A.anim && A.anim.on) A.anim.push(sy * A.cv.w + sx, A.cv.t, tvV);
+      return tvV[0];
+    }
     if (lf) return lf.t;
     const hh = h3(o.seed, bay, fl) & 15;
     if (hh < o.gA) return o.g0;
@@ -361,12 +444,17 @@ function facade(F, o) {
   };
 }
 
-function facadeOpts(C, st, wall, W, H, seed, style, blank) {
+// `A` IS THE STAGE, THREADED IN AS THE NINTH PARAMETER AND COUNTED AT ITS ONE
+// CALL SITE. A face shader that animates has to hand `AnimRec` a screen offset
+// and the tag that is about to be written, and both live on the stage — there
+// is no way to recover them from `F` alone, and re-deriving the projection here
+// would be the second copy of it that `faces.js` exists to prevent.
+function facadeOpts(C, st, wall, W, H, seed, style, blank, A) {
   const glass = st.pick([C.glass, C.aqua, C.steel, C.slate, C.teal]);
   const trim = st.bool(0.7) ? C.white : st.pick([C.cream, C.concrete, C.pave]);
   const acc = st.pick(C.accents);
   const o = {
-    W, H, seed, black: C.black, blank, faceK: 0,
+    W, H, seed, black: C.black, blank, faceK: 0, A,
     wall: wall.l, wallD: wall.r, quoin: wall.r,
     wallK: wall.k, glassK: glass.k,
     panelSpan: st.weighted([[1, 4], [2, 6], [3, 3]]),
@@ -431,6 +519,42 @@ function facadeOpts(C, st, wall, W, H, seed, style, blank) {
     // `roomT` is the trim family, the pale ceiling or blind of a lit room.
     o.roomW = wall; o.roomT = trim;
     o.lampA = lamps[0]; o.lampB = lamps[1]; o.lampC = lamps[2];
+    // ---- and one room in about ninety has a screen on.
+    //
+    // FOUR TONES OF ONE COLD LIGHT, minted here and never per window, on the
+    // same grounds as the lamps: a colour that recurs is a colour that means
+    // nothing, and `palette.distinct` is measured rather than spare.
+    //
+    // MINTED BY LIGHTNESS, NOT BY HUE, and that is the difference between a
+    // screen and a disco. What a room lit by a picture actually does is change
+    // BRIGHTNESS from cut to cut, with the hue wandering a few degrees inside
+    // one cold band; four different colours in one window would read as a
+    // fairground, which is the same failure the beacon's three rungs avoid.
+    //
+    // These sit BELOW `EMIT_L` on purpose, spanning 0.31-0.75. A filament is
+    // the brightest thing in the street and a screen is not — it is a wall
+    // being lit by something small, and the dimmest of the four is the frame
+    // where the picture has cut to something dark. That range is also what
+    // makes the flicker legible: four tones a seventh of the ramp apart are
+    // four distinguishable states at twelve pixels.
+    //
+    // From `h3`, not from `st`: a random draw inside this block would move
+    // every subsequent draw on this facade and the DAY path with it.
+    if ((h3(seed, 9000, 3) % 12) === 0) {
+      const j = (n, lo, hi) => lo + ((h3(seed, n, 61) & 1023) / 1024) * (hi - lo);
+      const hue = j(1, 196, 224);
+      const sat = j(2, 0.20, 0.42);
+      o.tv = [
+        C.mk(hue + j(3, -5, 5), sat * 0.9, j(4, 0.31, 0.37), true),
+        C.mk(hue + j(5, -4, 6), sat, j(6, 0.53, 0.59), true),
+        C.mk(hue + j(7, -9, 2), Math.min(1, sat * 1.25), j(8, 0.43, 0.48), true),
+        C.mk(hue + j(9, -3, 7), sat * 0.7, j(10, 0.68, 0.75), true),
+      ];
+      // Which of the mass's two faces carries it, and its own phase, so two
+      // screens in one frame are not in step.
+      o.tvFace = h3(seed, 9001, 3) & 1;
+      o.tvPh = ((h3(seed, 9002, 3) & 7) / 8);
+    }
     // The two DAY window states that are bright by construction are folded back
     // into the dark ones after dark. `lit` was the amber family's top and
     // `blind` was the trim's, and both landed on two of sixteen windows by an
@@ -455,12 +579,12 @@ function facadeOpts(C, st, wall, W, H, seed, style, blank) {
   return o;
 }
 
-function mass(cv, iso, C, st, x, y, z, w, d, h, wall, style, seed) {
+function mass(cv, iso, C, st, x, y, z, w, d, h, wall, style, seed, A) {
   const FL = leftFace(iso, y + d, x, z);
   const FR = rightFace(iso, x + w, y, z);
   const blankL = ((h3(seed, 1, 3) & 15) < 5);
   const blankR = ((h3(seed, 2, 3) & 15) < 5);
-  const oL = facadeOpts(C, st, wall, w, h, seed, style, blankL);
+  const oL = facadeOpts(C, st, wall, w, h, seed, style, blankL, A);
   // The two facades of one mass share every option but their width. `faceK`
   // separates the per-BAY hashes so the same run of lit windows does not appear
   // twice at the corner; the per-FLOOR hashes deliberately do NOT carry it,
@@ -517,7 +641,7 @@ export function drawBuilding(cv, iso, C, st, x, y, z, w, d, opt) {
     const wt = mi === 0 ? wall
       : C.mk(wall._h + st.range(-7, 7), Math.min(1, wall._s * st.range(0.8, 1.25)),
         Math.min(0.97, wall._L * st.range(0.86, 1.16)));
-    mass(cv, iso, C, st, mx, my, mz, mw, md, mh, wt, style, seed + Math.round(mz));
+    mass(cv, iso, C, st, mx, my, mz, mw, md, mh, wt, style, seed + Math.round(mz), opt.A);
   }
 
   const pitched = tall < 26 && Math.min(w, d) < 26

@@ -200,6 +200,11 @@ function parcel(cv, iso, C, st, p, seedN, tag, tagRaw, D, A) {
     cv.t = tag();
     drawBuilding(cv, iso, C, bs, x0 + ix, y0 + iy, Z, bw, bd, {
       maxH: p.type === 'low' ? 11 : 62, sign: sg, tag, D,
+      // The stage, for the one face shader in this generator that animates.
+      // `building.js` reads `A.frame`, `A.frames`, `A.anim` and `A.cv` and
+      // touches nothing else; with `frames` at 1 it draws the still picture
+      // and never enters the recorder. `parcel` already carries it as `A`.
+      A,
     });
     // awnings over the shopfronts on the two visible street faces
     const aw = ps.range(9, 15);
