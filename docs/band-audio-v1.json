@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-08-19T13:12:40.307Z",
+  "generated": "2026-08-20T00:10:45.897Z",
   "method": "p05..p95 across corpus tracks; per-track value = median across 30 s windows",
   "windowSeconds": 30,
   "corpusSize": 38,
@@ -123,11 +123,11 @@
       "max": 0.9745252832041167
     },
     "polyphony": {
-      "lo": 2.950729182656807,
-      "hi": 4.92851768281637,
-      "median": 4.205517736340177,
-      "min": 2.859956236323851,
-      "max": 5.413636363636364
+      "lo": 2.4561560472968242,
+      "hi": 5.971090139383592,
+      "median": 4.389856679275007,
+      "min": 1.892454113090407,
+      "max": 6.169839069578741
     },
     "silenceFraction": {
       "lo": 0,
@@ -195,19 +195,19 @@
         "junkala-title-screen.wav": 2,
         "nene-theme-song-8bit.wav": 0,
         "obscure-moon-chime.wav": 2,
-        "pmiller-nes-jazz.wav": 1,
+        "pmiller-nes-jazz.wav": 0,
         "randommind-old-tower-inn.wav": 4,
         "sketchy-boss.wav": 0,
         "sketchy-mars.wav": 2,
         "sketchy-mercury.wav": 0,
-        "sketchy-venus.wav": 4,
+        "sketchy-venus.wav": 3,
         "skrjablin-c64-uptempo.wav": 1,
         "springspring-great-boss.wav": 2,
-        "tinyworlds-happy-adventure.wav": 2,
+        "tinyworlds-happy-adventure.wav": 3,
         "wolfgang-battle-loop.wav": 2,
         "wolfgang-haunted-house.wav": 3,
         "zane-100-victories.wav": 0,
-        "zane-aura-horizon.wav": 4,
+        "zane-aura-horizon.wav": 5,
         "zane-dizzy-racing.wav": 2,
         "zane-face-the-facts.wav": 2,
         "zane-insect-factory.wav": 3,

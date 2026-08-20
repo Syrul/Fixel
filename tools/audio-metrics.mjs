@@ -320,6 +320,161 @@ function noteSalience(spec, bands, activeFloor) {
 }
 
 // ---------------------------------------------------------------------------
+// Voice counting — NOT the salience grid above. See the retraction in
+// docs/AUDIO-MEASURED.md.
+//
+// `noteSalience` cannot count voices, and for five rounds `polyphony` was its
+// `voices` field. The reason is a resolution artefact, and it is worth stating
+// exactly because the obvious fix (raise NC) does not work.
+//
+// Salience at semitone m is the MAX magnitude over a quarter-tone bin range.
+// At NC=4096 / 44.1 kHz a quarter-tone at midi 60 spans 15.2 Hz against a bin
+// width of 10.8 Hz, and floor/ceil widens that to 3-4 bins; the Hann main lobe
+// is itself ~4 bins. So the response to ONE note is a PLATEAU 3-4 semitones
+// wide. Two consequences, both measured:
+//
+//   1. Two notes closer than the plateau width produce ONE strict local
+//      maximum. Sines at midi 60/64/67 return 2 voices; midi 64+67 return 1.
+//      Voices are lost at exactly the intervals chords are built from.
+//   2. Which plateau member survives is decided by leakage-level differences
+//      in the higher-harmonic terms, not by which pitch is present, so the
+//      surviving peak's LABEL is wrong by up to 3 semitones low.
+//
+// Raising NC does not fix (1): swept over NC = 2048..32768 the exact-match rate
+// on controlled mixtures plateaus at 64%, and the wide-register stratum gets
+// WORSE (43% -> 37%), because sharper resolution lands a bass note's true
+// harmonics precisely on the +12/+19 suppression stencil and deletes genuine
+// upper voices. The grid had to be rebuilt, not enlarged.
+//
+// What replaces it: explicit spectral peaks with parabolic sub-bin
+// interpolation, so a partial's frequency is estimated to a few cents
+// regardless of bin width, then iterative F0 selection with SUBTRACTIVE
+// harmonic cancellation of the partials an accepted F0 actually explains,
+// rather than a flat wipe of a semitone neighbourhood.
+//
+// MEASURED, held out from tuning (n=334 chiptune-timbre mixtures of known
+// voice count, seeds disjoint from the tuning seeds):
+//   response slope, reading vs true count   0.602 -> 0.927   (1.000 is true)
+//   exact match                             48%   -> 74%
+//   within +-1 voice                        81%   -> 92%
+// A slope of 0.602 is the same failure shape as the retired `tempoBpm`
+// estimator: it compressed a true 1..5 voice span into a 1.46..3.82 reading.
+// This is a counter with a known residual, not an exact one — it still
+// under-counts dense mixtures (mean -0.9 voices at 5 simultaneous notes).
+// ---------------------------------------------------------------------------
+
+const VOICE = {
+  nHarm: 8,          // harmonics scored per F0 hypothesis
+  tolCents: 25,      // a partial must land this close to a predicted harmonic
+  stopRel: 0.17,     // stop when best remaining salience falls below this
+                     //   fraction of the first accepted F0's salience
+  maxVoices: 8,
+  // A second or later F0 must explain >= this many partials. Measured on the
+  // tuning mixtures: 1 and 2 are identical on chiptune timbres (143/176 each),
+  // but 2 collapses to 46% on pure sines against 86% for 1, because a sine has
+  // exactly one partial to offer as evidence. 1 costs nothing in-domain and
+  // removes an out-of-domain cliff, so it is not a free parameter worth 2.
+  minEvidence: 1,
+  gridStep: 1 / 3,   // semitone resolution of the F0 hypothesis grid
+  peakFloorRel: 0.005,
+};
+
+const hzToMidiC = f => 69 + 12 * Math.log2(f / 440);
+const midiToHzC = m => 440 * Math.pow(2, (m - 69) / 12);
+
+/** Spectral peaks with parabolic (log-magnitude) sub-bin interpolation. */
+function spectralPeaks(spec, binHz) {
+  let mx = 0; for (let k = 1; k < spec.length; k++) if (spec[k] > mx) mx = spec[k];
+  if (mx <= 0) return [];
+  const thr = mx * VOICE.peakFloorRel;
+  const out = [];
+  for (let k = 2; k < spec.length - 2; k++) {
+    const a = spec[k - 1], b = spec[k], c = spec[k + 1];
+    if (!(b > a && b >= c) || b < thr) continue;
+    const la = Math.log(Math.max(a, 1e-12)), lb = Math.log(Math.max(b, 1e-12)), lc = Math.log(Math.max(c, 1e-12));
+    const den = la - 2 * lb + lc;
+    let d = den !== 0 ? 0.5 * (la - lc) / den : 0;
+    if (!(Math.abs(d) < 0.5)) d = 0;
+    const f = (k + d) * binHz;
+    if (f <= 0) continue;
+    out.push({ f, amp: Math.exp(lb - 0.25 * (la - lc) * d), midi: hzToMidiC(f) });
+  }
+  out.sort((p, q) => p.f - q.f);
+  return out;
+}
+
+/**
+ * Number of simultaneous notes in one magnitude spectrum.
+ * Returns { voices, pitches } — pitches in MIDI, strongest first.
+ */
+function countVoices(spec, sr, N, midiLo, midiHi) {
+  const peaks = spectralPeaks(spec, sr / N);
+  if (!peaks.length) return { voices: 0, pitches: [] };
+  const res = peaks.map(p => p.amp);   // residual amplitude, consumed by cancellation
+
+  // Only F0s that some observed peak supports can score above zero, so the
+  // search enumerates those instead of sweeping a dense grid.
+  const hyp = new Set();
+  for (const p of peaks) {
+    for (let h = 1; h <= VOICE.nHarm; h++) {
+      const m = p.midi - 12 * Math.log2(h);
+      if (m < midiLo - 0.5 || m > midiHi + 0.5) continue;
+      hyp.add(Math.round(m / VOICE.gridStep) * VOICE.gridStep);
+    }
+  }
+  const grid = [...hyp].sort((a, b) => a - b);
+
+  // Peaks are frequency-ordered, so the partials within tolerance of a
+  // predicted harmonic form a contiguous run. Binary-search its start instead
+  // of scanning from zero on every hypothesis; the readings are unchanged.
+  const TOL = Math.pow(2, VOICE.tolCents / 1200);
+  const lowerBound = (f) => {
+    let lo = 0, hi = peaks.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (peaks[mid].f < f) lo = mid + 1; else hi = mid; }
+    return lo;
+  };
+
+  const score = (m) => {
+    const f0 = midiToHzC(m);
+    let s = 0, used = 0;
+    const hit = new Array(VOICE.nHarm + 1).fill(-1);
+    for (let h = 1; h <= VOICE.nHarm; h++) {
+      const fh = f0 * h;
+      const hiF = fh * TOL;
+      let best = -1, bestAmp = 0;
+      for (let i = lowerBound(fh / TOL); i < peaks.length; i++) {
+        if (peaks[i].f > hiF) break;
+        if (res[i] <= 0) continue;
+        if (res[i] > bestAmp) { bestAmp = res[i]; best = i; }
+      }
+      if (best >= 0) { s += bestAmp / h; hit[h] = best; used++; }
+    }
+    return { s, used, hit };
+  };
+
+  const accepted = [];
+  let firstSal = 0, guard = 0;
+  while (accepted.length < VOICE.maxVoices && guard++ < VOICE.maxVoices * 4) {
+    let bm = -1, bs = -1, bres = null;
+    for (const m of grid) { const r = score(m); if (r.s > bs) { bs = r.s; bm = m; bres = r; } }
+    if (bm < 0 || bs <= 0) break;
+    // An F0 with no energy at its own fundamental is a sub-harmonic ghost of a
+    // higher note. Drop the partial that suggested it and re-search.
+    if (bres.hit[1] < 0) {
+      const i = bres.hit.find(v => v >= 0);
+      if (i === undefined || i < 0) break;
+      res[i] = 0; continue;
+    }
+    if (accepted.length && bres.used < VOICE.minEvidence) break;
+    if (!accepted.length) firstSal = bs;
+    else if (bs < VOICE.stopRel * firstSal) break;
+    accepted.push({ midi: bm, sal: bs });
+    for (let h = 1; h <= VOICE.nHarm; h++) { const i = bres.hit[h]; if (i >= 0) res[i] = 0; }
+  }
+  return { voices: accepted.length, pitches: accepted.map(a => Math.round(a.midi)) };
+}
+
+// ---------------------------------------------------------------------------
 // Window analysis — every metric for one fixed-length window of audio
 // ---------------------------------------------------------------------------
 
@@ -541,10 +696,12 @@ function analyzeWindow(x, sr) {
   const voiceCounts = [];
   const peaksSeq = new Array(S2.nFrames);
   for (let f = 0; f < S2.nFrames; f++) {
-    const { chroma, peaks, voices, active } = noteSalience(S2.spec[f], bands, activeFloor);
+    const { chroma, peaks, active } = noteSalience(S2.spec[f], bands, activeFloor);
     peaksSeq[f] = active ? peaks : [];
     if (active) {
-      voiceCounts.push(voices);
+      // NOT noteSalience's `voices` — that field cannot count. See the
+      // countVoices header above and the retraction in docs/AUDIO-MEASURED.md.
+      voiceCounts.push(countVoices(S2.spec[f], sr, CFG.NC, CFG.midiLo, CFG.midiHi).voices);
       for (let p = 0; p < 12; p++) chromaAvg[p] += chroma[p];
     }
     chromaSeq.push(chroma);

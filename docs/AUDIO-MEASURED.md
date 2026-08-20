@@ -33,9 +33,18 @@ A track PASSES if **at most 5 of the 14 gating metrics** fall outside their p05.
 
 The budget is not a guess; it is the p95 of the leave-one-out fail-count distribution of the corpus
 against itself. Demanding all 14 metrics be in band is the wrong gate and the corpus proves it: with
-14 two-sided p05..p95 bands a track is expected to miss ~1.7 by construction, and measured
-leave-one-out only **5 of 38** genuine CC0 chiptunes clear all 14. Mean leave-one-out failures per
+14 two-sided p05..p95 bands a track is expected to miss ~1.4 by construction, and measured
+leave-one-out only **9 of 38** genuine CC0 chiptunes clear all 14. Mean leave-one-out failures per
 real track: **1.89**, max **6**. At a budget of 5, **37 of 38** real tracks are accepted.
+
+> ~~"a track is expected to miss ~1.7"~~ and ~~"only 5 of 38 clear all 14"~~ — **CORRECTED.** Both
+> were carried over unchanged from the 17-gate derivation and never re-measured when the set was cut
+> to 14. Read off `acceptance.leaveOneOut.failCounts` in `docs/band-audio-v1.json`, the count of
+> tracks clearing all 14 is **8** under the pre-rebuild band and **9** under the current one, not 5;
+> and 14 two-sided p05..p95 bands put the expectation at 1.4, not 1.7. The direction of the error
+> flattered the argument — it made an all-pass gate look more absurd than it is — which is exactly
+> the direction a stale number is least likely to get questioned. The conclusion is unchanged: 9 of
+> 38 is still a 76% rejection rate on the corpus's own music.
 
 ## Metrics that were retired, and why
 
@@ -98,6 +107,96 @@ metric list.
 track from 7 to 6, while the controls stayed at 9-13. The budget re-derived to the same value of 5,
 so the margin between the best-scoring fake and the budget is **unchanged at 4**.
 
+### `polyphony` — REBUILT, not retired (failed a). Seventh instrument in this repo to measure something other than its name
+
+`polyphony` was the `voices` field of `noteSalience`. **That field cannot count voices**, and the
+band shipped with it for five rounds. The defect was localised by an independent researcher who
+built a per-block voice counter, ran it against controlled mixtures, rejected its own instrument at
+**18% exact / mean error −0.90 voices**, and then found that its counter and this metric were the
+same code path.
+
+**The reported root cause was partly wrong, and reproducing it first is what showed that.** The
+stated cause was bin quantisation collapsing adjacent semitones, with two reproductions: sines at
+midi 60/64/67 returning 2 voices, and a 392 Hz sine producing *no candidate at all*.
+
+| reproduction | claimed | measured |
+|---|---|---|
+| sines midi 60/64/67 | 2 voices | **2 voices — confirmed** |
+| 392 Hz sine | no candidate | **one candidate, at midi 66** — a candidate is produced, mislabelled a semitone flat |
+
+The second is not a missing candidate; it is a *wrong* one, and that distinction is the whole
+mechanism. Instrumenting the salience curve directly:
+
+```
+sine midi 60 (261.6 Hz) — normalised salience
+  58:0.3045  59:1.0000  60:1.0000  61:0.7644  62:0.0849
+```
+
+The response to **one** note is a **plateau 3–4 semitones wide**. Salience at semitone *m* is the
+MAX magnitude over a quarter-tone bin range; at NC=4096 / 44.1 kHz a quarter-tone at midi 60 spans
+15.2 Hz against a 10.8 Hz bin, `floor`/`ceil` widens that to 3–4 bins, and the Hann main lobe is
+itself ~4 bins. Two consequences, both measured:
+
+1. **Two notes closer than the plateau width produce one strict local maximum.** Sines at midi 64+67
+   return **1** voice; the G is swallowed by the shoulder of the E. Voices are lost at exactly the
+   intervals chords are built from.
+2. **Which plateau member survives is arbitrary**, decided by leakage-level differences in the
+   higher-harmonic terms rather than by which pitch is present — hence the mislabel.
+
+**Raising NC does not fix it.** Swept on 102 controlled mixtures, shipped counter:
+
+| NC | bin | window | exact | mean err | low register | wide-register (spread) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 2048 | 21.5 Hz | 46 ms | 40% | +0.48 | 13% | 33% |
+| **4096** | **10.8 Hz** | **93 ms** | **48%** | **−0.17** | **13%** | **43%** |
+| 8192 | 5.4 Hz | 186 ms | 59% | −0.43 | 50% | 40% |
+| 16384 | 2.7 Hz | 372 ms | 62% | −0.51 | 63% | 43% |
+| 32768 | 1.3 Hz | 743 ms | 64% | −0.50 | 75% | **37%** |
+
+Exactness plateaus at 64% for a 3.4x runtime cost, and the wide-register stratum gets **worse** — at
+NC=32768 sharper resolution lands a bass note's true harmonics precisely on the `+12/+19/...`
+suppression stencil and deletes genuine upper voices. Quarter-tone bands below ~400 Hz are the wrong
+parameterisation because a semitone at 65 Hz is 3.9 Hz, which no window short enough to sit inside a
+chiptune note can resolve; but the fix was never more FFT. **The grid had to be rebuilt.**
+
+**What replaced it:** explicit spectral peaks with parabolic sub-bin interpolation, so a partial's
+frequency is estimated to a few cents regardless of bin width; then iterative F0 selection with
+harmonic cancellation of the partials an accepted F0 actually explains, instead of a flat 0.08 wipe
+of a fixed semitone stencil. NC stays at **4096** — every other STFT #2 metric is untouched.
+
+**SELF-CONSISTENCY (standing rule 7).** 612 controlled mixtures of known voice count, stratified over
+voice count 1–5, four registers, chordal (≥3 semitones) vs wide (≥7) spacing, three dynamic balances
+(flat / 6 dB / 12 dB) and six timbres. Parameters were chosen on 204 mixtures from two seeds; the
+figures below are the **408 held out on four disjoint seeds**, and the analogous statistic to the
+tempo audit's resampling check is the **response slope** — regress reading on truth, a true
+instrument gives 1.000.
+
+| | shipped | rebuilt |
+|---|---:|---:|
+| **response slope** (want 1.000) | **0.602** | **0.967** |
+| exact match | 48% | **73%** |
+| within ±1 voice | 81% | **92%** |
+| mean abs error (voices) | 0.76 | **0.42** |
+| mean reading at true 1 / 3 / 5 voices | 1.46 / 3.17 / 3.82 | 1.00 / 3.13 / 4.84 |
+
+*(chiptune timbres, n=334; over all six timbres including pure sines, n=408: slope 0.581 → 0.925,
+exact 49% → 73%.)*
+
+A slope of 0.602 is **the same failure shape as the retired `tempoBpm` estimator**: it compressed a
+true 1..5 voice span into a 1.46..3.82 reading, so most of what it reported was its own centre. That
+is why the researcher's counter scored 18% and why "it is biased identically on corpus and Fixel" was
+not a safe assumption to rest on — a metric with slope 0.6 is only two-thirds a voice counter.
+
+**This is a counter with a known residual, not an exact one.** It still under-counts dense mixtures
+(mean −0.9 voices at 5 simultaneous notes) and the low register remains the worst stratum (53% exact,
+up from 26%). Wide-register mixtures spanning more than two octaves reach only 58%. Reported at 73%,
+not claimed as solved.
+
+**Cost:** 2.1x runtime on a 6-minute track (0.97 s → 2.08 s). The corpus band had to be re-derived,
+and exactly one band row moved.
+
+**Effect on the bar — nothing retracts.** See the re-verification section at the end of this file.
+
 ## The band
 
 | Metric | p05 | p95 | median | min | max | Gates? |
@@ -113,7 +212,7 @@ so the margin between the best-scoring fake and the budget is **unchanged at 4**
 | `novelFraction` | 0.503 | 0.929 | 0.810 | 0.397 | 0.963 | yes |
 | `spectralCentroidMean` | 2201.520 | 4670.696 | 3489.504 | 1284.874 | 5427.580 | yes |
 | `spectralCentroidCV` | 0.125 | 0.558 | 0.218 | 0.109 | 0.975 | yes |
-| `polyphony` | 2.951 | 4.929 | 4.206 | 2.860 | 5.414 | yes |
+| `polyphony` | 2.456 | 5.971 | 4.390 | 1.892 | 6.170 | yes — **rebuilt, see below** |
 | `silenceFraction` | 0.000 | 0.125 | 0.001 | 0.000 | 0.172 | yes |
 | `noveltyPerSecond` | 0.194 | 0.350 | 0.288 | 0.174 | 0.366 | yes |
 | `peakDbfs` | -5.523 | 0.000 | -1.215 | -6.668 | 0.000 | **no — limiter-fakeable** |
@@ -214,44 +313,44 @@ Values are the median across each track's 30 s windows.
 
 | Track | `spectralCentroidMean` | `spectralCentroidCV` | `polyphony` | `silenceFraction` |
 |---|---:|---:|---:|---:|
-| 3xblast-pop-punk-1 | 3383.8 | 0.149 | 4.580 | 0.003 |
-| celestial-8bit-thing | 2330.3 | 0.540 | 2.960 | 0.172 |
-| celestial-pulsar | 3605.0 | 0.308 | 3.490 | 0.003 |
-| celestial-summer-sunday | 2895.7 | 0.124 | 4.374 | 0.001 |
-| centurion-delayed-chips | 2752.3 | 0.265 | 4.767 | 0.000 |
-| centurion-unstable-field | 3669.6 | 0.224 | 4.637 | 0.000 |
-| congus-lasso-lady | 3480.4 | 0.355 | 4.057 | 0.003 |
-| congus-napping-cloud | 1284.9 | 0.438 | 3.130 | 0.011 |
-| hydrogene-mechanical-complex | 3181.5 | 0.213 | 3.852 | 0.000 |
-| hydrogene-perilous-dungeon | 3505.7 | 0.142 | 4.597 | 0.000 |
-| junkala-adv-bossfight | 3692.4 | 0.280 | 3.752 | 0.000 |
-| junkala-adv-stage1 | 3516.7 | 0.321 | 3.587 | 0.000 |
-| junkala-level1 | 4280.1 | 0.194 | 3.670 | 0.000 |
-| junkala-level2 | 4416.7 | 0.195 | 3.442 | 0.000 |
-| junkala-level3 | 4781.5 | 0.148 | 4.064 | 0.000 |
-| junkala-title-screen | 4035.1 | 0.217 | 3.318 | 0.048 |
-| nene-theme-song-8bit | 3498.6 | 0.444 | 4.638 | 0.000 |
-| obscure-moon-chime | 3099.7 | 0.336 | 4.739 | 0.000 |
-| pmiller-nes-jazz | 2743.5 | 0.264 | 2.860 | 0.050 |
-| randommind-old-tower-inn | 4110.5 | 0.109 | 3.917 | 0.000 |
-| sketchy-boss | 2673.8 | 0.156 | 4.279 | 0.001 |
-| sketchy-mars | 3074.1 | 0.161 | 3.594 | 0.013 |
-| sketchy-mercury | 2424.7 | 0.171 | 4.191 | 0.003 |
-| sketchy-venus | 3424.3 | 0.222 | 5.414 | 0.005 |
-| skrjablin-c64-uptempo | 3071.5 | 0.195 | 3.957 | 0.000 |
-| springspring-great-boss | 4084.2 | 0.183 | 4.837 | 0.000 |
-| tinyworlds-happy-adventure | 1471.9 | 0.975 | 3.174 | 0.000 |
-| wolfgang-battle-loop | 3367.9 | 0.215 | 4.377 | 0.000 |
-| wolfgang-haunted-house | 2547.7 | 0.458 | 2.900 | 0.141 |
-| zane-100-victories | 3817.4 | 0.259 | 4.525 | 0.002 |
-| zane-aura-horizon | 2336.1 | 0.192 | 4.445 | 0.000 |
-| zane-dizzy-racing | 4534.5 | 0.125 | 4.900 | 0.000 |
-| zane-face-the-facts | 4651.1 | 0.187 | 4.611 | 0.004 |
-| zane-insect-factory | 3408.9 | 0.659 | 3.013 | 0.122 |
-| zane-poker-night | 3705.8 | 0.520 | 4.221 | 0.030 |
-| zane-sinister-abode | 5427.6 | 0.209 | 4.456 | 0.005 |
-| zane-space-cadet | 4254.6 | 0.316 | 4.269 | 0.004 |
-| zane-starlight-city | 4479.2 | 0.218 | 5.087 | 0.002 |
+| 3xblast-pop-punk-1 | 3383.8 | 0.149 | 5.443 | 0.003 |
+| celestial-8bit-thing | 2330.3 | 0.540 | 2.303 | 0.172 |
+| celestial-pulsar | 3605.0 | 0.308 | 3.166 | 0.003 |
+| celestial-summer-sunday | 2895.7 | 0.124 | 3.415 | 0.001 |
+| centurion-delayed-chips | 2752.3 | 0.265 | 4.192 | 0.000 |
+| centurion-unstable-field | 3669.6 | 0.224 | 4.970 | 0.000 |
+| congus-lasso-lady | 3480.4 | 0.355 | 4.428 | 0.003 |
+| congus-napping-cloud | 1284.9 | 0.438 | 2.884 | 0.011 |
+| hydrogene-mechanical-complex | 3181.5 | 0.213 | 3.990 | 0.000 |
+| hydrogene-perilous-dungeon | 3505.7 | 0.142 | 4.827 | 0.000 |
+| junkala-adv-bossfight | 3692.4 | 0.280 | 5.051 | 0.000 |
+| junkala-adv-stage1 | 3516.7 | 0.321 | 3.665 | 0.000 |
+| junkala-level1 | 4280.1 | 0.194 | 4.049 | 0.000 |
+| junkala-level2 | 4416.7 | 0.195 | 4.352 | 0.000 |
+| junkala-level3 | 4781.5 | 0.148 | 4.794 | 0.000 |
+| junkala-title-screen | 4035.1 | 0.217 | 3.402 | 0.048 |
+| nene-theme-song-8bit | 3498.6 | 0.444 | 5.138 | 0.000 |
+| obscure-moon-chime | 3099.7 | 0.336 | 5.049 | 0.000 |
+| pmiller-nes-jazz | 2743.5 | 0.264 | 2.800 | 0.050 |
+| randommind-old-tower-inn | 4110.5 | 0.109 | 2.750 | 0.000 |
+| sketchy-boss | 2673.8 | 0.156 | 5.279 | 0.001 |
+| sketchy-mars | 3074.1 | 0.161 | 3.285 | 0.013 |
+| sketchy-mercury | 2424.7 | 0.171 | 5.095 | 0.003 |
+| sketchy-venus | 3424.3 | 0.222 | 4.946 | 0.005 |
+| skrjablin-c64-uptempo | 3071.5 | 0.195 | 2.975 | 0.000 |
+| springspring-great-boss | 4084.2 | 0.183 | 5.712 | 0.000 |
+| tinyworlds-happy-adventure | 1471.9 | 0.975 | 2.483 | 0.000 |
+| wolfgang-battle-loop | 3367.9 | 0.215 | 3.823 | 0.000 |
+| wolfgang-haunted-house | 2547.7 | 0.458 | 1.892 | 0.141 |
+| zane-100-victories | 3817.4 | 0.259 | 5.544 | 0.002 |
+| zane-aura-horizon | 2336.1 | 0.192 | 5.964 | 0.000 |
+| zane-dizzy-racing | 4534.5 | 0.125 | 6.012 | 0.000 |
+| zane-face-the-facts | 4651.1 | 0.187 | 5.915 | 0.004 |
+| zane-insect-factory | 3408.9 | 0.659 | 3.387 | 0.122 |
+| zane-poker-night | 3705.8 | 0.520 | 4.197 | 0.030 |
+| zane-sinister-abode | 5427.6 | 0.209 | 5.519 | 0.005 |
+| zane-space-cadet | 4254.6 | 0.316 | 5.080 | 0.004 |
+| zane-starlight-city | 4479.2 | 0.218 | 6.170 | 0.002 |
 
 ### Loudness — NON-GATING
 
@@ -404,7 +503,8 @@ Showing the RMS-dead-centre variant of each.
 | `noveltyPerSecond` | 0.000 | 0.194 .. 0.350 | -1.24 |
 | `novelFraction` | 0.007 | 0.503 .. 0.929 | -1.16 |
 | `leapFrac` | 0.000 | 0.295 .. 0.552 | -1.15 |
-| `polyphony` | 1.000 | 2.951 .. 4.929 | -0.99 |
+| ~~`polyphony`~~ | ~~1.000~~ | ~~2.951 .. 4.929~~ | ~~-0.99~~ |
+| `polyphony` **(rebuilt)** | 1.000 | 2.456 .. 5.971 | **-0.41** |
 | `spectralCentroidMean` | 6557.998 | 2201.520 .. 4670.696 | +0.76 |
 | `repeatStrength` | 1.000 | 0.154 .. 0.642 | +0.73 |
 | `stepFrac` | 0.000 | 0.176 .. 0.458 | -0.62 |
@@ -416,7 +516,8 @@ Showing the RMS-dead-centre variant of each.
 
 | Metric | value | band | distance (band-widths) |
 |---|---:|---|---:|
-| `polyphony` | 1.598 | 2.951 .. 4.929 | -0.68 |
+| ~~`polyphony`~~ | ~~1.598~~ | ~~2.951 .. 4.929~~ | ~~-0.68~~ |
+| `polyphony` **(rebuilt)** | 1.288 | 2.456 .. 5.971 | **-0.33** |
 | `spectralCentroidMean` | 5979.850 | 2201.520 .. 4670.696 | +0.53 |
 | `pitchClassEntropy` | 3.564 | 2.773 .. 3.301 | +0.50 |
 | `chromaChangeRate` | 1.800 | 0.990 .. 1.576 | +0.38 |
@@ -447,6 +548,12 @@ Stated bluntly, because a bar you cannot attack is a bar you do not understand.
 **The load-bearing metrics are six**: `pitchClassEntropy`, `chromaChangeRate`, `repeatStrength`,
 `novelFraction`, `noveltyPerSecond`, `polyphony`. Those six caught all three controls on both
 mastering variants. If a future synth is tuned against this band, these are the ones doing the work.
+
+> Read that as the six *collectively* covering all three controls, which is what the per-control
+> tables show. Individually `polyphony` fails control-a and control-b and **passes control-c** at
+> 2.873 against a lower edge of 2.456 — the one-bar loop has two real voices, so a working counter
+> reads it correctly and correctly declines to object. It was never a three-for-three metric, before
+> or after the rebuild.
 
 **`onsetRate` and `beatStrength` are the weakest surviving gates.** Before mastering, the
 sustained-square control scored `onsetRate` 19.93/s and `beatStrength` 0.95 with *no notes in it at
@@ -483,10 +590,51 @@ the retirement section above, which the autocorrelation approach did not.
 (Zane Little Music 9, Juhani Junkala 6). Band widths partly encode those artists' habits rather than
 chiptune in general.
 
-**Harmonic suppression assumes strong fundamentals.** The salience grid suppresses accepted notes'
+**Harmonic suppression assumes strong fundamentals.** ~~The salience grid suppresses accepted notes'
 harmonics at +12/19/24/28/31/34/36 semitones, so a melody sitting exactly an octave or an
-octave-plus-fifth above a bass note is suppressed and undercounted in `polyphony` and chroma. Chiptune
-waveforms all carry strong fundamentals, which is what makes the approximation survivable here.
+octave-plus-fifth above a bass note is suppressed and undercounted in `polyphony` and chroma.~~
+**Still true for chroma; no longer the mechanism for `polyphony`,** which no longer uses the stencil
+— see the rebuild above. What replaced it under-counts a true octave for a different and honest
+reason: a note and its octave share every partial, so no single spectrum can separate them.
+
+Measured on two-voice mixtures across six roots, four chiptune timbres and three dynamic balances,
+correct-count rate on the stencil intervals `+12/19/24/28/31/34/36` (n=492) versus every other
+interval from +1 to +18 (n=1224):
+
+| | stencil intervals | other intervals |
+|---|---:|---:|
+| shipped counter | 37% | 51% |
+| rebuilt counter | 62% | 87% |
+
+Two things follow, and the first corrects a smaller probe of mine that pointed the other way. The
+stencil intervals **were** genuinely the worse ones for the shipped counter (37% vs 51%), so
+`HARMONIC_SHADOW` in `src/audio/theory.js` was aimed in the right direction — a single-configuration
+probe at one root and one timbre said otherwise and was wrong, which is standing rule 8 collecting
+again. But the stencil is a **weak predictor** of where voices were actually lost: `+12` scored 54%
+while `+10`, `+13` and `+18` — none of them avoided — scored 35–40%. After the rebuild the
+non-stencil intervals reach 87–100% and the residual loss concentrates in the true octave family,
+which is a physical ambiguity rather than a grid artefact.
+
+**Pitch LABELS are wrong in the bass, and this is NOT fixed.** The same plateau that broke the voice
+count also mislabels the surviving peak, and chroma is accumulated from accepted notes only — so
+`pitchClassEntropy` and `chromaChangeRate`, two of the six load-bearing gates, are fed
+partly-wrong pitch classes. Measured on 300 single notes of known pitch across five timbres and the
+full midi 36..95 grid:
+
+| register | NC=4096 (shipped) | NC=8192 | NC=16384 |
+|---|---:|---:|---:|
+| C2–B2 (65–124 Hz) | **60%** correct | 82% | 88% |
+| C3–B3 (131–247 Hz) | 80% | 87% | 98% |
+| C4–B4 (262–494 Hz) | 87% | 98% | 100% |
+| C5–B5 (523–988 Hz) | 98% | 100% | 100% |
+| C6–B6 (1047+ Hz) | 100% | 100% | 100% |
+| **all** | **85%**, mean error −0.19 semitones | 93% | 97% |
+
+The error is one-sided (always flat, never sharp) and confined below ~500 Hz. Unlike the voice count
+this one *does* respond to NC. It is left unfixed deliberately: correcting chroma moves five gating
+metrics at once, and this round validated only the voice counter. **Nothing in this document's
+`pitchClassEntropy` or `chromaChangeRate` figures should be read as resting on correct bass pitch
+classes.**
 
 
 ---
@@ -506,6 +654,47 @@ Gating set is now **14** (`tempoBpm`, `ioiEntropy`, `spectralCentroidVar` remove
 
 **Margin preserved: worst genuine 4, best fake 9.** Removing three gates did not
 cost separation — which is the point, since they were not contributing any.
+
+## Re-verification after the `polyphony` rebuild — NO PAST VERDICT MOVES
+
+The question this had to answer was not "is the metric better" but "did any conclusion rest on the
+broken one". The researcher's note that the bias applies to corpus and Fixel identically was a
+reason to check, not a finding. Checked three ways, on all 38 corpus tracks and all 9 control
+variants, with only the voice counter changed and NC held at 4096 so nothing else moves:
+
+| | shipped `polyphony` | rebuilt `polyphony` | `polyphony` ABLATED (13 gates) |
+|---|---:|---:|---:|
+| budget (ceil p95 of LOO) | 5 | **5** | 4 |
+| LOO mean fail count | 1.89 | **1.89** | 1.74 |
+| worst genuine track (LOO) | 6 | **6** | 6 |
+| corpus accepted | 37/38 | **37/38** | 37/38 |
+| best-scoring fake | 9 | **9** | 8 |
+| margin, worst genuine → best fake | 6 → 9 | **6 → 9** | 6 → 8 |
+| control fail counts | 13,12,9,9,9,9,9,9,9 | **identical** | 12,11,8,8,9,9,9,9,9 |
+| controls failing | 9 of 9 | **9 of 9** | 9 of 9 |
+
+**(a) The controls still fail** — all nine variants, at identical fail counts.
+**(b) The budget re-derives to 5.**
+**(c) The margin survives** — worst genuine 6, best fake 9, unchanged.
+**(d) Exactly one band row moved:** `polyphony` 2.951..4.929 → **2.456..5.971**. Every other gating
+band is byte-identical, because the rebuild touches nothing else.
+
+**The ablation column is the load-bearing one.** It does not depend on the rebuilt counter being
+right: it asks what survives if `polyphony` is worth *nothing at all*. Answer — all nine controls
+still fail, by 4 to 8 metrics clear of a budget of 4. So the bar's teeth were never imaginary; the
+worst case for this defect was already covered by the other thirteen gates.
+
+**What IS retracted:** the two band-width distances. `polyphony` caught the sustained square at
+**−0.41** band-widths, not −0.99, and the random-note control at **−0.33**, not −0.68 — the rebuilt
+corpus spread is 78% wider (1.978 → 3.515 band-width units), so the same catch is a smaller fraction
+of it. Both are struck through in the tables above. The *claim* those numbers supported — that
+`polyphony` is one of the six load-bearing gates catching all three controls on both mastering
+variants — **still holds**: it fails control-a and control-b and, as before, passes control-c.
+
+Two honest caveats on this section. The corpus is still 38 OpenGameArt tracks with two artists
+supplying 15, so these band widths still partly encode those artists' habits. And a re-derive is not
+an independent test: the corpus defined the band it is being scored against, which is why the
+leave-one-out column rather than the raw fail count is the number to read.
 
 ## THE GAP THIS OPENS — carry it into every audio verdict
 
