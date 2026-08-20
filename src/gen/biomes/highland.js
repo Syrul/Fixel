@@ -61,7 +61,7 @@ import { heightField, fbm, ridged, vnoise, tri } from '../world.js';
 import { makeTerrain, drawTerrain, walkTrack } from '../terrain.js';
 import { drawSlab, drawBox } from '../../core/iso.js';
 import { box } from '../draw.js';
-import { h3 } from '../palette.js';
+import { h3, EMIT_L } from '../palette.js';
 import { topFace, leftFace, rightFace } from '../faces.js';
 import { localC } from '../stage.js';
 import { dep, projR } from '../view.js';
@@ -523,6 +523,46 @@ export function paintHighland(stage) {
   const tarnDeep = C.mk(tarnFam._h + ws.range(-6, 6),
     Math.min(0.44, tarnFam._s * ws.range(1.0, 1.35)),
     tarnFam._L * ws.range(0.74, 0.88));
+  // A TARN AFTER DARK IS A MIRROR, AND A MIRROR IS NOT A SURFACE.
+  //
+  // This is the emissive argument arriving from the other direction, and it is
+  // the third of this biome's night lights — the one that needs no lamp in it.
+  // `condLight`'s night branch compresses every pigment toward the ambient
+  // floor because that is what happens to a thing the sky is LIGHTING. Still
+  // water is not lit by the sky; it IS the sky, folded. Crushed to 0.07 the
+  // tarn came out as a hole of near-black indigo in a near-black mountain, which
+  // is exactly the "read as a shadow" failure the tone above was already minted
+  // to avoid — undone after dark by a transform that had no business applying.
+  //
+  // So at night the tarn is minted as a SOURCE: a cold pale sky-slate that skips
+  // the night compression and the night hue pull, and keeps the weather veil,
+  // because fog genuinely does hide a reflection. Against a mountain sitting at
+  // the ambient floor it reads as a sheet of light, which is what a corrie tarn
+  // under any sky at all actually looks like.
+  //
+  // AND IT IS STILL, DELIBERATELY. Everything else this round that catches light
+  // also moves; this does not. A tarn in a corrie on a cold night is glass —
+  // there is no fetch to raise a ripple — and the whole point of the amplitude
+  // floor is that a thing which cannot move by a coherent pixel must not move at
+  // all. It also keeps the loop out of the biome that already owns the worst
+  // case (highland + snow, 694 KB at 440x1000).
+  //
+  // WHY THIS IS NOT DONE TO THE SEA. The same physics applies to the shore, and
+  // the shore must not have it: open water is most of that frame, so lifting it
+  // out of the night ramp would raise the key of the whole picture rather than
+  // put a highlight in it. A tarn is small enough to be a highlight. Scope is
+  // the argument, not physics — stated so nobody generalises it later.
+  //
+  // NO Rng DRAW HAPPENS HERE. The numbers are hashed off the daylight tarn's own
+  // minted family, so the `tarn` stream is untouched and every subsequent draw
+  // in it — and therefore every scattered object in the frame — is unmoved.
+  let tarnSky = null, tarnSkyD = null;
+  if (C.cond && C.cond.night) {
+    const sk = h3(Math.round(tarnFam._h * 64), Math.round(tarnFam._L * 4096), 0x7ab1);
+    const j = (n, lo, hi) => lo + ((h3(sk, n, 23) & 1023) / 1024) * (hi - lo);
+    tarnSky = C.mk(j(1, 200, 224), j(2, 0.10, 0.24), EMIT_L * j(3, 0.60, 0.74), true);
+    tarnSkyD = C.mk(j(4, 202, 228), j(5, 0.16, 0.30), EMIT_L * j(6, 0.40, 0.52), true);
+  }
   cutTarns(T, F, ws, step, TL0, seedN);
 
   // ---------------------------------------------------------------- the hero
@@ -830,13 +870,17 @@ export function paintHighland(stage) {
     F.locate(u, v);
     const hf = F.ch(CH_H);
     const d = z - hf;
-    if (d < 0.55) return tarnFam.t;
+    // The night families are a straight substitution: same three bands, same
+    // rim, same hash. Only the pigment behind them is a source rather than a
+    // surface, so the structure a daylight reader learned still holds.
+    const FAM = tarnSky || tarnFam, DEEP = tarnSkyD || tarnDeep;
+    if (d < 0.55) return FAM.t;
     // Two flat bands and a bright rim: a tarn is a hole in the hill, and the
     // only thing that says so at this size is that its edge is a value change
     // rather than a gradient.
     const g = h3(Math.floor(u / 9), Math.floor(v / 9), S1 + 41) & 15;
-    if (d > 3.4) return g < 4 ? tarnDeep.l : tarnDeep.t;
-    return g < 5 ? tarnFam.l : tarnFam.t;
+    if (d > 3.4) return g < 4 ? DEEP.l : DEEP.t;
+    return g < 5 ? FAM.l : FAM.t;
   };
 
   const tags = new Map();
@@ -936,9 +980,41 @@ export function paintHighland(stage) {
   if (stead) {
     const [sx, sy] = stead;
     const sz = T.surfaceZ(sx, sy);
+    // SOMEBODY IS IN, OR THE BOTHY IS EMPTY, AND MOST OF THEM ARE EMPTY.
+    //
+    // The highland had no emitters at all: after dark the massif, the viaduct,
+    // the walls and the trees all sat at the ambient floor and the frame had
+    // nothing in it that was a LIGHT. A bothy with a fire in it is the honest
+    // answer — it is what is actually up there — and it works because everything
+    // around it is black. A lit hut on an unlit mountain reads at a hundred
+    // pixels; twenty lamps along a track would read as a suburb.
+    //
+    // FROM `h3`, NOT FROM `bs`. Law 2 in `src/core/rng.js`: appending a draw to
+    // an existing stream re-rolls every subsequent draw in it, and `bs` still
+    // has the log stack, the fold and its wall to draw. Occupancy is a property
+    // of the SITE and hashing its coordinates is both stable for it and free.
+    //
+    // 55 IN 100, AND THE OTHER 45 ARE THE POINT. An always-lit bothy is a lamp
+    // the feed has, not a thing the feed sometimes does — and a dark bothy on a
+    // dark hill is what makes the lit one mean somebody is up there.
+    const occupied = C.cond && C.cond.night
+      && (h3(Math.round(sx), Math.round(sy), 0x5c31) % 100) < 55;
+    let bothyLamp = null;
+    if (occupied) {
+      // A HEARTH AND A HURRICANE LAMP, WHICH IS A WARMER LIGHT THAN A CITY'S.
+      // Deliberately not `lampSet` from `building.js`: that set is a filament, a
+      // fluorescent tube and a cold screen, and two of the three are things a
+      // bothy does not contain. The shared quantity is `EMIT_L` — how bright an
+      // emitter is minted against this file's own night ramp — and it is
+      // imported rather than copied, so there is one measured number and one
+      // home for it.
+      const sk = h3(Math.round(C.light.HUE0 * 1e5), Math.round(sx), Math.round(sy));
+      const j = (n, lo, hi) => lo + ((h3(sk, n, 31) & 1023) / 1024) * (hi - lo);
+      bothyLamp = C.mk(j(1, 17, 33), j(2, 0.62, 0.86), EMIT_L * j(3, 0.92, 1.0), true);
+    }
     cv.t = tag();
     P.bothy(cv, iso, C, bs, sx, sy, sz, bs.range(11, 15), bs.range(8, 11),
-      { tone: steadTone, roof: roofTone, dark: C.slate });
+      { tone: steadTone, roof: roofTone, dark: C.slate, lamp: bothyLamp });
     cv.t = tag();
     P.logStack(cv, iso, C, bs, sx - bs.range(5, 8), sy + bs.range(1, 5), sz,
       { tone: C.mk(C.wood._h + bs.range(-8, 8), C.wood._s * bs.range(0.7, 1.2), C.wood._L) });
@@ -965,7 +1041,7 @@ export function paintHighland(stage) {
   // that crosses open air, and it is drawn in the metal's own contour step
   // rather than in the shared ink: it is a wire, not a silhouette.
   const cs2 = rng.stream('cable');
-  cableLine(cv, iso, C, cs2, T, F, iso, W, H, S, tag, seen, TL0);
+  cableLine(cv, iso, C, cs2, T, F, stage, W, H, S, tag, seen, TL0);
 
   // ------------------------------------------------------------- the scatter
   scatterHighland(stage, {
@@ -1292,11 +1368,74 @@ function pickSteading(T, F, pts, seen, TL0, st) {
 }
 
 /** Three pylons on the skyline and the wire between them. */
-function cableLine(cv, iso, C, st, T, F, _i, W, H, S, tag, seen, TL0) {
+// `A` IS THE STAGE, AND IT USED TO BE `iso` PASSED A SECOND TIME INTO AN UNUSED
+// PARAMETER. The beacon needs the frame index and the recorder, both of which
+// live on the stage; the dead slot was already there and is now the thing that
+// carries them, so the arity is unchanged and there is no fifth-argument call to
+// a four-parameter function anywhere in the chain. Counted at the call site.
+function cableLine(cv, iso, C, st, T, F, A, W, H, S, tag, seen, TL0) {
   const m = C.mk(C.metal._h + st.range(-12, 12), Math.min(0.11, C.metal._s * st.range(0.6, 1.8)),
     Math.min(0.80, C.metal._L * st.range(0.62, 0.94)));
   const cc = C.mk(C.orange._h + st.range(-10, 10), C.orange._s * st.range(0.7, 1.0),
     C.orange._L * st.range(0.8, 1.1));
+  // THE OBSTRUCTION LAMP, MINTED ONCE FOR THE LINE AND HUNG ON ONE PYLON.
+  //
+  // Three rungs of one red, not three colours: what pulses is how bright it is,
+  // and a beacon that changed hue as it flashed would be a fairground. All three
+  // are emissive — a lamp is a source, so the night pull and the night
+  // compression do not apply to it, while the weather veil still does, because
+  // fog scatters a lamp's own photons out of the line of sight exactly as it
+  // scatters a wall's. See `src/gen/palette.js`.
+  //
+  // From `h3` off the scene's own light commitment, so two night highlands get
+  // different beacons without a single new random draw and without this stream
+  // moving under the pylons it is about to place.
+  // AND IT IS *NOT* MINTED AT `EMIT_L`, WHICH IS THE INTERESTING PART.
+  //
+  // `EMIT_L` is 0.74 and it is correct where it came from: a lit WINDOW is a
+  // near-neutral warm light and 0.74 clears the night ramp's lightness ceiling
+  // (0.6036 by construction, 0.533-0.598 measured) while keeping half the
+  // available chroma. It is a LUMA target, and a luma target is only
+  // well-conditioned on a pigment that has little chroma to lose.
+  //
+  // A SIGNAL LAMP IS THE OTHER CASE AND IT INVERTS. HSL chroma is
+  // `(1 - |2l - 1|) * s`, so on a saturated pigment every step up in lightness
+  // past 0.5 buys luma by spending colour. Measured at hue 10, s 0.90:
+  //
+  //     l     0.50            0.60            0.74
+  //     rgb   242, 51, 13     245, 92, 61     248, 149, 129
+  //     luma  103.8           134.1           176.4
+  //     chroma 230            184             119
+  //
+  // At `EMIT_L` a red beacon rasterises to rgb(248,149,129) — SALMON. That is
+  // standing rule 13's lesson in a new costume: the emitter would have passed a
+  // luma check while throwing the red away, exactly as a 0.99 lamp passed a hue
+  // check while throwing the amber away.
+  //
+  // SO THE TARGET IS CHROMA, AND THE CEILING IT HAS TO CLEAR IS MEASURED. Over 6
+  // seeds of highland/night/clear, no tone holding 40 px or more of the frame
+  // exceeds chroma 53-65 or luma 84-125. A beacon at l = 0.50 sits at chroma 230
+  // and luma 104: unmatchable in colour by anything the night ramp can produce,
+  // which is the property that makes it read as a LIGHT rather than as a bright
+  // surface. The three rungs step down in lightness from there, so the pulse is
+  // a change in how bright it is and never in what colour it is.
+  //
+  // `EMIT_L` IS DELIBERATELY LEFT ALONE ON THE CITY'S WINDOWS. A lit window seen
+  // from outside really is pale, the constant was measured for it, and moving it
+  // would be a picture change to a measured object smuggled into a commit about
+  // a mountain. Two emitters, two arguments, both stated. `EMIT_L` is imported
+  // above and used by the bothy, which is a window and not a signal.
+  let lamp = null;
+  if (C.cond && C.cond.night) {
+    const sk = h3(Math.round(C.light.LEFT * 1e5), Math.round(C.light.HUE0 * 1e5), 0x2c07);
+    const j = (n, lo, hi) => lo + ((h3(sk, n, 41) & 1023) / 1024) * (hi - lo);
+    const hue = j(1, 4, 19), sat = j(2, 0.82, 0.96);
+    lamp = [
+      C.mk(hue, sat, j(3, 0.48, 0.53), true).t,
+      C.mk(hue, sat, 0.36, true).t,
+      C.mk(hue, Math.min(1, sat * 1.04), 0.24, true).t,
+    ];
+  }
   const seed = contourSeek(T, F, iso, W, H, S, TL0 + st.range(4, 26), st);
   if (!seed) return;
   const a = st.range(0, 1) < 0.5 ? 1 : -1;
@@ -1311,7 +1450,21 @@ function cableLine(cv, iso, C, st, T, F, _i, W, H, S, tag, seen, TL0) {
     const hh = st.range(13, 20);
     if (!seen(x, y, z, hh + 4)) { prev = null; continue; }
     cv.t = tag();
-    const top = P.pylon(cv, iso, C, st, x, y, z, hh, { tone: m, base: st.range(2.2, 3.0) });
+    // ONE LAMP ON THE LINE, ON THE MIDDLE PYLON. The middle one is the seed
+    // point the other two are stepped off, so it is the one that is actually in
+    // frame; lighting all three would be a runway, and lighting the tallest
+    // would need a second pass to find out which that is.
+    const top = P.pylon(cv, iso, C, st, x, y, z, hh,
+      {
+        tone: m, base: st.range(2.2, 3.0),
+        lamp: i === 0 ? lamp : null,
+        // Its own tag, and one the silhouette sweep skips. A lamp is a source,
+        // not a solid, so it has no silhouette to close — and the head beam it
+        // sits on projects to a four-pixel sliver, far too thin to contain a
+        // 3x2 lamp, so sharing the pylon's tag had the sweep ink two thirds of
+        // it against the terrain behind.
+        lampTag: i === 0 && lamp ? A.tagRaw() : 0,
+      }, A);
     if (prev) {
       cv.t = tag();
       P.cable(cv, iso, C, prev, top, st.range(10, 20), m.k);

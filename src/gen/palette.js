@@ -173,6 +173,30 @@ const HAZE_C = 0.22;   // haze keeps a warm cast
 const DUST_C = 0.40;   // dust is a MATERIAL in the air, and it is sand-coloured
 const SNOW_C = 0.12;   // settled snow: barely blue, mostly value
 
+/**
+ * HOW BRIGHT AN EMITTER IS MINTED — one number, one definition, here.
+ *
+ * It lived in `src/gen/building.js` while a lit window was the only emitter in
+ * the project. It is not a property of buildings: it is a property of the NIGHT
+ * RAMP THIS FILE BUILDS, so a second emitter in a second biome that wrote its
+ * own copy would be a constant with two homes and one of them going stale.
+ *
+ * SET BY A MEASUREMENT, and the measurement is against the ramp above. The
+ * night branch of `condLight` compresses lightness to `AMB + (l - AMB) * 0.58`
+ * and clamps l at 0.99, so the brightest palette entry a CONDITIONED pigment can
+ * reach after dark is 0.6036 by construction, and over six seeds it reads
+ * 0.533-0.598. 0.74 clears that ceiling by about a seventh while keeping half
+ * the available chroma, so an emitter is both the brightest thing in the frame
+ * and still a colour.
+ *
+ * IT MUST NOT BE PUSHED TOWARD 1. HSL chroma is `(1 - |2l - 1|) * s`, which goes
+ * to zero as l goes to 1: the old 0.99 — itself a stale pre-compensation for the
+ * very compression `emissive` now skips — rasterised to rgb(254,253,251), and
+ * the amber was thrown away at the last step while every check upstream passed.
+ * See standing rule 13 in `docs/BAR.md`.
+ */
+export const EMIT_L = 0.74;
+
 const toLin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
 const toEnc = (v) => 255 * (v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055);
 

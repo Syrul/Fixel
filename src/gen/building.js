@@ -16,7 +16,7 @@
 import { drawSlab, asShade } from '../core/iso.js';
 import { box, gable } from './draw.js';
 import { leftFace, rightFace, topFace, blitFace, textPanel } from './faces.js';
-import { h3 } from './palette.js';
+import { h3, EMIT_L } from './palette.js';
 import { textBitmap, scaleBitmap, coinWord, coinTag, signInk } from './font.js';
 import * as R from './props/roof.js';
 import * as S from './props/street.js';
@@ -55,8 +55,11 @@ const MD = (f) => ({ top: f.l, left: f.r, right: f.d });
 // decides what is behind every other window, so there is nothing to open.
 // ---------------------------------------------------------------------------
 
-/** How bright an emitter is minted. Set by a measurement; see `lampSet`. */
-const EMIT_L = 0.74;
+// `EMIT_L` MOVED TO `src/gen/palette.js` AND IS IMPORTED ABOVE. It is a property
+// of the night ramp that file builds, not of buildings, and a second emitter in
+// a second biome — the highland's bothy and its pylon beacon — needs the same
+// number. Two copies of a measured constant is one copy going stale; the
+// measurement that sets it is recorded at its new home and in `lampSet` below.
 
 /**
  * THE SCENE'S LAMPS. THREE TONES, shared by every window in the frame.

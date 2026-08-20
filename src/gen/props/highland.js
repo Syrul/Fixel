@@ -493,15 +493,48 @@ export function bothy(cv, iso, C, st, x, y, z, w, d, o = {}) {
   const FL = leftFace(iso, y + d, x, z), FR = rightFace(iso, x + w, y, z);
   const ridgeX = w >= d;
   const dr = o.dark || C.slate;
+  // SOMEBODY IS IN, OR NOBODY IS. `o.lamp` is an EMISSIVE family or null, and it
+  // is the whole of the highland's night light: a hut with a fire in it is what
+  // is actually up there after dark, and it is not a street lamp with a mountain
+  // behind it. Null by day and on an empty bothy, so both of those paths are
+  // byte-identical to the render before this existed.
+  //
+  // THE OPENINGS ARE NOT RESIZED WHEN THEY ARE LIT, and that is deliberate
+  // rather than lazy. Adding a second window on the night branch would make the
+  // same seed a different BUILDING at a different hour, which is the kind of
+  // inconsistency nobody notices in one post and everybody notices in a feed —
+  // and it would put a geometry change inside a lighting commit, which this
+  // repo has a standing rule about. Only the colour behind the hole moves.
+  const lamp = o.lamp || null;
+  const px = 0.5 * (FL.q === undefined ? 1 : FL.q);
   // openings, cut in the masonry shader so the reveal is part of the wall
   const doorU = st.range(1.6, Math.max(1.7, w - 3.4)), winU = st.range(1.4, Math.max(1.5, w - 3.0));
   const cutL = (u, v) => {
-    if (u > doorU && u < doorU + 2.0 && v < 3.3) return (u < doorU + 0.3 || u > doorU + 1.7 || v > 3.0) ? g.k : dr.k;
-    if (u > winU && u < winU + 1.5 && v > 3.9 && v < 5.3 && wallH > 5.6) return dr.k;
+    if (u > doorU && u < doorU + 2.0 && v < 3.3) {
+      if (u < doorU + 0.3 || u > doorU + 1.7 || v > 3.0) return g.k;
+      if (!lamp) return dr.k;
+      // A DOORWAY IS A HOLE AND THE FLOOR OF THE ROOM IS AT THE BOTTOM OF IT.
+      // One flat rectangle of light reads as a sticker; the lower band is the
+      // lamp's own shaded step, which is the floor catching it, and that is the
+      // whole of the modelling an opening six pixels wide can carry.
+      return v < 0.8 ? lamp.l : lamp.t;
+    }
+    if (u > winU && u < winU + 1.5 && v > 3.9 && v < 5.3 && wallH > 5.6) {
+      if (!lamp) return dr.k;
+      // A transom in the lamp's own dark, so the opening reads as a WINDOW and
+      // not as a hole punched through the gable. One screen pixel, via `q`.
+      if (v > 4.58 && v < 4.58 + px) return lamp.k;
+      return lamp.t;
+    }
     return 0;
   };
   const cutR = (u, v) => {
-    if (u > 1.6 && u < 3.1 && v > 2.2 && v < 3.7) return dr.k;
+    if (u > 1.6 && u < 3.1 && v > 2.2 && v < 3.7) {
+      if (!lamp) return dr.k;
+      // The gable window is on the far side of the room from the door, so it is
+      // one rung down: the same light, further from it.
+      return v > 3.62 - px ? lamp.k : lamp.l;
+    }
     return 0;
   };
   drawBox(cv, iso, x, y, z, w, d, wallH, {
@@ -544,7 +577,59 @@ export function logStack(cv, iso, C, st, x, y, z, o = {}) {
 // crosses open air, and it is drawn in the metal's own contour step rather than
 // in the shared ink: it is a wire, not a silhouette.
 
-export function pylon(cv, iso, C, st, x, y, z, h, o = {}) {
+// THE BEACON ON THE HEAD OF THE TALLEST PYLON.
+//
+// The second of the highland's two emitters, and the argument for it is the
+// same as the bothy's: it is a light that is ACTUALLY up there. A steel line
+// walking over a ridge carries an obstruction lamp because the ridge is the
+// reason it has to; it is not a street lamp with a mountain behind it, which is
+// what a highland gets if you reach for the city's furniture.
+//
+// IT IS A COLOUR OVER A FIXED SILHOUETTE AND NOTHING ELSE. Three poses, six
+// pixels each, identical shape, identical origin, identical depth, identical
+// tag — which is the whole of what `Canvas.blitAnim`'s contract allows, and the
+// reason a beacon is the right thing to animate here and a swinging cable is
+// not. A grown or moved silhouette wins depth tests it lost at frame 0 and
+// changes tag adjacency, and `outlinePass` then un-blackens a pixel of whatever
+// is behind it — 36 px that no sprite touches and no recorder sees. See
+// `docs/BAR.md`, "the related law, for anything blitted".
+//
+// SIX PIXELS, NOT ONE. A single flashing pixel is per-pixel noise with a story
+// attached: `animcheck.mjs` 4-connects the ever-moved mask and fails a seed
+// whose motion lives in 1-2 px islands, and it would be right to. 3x2 is one
+// island of six and the smallest thing that can read as a lamp rather than as a
+// stuck pixel.
+const BEACON = {
+  a: ['aaa', 'aaa'],
+  b: ['bbb', 'bbb'],
+  c: ['ccc', 'ccc'],
+};
+const BEACON_CH = 'abc';
+
+/**
+ * Which rung the beacon is on at frame `k`.
+ *
+ * A THRESHOLDED `triPhase`, NOT A HAND-WRITTEN TABLE, and the difference is
+ * the loop closing by arithmetic rather than by somebody counting entries.
+ * `triPhase` is periodic with period 1 in `phase(k)` and has no kick at the
+ * wrap; a threshold of a periodic function is periodic, so frame FRAMES is
+ * frame 0 whatever the table would have said. A literal 8-entry sequence would
+ * be a second place the loop length is written down, and it would close only
+ * for as long as nobody changed `FRAMES`.
+ *
+ * ANCHORED AT 0.5 SO FRAME 0 IS THE LIT ONE. Everywhere else in this file the
+ * anchor exists to make frame 0 the STILL picture; here there is no still
+ * picture to preserve — the beacon is new — so the anchor is spent on the other
+ * thing it can buy, which is that a one-frame render shows a lamp that is on.
+ * A still render of a beacon caught at its darkest would be a lamp nobody can
+ * see, in the only picture most tools ever look at.
+ */
+function beaconRung(k) {
+  const b = triPhase(k, 0.5);
+  return b > 0.70 ? 0 : b > 0.30 ? 1 : 2;
+}
+
+export function pylon(cv, iso, C, st, x, y, z, h, o = {}, A) {
   const m = o.tone;
   const base = o.base === undefined ? 2.4 : o.base, top = 1.2;
   const legs = [[0, 0], [1, 0], [0, 1], [1, 1]];
@@ -566,7 +651,47 @@ export function pylon(cv, iso, C, st, x, y, z, h, o = {}) {
   }
   // the head beam the cable runs over
   drawBox(cv, iso, x - 1.4, y + top * 0.5 - 0.4, z + h + 0.1, top + 2.8, 0.9, 0.85, { top: m.t, left: m.l, right: m.r });
-  return [x + top * 0.5, y + top * 0.5, z + h + 0.95];
+  const hx = x + top * 0.5, hy = y + top * 0.5, hz = z + h + 0.95;
+  // `o.lamp` is three palette indices — bright, mid, ember — or absent. Absent
+  // by day and on every pylon but one, so both of those paths draw exactly the
+  // pixels they drew before this existed.
+  if (o.lamp) {
+    const p = projR(iso, hx, hy, hz);
+    // TWO THINGS WERE MEASURED HERE AND BOTH FIRST GUESSES WERE WRONG. Counted,
+    // not reasoned: the lamp writes six pixels and only two or three of them
+    // reached the frame, on 5 of 5 seeds, with nothing erroring anywhere.
+    //
+    // ONE: THE DEPTH BIAS. `dep` is s*(x+y+z), exactly what `topDepth` resolves
+    // to at the same point, so +2.2 looked like "two units in front of the beam
+    // it sits on". It is not — `hx, hy` is the CENTRE of the beam's top face and
+    // depth varies ACROSS that face. The beam spans 4.0 units in x and 0.9 in y,
+    // so its near half is up to s*(2.0 + 0.45) = 4.9 deeper than its centre, and
+    // a 2.2 bias lost the depth test over half the lamp. 6.0 clears the whole
+    // face with margin: three world units of "in front", i.e. a lamp on a short
+    // bracket. It does mean an object standing within three units nearer would
+    // be drawn through, and at the top of a pylon there is nothing there.
+    //
+    // TWO, AND THIS IS THE ONE THAT MATTERED: THE SILHOUETTE SWEEP ATE IT. The
+    // rendered-vs-`noOut` counts were 2 and 6 — so the depth was not the whole
+    // story, and the missing four pixels were being BLACKENED rather than lost.
+    // The head beam's top face is a 4.0 x 0.9 rectangle, and in this projection
+    // that projects to a sliver about four pixels thick perpendicular to its own
+    // long axis. A 3x2 lamp cannot fit inside it, so the lamp's edge pixels sat
+    // against the terrain's tag, and `outlinePass` correctly inked the near side
+    // of every one of them. A LIGHT IS NOT AN OBJECT AND HAS NO SILHOUETTE, so
+    // it takes a `tagRaw` tag and opts out of the sweep — the same reason a
+    // pedestrian does, arrived at from the opposite direction.
+    const d = dep(iso, hx, hy, hz, 6.0);
+    const map = { a: o.lamp[0], b: o.lamp[1], c: o.lamp[2] };
+    const K = A && A.frames > 1 ? A.frames : 1;
+    const ps = new Array(K);
+    for (let j = 0; j < K; j++) ps[j] = BEACON[BEACON_CH[beaconRung((A ? A.frame : 0) + j)]];
+    const keep = cv.t;
+    if (o.lampTag) cv.t = o.lampTag;
+    putPoses(cv, p[0] - 1, p[1] - 2, ps, map, d, A);
+    cv.t = keep;
+  }
+  return [hx, hy, hz];
 }
 
 /** A catenary, as a parabola. No transcendental anywhere near a pixel. */
