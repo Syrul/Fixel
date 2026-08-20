@@ -645,6 +645,176 @@ export function paintShore(stage) {
   // ladder and the swell tones, which is what a stretch of water actually does.
   for (const R of REG) mintSea(C, ts, R, seaH0, seaS0, seaL0);
 
+  // ==========================================================================
+  // TWO THINGS THAT ONLY EXIST AT ONE INTERSECTION, AND THEY ARE OPPOSITES.
+  //
+  // The feed has four biomes, three times of day and six weathers and almost
+  // nothing exploits the combinations. The most interesting thing available is
+  // not a new moving object; it is a surface that changes what it REFLECTS,
+  // which is the one thing `blitAnim`'s contract and the amplitude floor both
+  // allow without argument — no silhouette moves, and the pixels that change
+  // are the ones that were already changing.
+  //
+  // Both of these ride the water's EXISTING animation. `waterTop` already emits
+  // K frames per pixel from two moving quantities (the swash surge and the
+  // crest phase); these two read the same quantities and answer a different
+  // colour. So the loop grows by the width of one extra band edge rather than
+  // by a new mechanism, and frame 0 of a conditioned post is still exactly the
+  // still render of that post.
+  //
+  // NEITHER IS REACHABLE ON A REFERENCE POST. `day + clear` takes neither
+  // branch, so every craft number in `docs/` still describes the pixels it was
+  // measured on — checked as byte-identity, not asserted.
+  //
+  // NO Rng DRAW HAPPENS IN EITHER. Every number below is `h3` off quantities
+  // this scene has already committed to. A draw appended to `ts` here would
+  // re-roll nothing (it is the stream's last use) but a draw appended to the
+  // WRONG stream is how this project moves a whole feed by accident, and "it
+  // happens to be last" is not a property worth depending on.
+  // ==========================================================================
+
+  /**
+   * THE COLD TIDE — shore x night x clear, and no other cell of the grid.
+   *
+   * Agitated water carrying a bloom lights up where it breaks. The surf line is
+   * already the most legible motion in the frame and after dark it is the
+   * dimmest thing in it — a pale foam pulled down to the night ramp — so this
+   * costs almost nothing and inverts the whole picture: the sea becomes the
+   * light source and the land is the silhouette.
+   *
+   * WHY CLEAR AND NOT ANY NIGHT. Under fog, rain or overcast the veil in
+   * `condLight` carries every tone toward the medium, an emitter included and
+   * correctly so (Koschmieder applies to a source exactly as to a surface). A
+   * bloom seen through a rain layer is a smudge. Gating on clear is not a
+   * rarity dial bolted on — it is the condition under which the thing is
+   * visible at all, which is what makes an intersection worth building.
+   *
+   * IT IS AN EMITTER, SO IT IS MINTED AT ITS CHROMA MAXIMUM RATHER THAN AT
+   * `EMIT_L`. Same finding as the highland's beacon: on a saturated pigment
+   * every step of lightness past 0.5 buys luma by spending colour, and a bloom
+   * that came out pale mint would be a lit foam rather than a light.
+   */
+  const bloom = (C.cond.night && C.cond.weather === 'clear') ? (() => {
+    const sk = h3(S0, Math.round(seaH0 * 64), 0x3b19);
+    const j = (n, lo, hi) => lo + ((h3(sk, n, 53) & 1023) / 1024) * (hi - lo);
+    // Between green and cyan and never blue: blue is the sea's own hue here
+    // (182-214) and a bloom the colour of the water it is in is not a bloom.
+    const hue = j(1, 146, 174), sat = j(2, 0.56, 0.80);
+    return [
+      C.mk(hue, sat, j(3, 0.50, 0.55), true),
+      C.mk(hue + j(4, -7, 5), sat * 0.88, 0.375, true),
+      C.mk(hue + j(5, -9, 3), sat * 0.72, 0.255, true),
+    ];
+  })() : null;
+  /** Which stretches of coast carry it. The swell channel is the coarsest field
+   *  the water has (360 and 180 world units after `SET_WARP`), so a bloom comes
+   *  in bays rather than in speckle — the same argument that makes the surge
+   *  itself regional. Roughly half the coastline on a given night. */
+  const BLOOM_T = bloom ? 0.46 + ((h3(S0, 7, 0x3b19) & 255) / 256) * 0.22 : 2;
+
+  /**
+   * THE SLICK RING — one night-clear shore in nine, and it is the only thing in
+   * this file that is neither admitted by the land nor drawn every time.
+   *
+   * A bloom gathers on the convergence of an eddy and closes into a ring of
+   * light on open water, well outside the surf. Invented, and deliberately so:
+   * it is a phenomenon this world has and ours does not have to.
+   *
+   * DELIBERATELY STILL. There is no wave out there for it to ride — the swash
+   * amplitude is a shore quantity — and a ring that pulsed would be a large
+   * bright area added to the loop for a thing that appears in about one post in
+   * five hundred. `docs/BAR.md`: a component must clear the amplitude floor on
+   * its own or it must not move, and this one has nothing to move with. A
+   * reasoned exclusion is a result.
+   */
+  const ring = (bloom && (h3(S0, 11, 0x51c4) % 9) === 0) ? {
+    x: Ox + nx * (-56 - ((h3(S0, 12, 0x51c4) & 63))) + cxu * (((h3(S0, 13, 0x51c4) & 255) - 128) * 0.9),
+    y: Oy + ny * (-56 - ((h3(S0, 12, 0x51c4) & 63))) + cyu * (((h3(S0, 13, 0x51c4) & 255) - 128) * 0.9),
+    r: 9 + ((h3(S0, 14, 0x51c4) & 15)),
+    t: 1.4 + ((h3(S0, 15, 0x51c4) & 7)) * 0.26,
+  } : null;
+
+  /**
+   * THE GLITTER PATH — shore x golden x clear, the other end of the same idea.
+   *
+   * A low sun puts a road of light on water, and it is a road rather than a
+   * sheet because only the facets tilted the right way send anything to the
+   * eye. This generator already knows which facets those are: `tone` computes
+   * the crest of the swell as a triangle on the cross-shore ordinate, and the
+   * crest IS the tilted facet. So the whole phenomenon is "inside one band of
+   * the alongshore coordinate, the crest is the sun instead of a lighter blue",
+   * and because the crest phase is already the thing that moves, the glitter
+   * travels along the swell for free.
+   *
+   * THE PATH NARROWS AWAY FROM ITS AXIS rather than ending at a line. Off-axis
+   * the crest threshold rises, so fewer and fewer facets qualify and the road
+   * frays out into single flashes — which is what one looks like, and which is
+   * also why it does not read as a rectangle laid over the sea.
+   *
+   * EMISSIVE, AND THAT IS THE PHYSICS RATHER THAN A TRICK. `condLight`'s golden
+   * branch mixes a pigment 14% toward the sun's colour because the sun is
+   * LIGHTING it. A specular return is not lit by the sun, it is an image of the
+   * sun, so it is minted at the sun's own colour and opts out of being carried
+   * a seventh of the way there. It keeps the veil, so a hazy golden hour puts
+   * the road out, correctly.
+   */
+  const glint = (C.cond.time === 'golden' && C.cond.weather === 'clear') ? (() => {
+    const sk = h3(S0, Math.round(sandH * 64), 0x6d02);
+    const j = (n, lo, hi) => lo + ((h3(sk, n, 29) & 1023) / 1024) * (hi - lo);
+    // ONE GOLDEN SHORE IN SEVEN TAKES THE COLD CORE INSTEAD.
+    //
+    // The core of a glitter path is the least saturated part of it, and on a
+    // rare evening the very brightest facets come back a cold green rather than
+    // a white — an invented optical accident, and the whole of it is one hue.
+    // It is a hue swap on about 40 pixels of a picture that is itself about one
+    // post in forty, so it is a thing a person finds rather than a thing the
+    // feed has.
+    // AND THE RARE CORE IS DARKER, NOT PALER, WHICH IS THE WHOLE REASON IT IS
+    // VISIBLE. The first version reached for "the brightest facet, in green" and
+    // minted it at l 0.90-0.95 alongside the white one. HSL chroma is
+    // (1-|2l-1|)*s, so at l = 0.92 and s = 0.40 the chroma is 16 out of 255 —
+    // the egg would have rendered as an off-white indistinguishable from the
+    // ordinary core, shipped, and never been seen by anyone. Standing rule 13
+    // for the third time in this round: a colour pushed toward white is not a
+    // brighter colour, it is a smaller one. At l 0.66 and s 0.65 the chroma is
+    // 113 and it is unmistakably green.
+    const rare = (h3(S0, 9, 0x6d02) % 7) === 0;
+    const skirt = C.mk(j(5, 34, 44), j(6, 0.46, 0.66), j(7, 0.74, 0.82), true);
+    return rare
+      ? [C.mk(j(1, 128, 146), j(3, 0.55, 0.75), j(4, 0.62, 0.70), true), skirt]
+      : [C.mk(j(2, 44, 54), j(3, 0.08, 0.19), j(4, 0.90, 0.95), true), skirt];
+  })() : null;
+  /** The path's axis and half-width, in alongshore world units. 34-52 units is
+   *  135-210 screen pixels either side of the axis: a third of the frame, which
+   *  is what a sun road at this elevation covers, and never the whole sea. */
+  // ANCHORED ON THE SHORELINE ORIGIN, NOT ON A FREE HASH. A sun road's position
+  // is set by where the viewer is standing relative to the sun, and the frame is
+  // composed on the shore — so it is always roughly in front of you. Drawn as an
+  // unanchored alongshore coordinate it landed off-frame on 4 of 8 seeds, which
+  // is a phenomenon that half the time is not in the picture. Anchored plus a
+  // 46-unit jitter it is always somewhere in the water and never in the same
+  // place twice.
+  const GC = glint ? (Ox * cxu + Oy * cyu) + ((h3(S0, 21, 0x6d02) & 255) - 128) * 0.36 : 0;
+  const GW = glint ? 21 + ((h3(S0, 22, 0x6d02) & 63)) * 0.24 : 1;
+  /**
+   * How much of the swell's period is a facet tilted at the sun.
+   *
+   * 0.925 is 7.5% of a 26-46 unit period, which is 8-14 screen pixels: a fleck,
+   * not a band. The first version used the crest band the swell already draws
+   * (`t > 0.87`, 13% of the period, 14-24 px) and the result read as SANDBARS —
+   * long continuous cream stripes lying on the water, because that is what a
+   * band that wide is.
+   *
+   * AND THE PATH FRAYS BY DENSITY, NOT BY WIDTH. The obvious way to taper it is
+   * to raise the threshold away from the axis, and that is wrong for a reason
+   * this project has already paid for twice: it drives the band width to zero at
+   * the edge, and a band thinner than a pixel is not a thin band, it is noise —
+   * `docs/CRAFT.md` finding 5, and the amplitude floor from the other side. So
+   * the flecks keep a constant width and get RARER, gated on the fine field,
+   * whose 29-pixel features make the gaps as coherent as the flecks.
+   */
+  const GTH = 0.925;
+
   // ------------------------------------------------------------ the footpaths
   //
   // WORN TRACKS THROUGH THE DUNES, CUT INTO THE GROUND ITSELF RATHER THAN LAID
@@ -956,6 +1126,34 @@ export function paintShore(stage) {
     const si = Math.floor(e / R.subW) + (fine > 0.74 ? 1 : fine < 0.20 ? -1 : 0);
     const base = (si & 1) ? F.l : F.t;
 
+    // ---- THE SLICK RING, and it returns BEFORE the loop is computed.
+    //
+    // It is constant in k by construction, so the K frames would all be the
+    // same value and `AnimRec.push` would count them as `flat` and throw them
+    // away — after computing them. Returning here instead is the same argument
+    // `waterTop`'s own `if (K < 2)` line makes: a value that cannot move should
+    // not be evaluated eight times to discover that.
+    //
+    // Gated well offshore and away from any white water so it can never eat the
+    // surf line, which is the thing the rest of this file exists to draw.
+    if (ring && e < -13) {
+      const rx = u - ring.x, ry = v - ring.y;
+      const rr = Math.sqrt(rx * rx + ry * ry) - ring.r;
+      if (rr > -ring.t && rr < ring.t) {
+        // Two bands and the outer one is the dimmer: a slick has a bright
+        // convergence line with the glow trailing off outward.
+        return rr < -ring.t * 0.30 ? bloom[1].t
+          : rr < ring.t * 0.34 ? bloom[0].t : bloom[2].t;
+      }
+    }
+
+    // ---- which of the two intersections, if either, this pixel is inside.
+    // Both are pure functions of position and are hoisted out of `tone`, which
+    // runs K times per pixel: the shader's whole cost argument is that only the
+    // two phase scalars differ per frame.
+    const bloomHere = bloom !== null && swell > BLOOM_T;
+    const gd = glint === null ? 2 : Math.abs((u * cxu + v * cyu) - GC) / GW;
+
     // The swell runs on the LINEAR cross-shore ordinate, not on the exposure
     // field: the exposure field carries the bar, and over the bar's outer face
     // it changes by thirty units in sixteen, which bunched the crests into the
@@ -976,8 +1174,55 @@ export function paintShore(stage) {
       const fw = foamAt(e + dE, g0, grain);
       if (fw > 0.60) return R.foam[gi].t;
       if (fw > 0.44) return R.foam[gi].l;
+      // ---- the cold tide.  It sits STRICTLY SEAWARD OF THE FOAM and adds two
+      // bands below the foam's own 0.44 rather than replacing anything, which
+      // is both the physics and the cheapest possible version of it: the foam
+      // stays foam, the water that the wave has just torn glows, and the light
+      // rides the swash surge that was already moving those pixels. One extra
+      // band edge, no new mechanism, and the white water keeps its structure.
+      //
+      // THE FIRST TWO VERSIONS BOTH FAILED BY EYE AND BOTH FAILED THE SAME WAY.
+      // Ordering the bands by `fw` descending put the brightest tone on the
+      // THICK white water, which is the widest part of the surf: several
+      // thousand pixels of one bright green, reading as paint rather than as
+      // light, and worsening the `flat.largestRegion` regression this biome
+      // already carries. Inverting the order fixed the flat field and left the
+      // whole surf a muddy dark green, because the widest band was then the
+      // dull one. Neither was visible in any number; both were obvious in a
+      // 3x crop. `docs/BAR.md` standing rule 11 — a number you have not seen
+      // the shape of is a number you do not have.
+      //
+      // THE STRETCH GATE IS AN INTENSITY, NOT AN ON/OFF. A hard threshold on
+      // the swell channel is a slow field read over one frame: on the seeds it
+      // sat above, the entire visible coast flared; on the ones it sat below the
+      // phenomenon did not exist. 1 and 0, never the thing in between — which is
+      // `docs/CRAFT.md`'s "a fixed threshold on an fbm does not travel between
+      // seeds" arriving through a different door. Every night-clear shore now
+      // glows; which stretches FLARE is what varies along the coast.
+      //
+      // AND IT IS CONFINED TO THE SWASH, WHICH IS A CRAFT DECISION OVERRULING A
+      // PHYSICAL ONE, STATED AS SUCH. `foamAt` has a second source: a breaker
+      // term over any flat patch of seabed between 6 and 27 units of exposure.
+      // Real surf over an offshore bank really does light up — and those patches
+      // are broad and smooth, so lighting them put two 3,000-pixel fields of one
+      // flat green in the open sea. That is the largest-flat-region defect this
+      // biome is already carrying, bought with the most literal reading of the
+      // effect. The glow is therefore gated on the SHIFTED exposure — shifted,
+      // so the gate edge travels with the band instead of clipping it — and the
+      // offshore breakers stay unlit.
+      if (bloom && e + dE > -9) {
+        if (fw > 0.33) return bloomHere ? bloom[0].t : bloom[1].t;
+        if (fw > 0.21) return bloomHere ? bloom[1].t : bloom[2].t;
+      }
       const t = tri(d / R.pitch + swell * 1.25 + ph);
       if (grain > 0.30) {
+        // ---- the glitter path.  The crest is the tilted facet, so inside the
+        // band the crest returns the sun rather than a lighter blue. `gth` rises
+        // with distance from the axis, so the road frays into single flashes
+        // instead of ending at a ruled edge.
+        if (gd < 1 && t > GTH && fine > 0.26 + gd * gd * 0.56) {
+          return t > GTH + 0.022 ? glint[0].t : glint[1].t;
+        }
         if (t > 0.87) return F.l;
         // The trough takes the RIGHT step, not the contour step. `.k` is the
         // line the light does not reach at all, and a hundred pixels of it
