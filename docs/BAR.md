@@ -1128,12 +1128,22 @@ still be worth deleting**, and that is a different sentence from "it never did a
 
 ## THE OPEN DEFECT, deliberately not fixed, and it is larger than the one that was
 
-**The same plateau mislabels PITCH: 85% correct overall, and 60% correct below 124 Hz.** That
-feeds `pitchClassEntropy` and `chromaChangeRate` — two more load-bearing gates.
+~~**The same plateau mislabels PITCH: 85% correct overall, and 60% correct below 124 Hz.**~~
+**CORRECTED — wrong in its number, wrong in its justification, and it UNDERSTATED the problem
+on the statistic that actually matters.** The 85/60 figures included pure sine tones, which no
+chiptune waveform produces; on chiptune timbres the same detector labels **95% overall and 73%
+in the bass**. But label accuracy was the wrong statistic to quote in the first place — entropy
+is built from chroma **MASS**, not from the argmax. The honest figure:
 
-> **Every entropy reading in this audio investigation rests on a chroma detector that is 60%
-> right in the bass.** That includes the readings that refuted the chord-vocabulary hypothesis
-> at 2.771, and the readings that justified removing `HARMONIC_SHADOW`.
+> **The shipped detector puts only 45% of its chroma mass in the right bin in the bass.**
+
+It feeds `pitchClassEntropy` and `chromaChangeRate` — two more load-bearing gates.
+
+> ~~**Every entropy reading in this audio investigation rests on a chroma detector that is 60%
+> right in the bass**, including the readings that refuted the chord-vocabulary hypothesis at
+> 2.771 and the readings that justified removing `HARMONIC_SHADOW`.~~
+> **FALSIFIED. Both of those conclusions are SYMBOLIC — computed from the score, never through
+> the detector.** See the correction two sections below; the error was the lead's.
 
 Stopping was correct: fixing chroma moves five gating metrics at once, and only the counter had
 been validated. But this cannot sit as a footnote, and it is commissioned as its own task with
@@ -1141,24 +1151,114 @@ the same ablation discipline. One promising asymmetry to start from: **unlike th
 chroma DOES respond to `NC` — 97% at 16384** — so the cheap fix that was unavailable to the
 counter may be available here.
 
-## How to cite the `HARMONIC_SHADOW` removal — the two halves must stay apart
+## CORRECTED: how to cite the `HARMONIC_SHADOW` removal
 
-There are two independent arguments for removing that rule, and **only one of them
-is currently trustworthy**:
+~~There are two independent arguments for removing that rule, and only one of them
+is currently trustworthy: the firing rate is sound, while "removing it did not move
+`pitchClassEntropy`, which sits at 2.771" rests on the chroma detector and is not
+yet trustworthy at 60% correct below 124 Hz. Cite the firing rate, not the entropy.
+The same caution applies to the refutation of the chord-vocabulary hypothesis: it
+was refuted at 2.771, a chroma reading, so if the corrected detector moves that
+number the refutation is re-opened.~~
 
-| the argument | rests on | status |
-|---|---|---|
-| the rule **fired on 87%** of harmony notes and **achieved its purpose on 17%** of those | a firing-rate count over the symbolic score | **sound. Does not touch chroma at all.** |
-| removing it did not move `pitchClassEntropy`, which sits at 2.771 | the chroma detector | **not yet trustworthy — 60% correct below 124 Hz** |
+**THAT WAS WRONG, AND IT WAS THE LEAD'S ERROR. Both flagged conclusions are
+SYMBOLIC — computed from the note list, never through the audio detector.** A
+detector that puts 45% of its chroma mass in the right bin cannot have influenced a
+number that never passed through it. Measured across all 31 progressions under the
+symbolic path: **0 of 31 hot, under the shipped and the rebuilt detector alike.**
 
-The removal stands, on the first row alone. But the tempting shorthand is
-**"we measured it and removed it"**, and that sentence quietly borrows credibility
-from the untrustworthy half. Cite the firing rate, not the entropy, until the
-chroma task reports.
+The general rule stated with it — *a conclusion inherits the reliability of its
+weakest instrument* — **is sound and stands.** What was wrong was the application:
+the entropy half of the shadow argument is symbolic too, so it does not inherit the
+detector's unreliability, and the two halves did not need separating.
 
-The same caution applies to the refutation of the chord-vocabulary hypothesis. It
-was refuted at 2.771 — a chroma reading. If the corrected detector moves that
-number, the refutation is re-opened, and the `theory.js` comment claiming those
-chromatic degrees were added to lift entropy becomes live again rather than
-merely wrong. **A conclusion inherits the reliability of its weakest instrument,
-and it keeps inheriting it until that instrument is fixed.**
+**The disconfirming evidence was in text the lead had written personally.** Standing
+rule 12's own section, four hundred lines above, introduces those figures with the
+words *"Measured, on the symbolic score"*. It was read past. That is standing rule 9
+exactly — *test independence before treating shared structure as evidence* — in its
+cheapest possible form: two numbers were assumed to share a provenance because they
+shared a name, and the assumption was never stated and never checked while a caution
+was built on top of it.
+
+### One word does not survive, and it is not the lead's
+
+`pitchClassEntropy` at 2.771 was relayed as **"comfortably inside the band"**. It is
+not. The p05 edge is **2.7728**, so 2.771 sits **0.0018 BELOW it** — marginally
+*outside*, at **-0.0035 band-widths**, which under standing rule 10 is **no result in
+either direction.**
+
+The refutation is unaffected, because it never needed that edge. It needed the
+distance from the **CEILING**, and that was never in doubt. **Correct the wording,
+keep the conclusion** — and note that the flattering word appeared on the side of the
+argument that was already being made, which is standing rule 12's sibling about stale
+numbers pointing the same way twice in one investigation.
+
+---
+
+# The chroma rebuild — an instrument that manufactured entropy from a monotone
+
+## Lead with the intercept. It explains more than any slope in this investigation.
+
+> **The shipped detector read 1.0 to 1.26 BITS of pitch-class entropy for signals containing
+> EXACTLY ONE PITCH CLASS.**
+
+Not a scaling error, not a bias that cancels — an **intercept**. A monotone is the one input
+whose true entropy is known without argument, and it read as though it contained two and a half
+pitch classes. Everything built on `pitchClassEntropy` sat on top of that floor, which is why the
+corpus band was narrow and high and why "diatonic" tracks measured near the middle of it.
+
+The rebuilt detector reads **0.30 to 0.49** on the same signals — **a reduced floor, not an
+eliminated one**, and bass-heavy input is still **0.63**. Reported that way deliberately: this is
+the third instrument in a row where the honest summary is "better and still wrong", and the
+project has been burned by every version of "fixed" that was really "improved".
+
+## The round COST something, and it is reported first
+
+| | before | after |
+|---|---:|---:|
+| acceptance budget | 5 | **6** |
+| corpus acceptance | 37/38 | **38/38** |
+| best fake's clearance over budget | 4 | **3** |
+
+A decompressed detector spreads the corpus out, so the bands widen and the budget follows —
+**the same shape as `polyphony`'s 78% widening.** Correcting an instrument made the gate looser.
+That is the right thing to have happened and it is still a cost, so it goes at the top rather
+than in a footnote.
+
+## And this time the ablation is THIN — which is the real headline for the bar
+
+`polyphony`'s ablation was reassuring: with it worth nothing, 9 of 9 controls still failed by 4-8
+metrics. **This one is not.**
+
+> With all five chroma-fed gates ablated to worth nothing, **worst-genuine and best-fake both sit
+> at 5. A gap of ZERO.**
+
+**The chroma-derived metrics carry the separation.** So the band is now materially more dependent
+on the instrument we have just learned the least about — we know its intercept is wrong, we know
+its bass mass is 45%, and we know the rebuild only halved the error. This belongs in the
+**Acceptance rule** in plain language, not as a caveat at the bottom: *the audio bar's teeth are
+mostly chroma's teeth, and chroma is the least trustworthy thing in it.*
+
+## The sentence that cost the builder its own story, kept verbatim
+
+The three structural gates moved by **less than the noise at n=7**, and:
+
+> **the difference favours the OLD detector. Saying so costs me the cleaner story.**
+
+That is the hardest kind of honesty in this project and it is worth more than the rebuild. A
+builder that reports its correction as neutral-to-slightly-negative on the metrics it was hoping
+to improve is a builder whose positive results can be believed.
+
+## Two decisions taken
+
+**1. `control-d-long-loop` is added to the calibration set.** `noveltyPerSecond` **INVERTS** on
+loops longer than its 4-second kernel: verbatim loops of 6 s and 8 s score **0.310 and 0.349** —
+*inside* the corpus band of 0.194-0.350. **`control-c` is caught only because its loop happens to
+be 2 s.** So the one demonstration that this bar cannot catch a verbatim loop was itself resting
+on an accident of the control's bar length, and the hole is bigger than it was stated to be.
+This makes the original inversion finding **stronger, not weaker**. It changes the calibration
+set, and a calibration set that cannot see an 8-second loop is worth changing.
+
+**2. `stepFrac`, `leapFrac` and `bigLeapFrac` are commissioned.** They still ride the old peak
+picker, they are byte-identical this round, and **they have never been tested against known
+melodic content.** They are the only remaining consumer of the plateau.
