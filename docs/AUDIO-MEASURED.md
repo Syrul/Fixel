@@ -51,8 +51,10 @@ A track PASSES if **at most 6 of the 14 gating metrics** fall outside their p05.
 > learned the least about**, and chroma is on its first correction where `polyphony` is on its
 > second.
 >
-> **A verbatim loop already passes.** `control-d-long-loop` is 90 seconds of the same four bars,
-> and it clears this gate. See the calibration section.
+> **The genuine-to-fake margin is now ZERO.** Worst genuine corpus track, leave-one-out: **7**.
+> Best-scoring fake: **7**. They are indistinguishable by fail count, and one genuine track is
+> rejected at exactly the count the best fake reaches. All four controls do fail — but the headroom
+> that made that comfortable is gone.
 
 The budget is not a guess; it is the p95 of the leave-one-out fail-count distribution of the corpus
 against itself. Demanding all 14 metrics be in band is the wrong gate and the corpus proves it: with
@@ -365,9 +367,85 @@ structure genuinely exists the metric is excellent — against real section-boun
 
 **The adversarial consequence is concrete, and it has since been built.** `control-c-one-bar-loop` is
 caught by this gate only because its loop is 2 s. `control-d-long-loop` is the same fake with an 8 s
-loop: `noveltyPerSecond` reads **0.310, inside the band**, and does not catch it. ~~`repeatStrength`
-still catches it, so the bar as a whole holds~~ — **the bar as a whole does NOT hold.** `control-d`
-scores 5 out-of-band metrics against a budget of 6 and **PASSES**. See the calibration section.
+loop: `noveltyPerSecond` reads **0.310, inside the band**, and does not catch it — and it still does
+not, after everything below. `control-d` is now caught, but by the repaired melodic gates, not by
+this one. **This gate remains blind to any verbatim loop longer than its own 4 s kernel**, and that
+is unfixed.
+
+### `stepFrac`, `leapFrac`, `bigLeapFrac` — REBUILT. The tracker was following the bass
+
+The interval DEFINITION was never the problem. On a solo melody of known interval content the shipped
+metrics score **slope 0.983 / 0.983 / 0.994** — very nearly perfect. Add **one bass line** and they
+collapse to **0.253 / 0.095 / 0.134**; add a harmony pad and 0.243 / 0.063 / 0.084. A slope near zero
+is the retired tempo estimator's signature: the reading is nearly independent of the input.
+
+**Every corpus track has a bass. So every corpus value of these three metrics was an artefact of the
+accompaniment, and so were their bands.**
+
+The cause is not the documented one. The shipped comment said the second pass confines the line to a
+two-octave window "around its own median", which "kills those voice-swap artefacts". Instrumented on
+a melody spanning midi 55..79 over a single bass note:
+
+```
+monophonic        melCentre=64   frames whose tracked pitch IS a melody note: 341/341 = 100%
++ bass            melCentre=45   frames whose tracked pitch IS a melody note:   0/341 =   0%
+```
+
+`melCentre` is the median of a first pass that keeps only peaks with `rel >= 0.35` — which discards
+the melody in every frame where the bass is louder. The median then lands **in the bass register**,
+and the ±12 window centred there **excludes the melody outright**. The rationale was right — "the
+loudest partial is almost always the bass" — and the implementation did precisely the thing the
+rationale warned against.
+
+**Rebuilt** on the same F0 set the counter and chroma already use, with a loudness floor high enough
+to reject accompaniment partials (0.40) and a slightly wider window (±15). Held out from tuning
+(tuning seeds 5/17; evaluation seeds 101/233/577/911), slope of reading vs known interval content:
+
+| stratum | `stepFrac` | `leapFrac` | `bigLeapFrac` |
+|---|---|---|---|
+| monophonic | 0.983 → 0.987 | 0.983 → 1.002 | 0.994 → 1.018 |
+| **+ one bass line** | **0.253 → 0.962** | **0.095 → 0.961** | **0.134 → 0.994** |
+| **+ bass + harmony** | **0.243 → 0.972** | **0.063 → 0.966** | **0.084 → 0.986** |
+| low melody 48..67 | 0.023 → 0.891 | 0.056 → 0.886 | −0.000 → 0.905 |
+| high melody 67..91 | 0.860 → 0.979 | 0.784 → 0.986 | 0.737 → 1.006 |
+
+**Two residuals, both real.** Fast passages still break it: at 16 notes/second the rebuilt slopes are
+0.539 / 0.374 / 0.566, because a note must hold a stable detected pitch for ~70 ms
+(`minNoteFrames`) to be counted at all and anything shorter is silently dropped, joining its
+neighbours into an interval that was never played. At 12 notes/s it is 0.831 / 0.778 / 0.847 and at
+8/s and slower ≥ 0.899; the corpus `onsetRate` band is 4.58–9.59/s, so most corpus material sits in
+the good range and chiptune arpeggios do not. And it is timbre-dependent: square 0.972, pulse25
+0.841, triangle 0.807, sawtooth 0.774. Reported, not solved.
+
+**Blast radius: exactly three metrics.** All eleven others are byte-identical across the 38 corpus
+tracks — including `polyphony`, both chroma gates and all three structural gates.
+
+> A near-miss worth recording. The first version of this change also replaced the frame-ACTIVITY
+> gate, on the reasoning that the shipped one compares a harmonic-sum salience against a threshold
+> derived from a raw spectrum sum, which is a genuine unit mismatch. Measured against known
+> note/silence structure the two agree on **855 of 858 frames**, scoring 92.5% vs 92.2% — no result
+> at n=858 — and the swap moved `polyphony` by up to **0.48**. It was reverted. An unmeasurable
+> change that moves an unrelated metric by half a voice is not a cleanup.
+
+**`bigLeapFrac`'s suspiciously wide band was the symptom, and it narrows.** 0.064..0.502 (width
+0.438) → 0.300..0.672 (width 0.372). The inherited explanation — voice-swapping "on dense polyphony"
+— was directionally right and wrong about the severity: it took one bass note, not dense polyphony.
+
+> **What this does NOT establish.** The self-consistency test uses synthesised melodies with a clear
+> top-line melody. Real chiptune often carries its melody as an arpeggio, or moves it between voices,
+> and there is no ground-truth annotation of the corpus to check against. The rebuilt corpus
+> `bigLeapFrac` median is 0.461 — i.e. nearly half of all detected melodic intervals are larger than
+> a fifth — which is either a true property of arpeggiated chiptune leads or residual voice-swapping,
+> and **this round cannot tell those apart.**
+
+**`stepFrac` catches nothing, and now it is measuring the right thing while catching nothing.** It is
+out of band on `control-a` and `control-c` only, and on both it reads exactly **0.000** — the
+degenerate case where no melodic line is detected at all, which is information about silence, not
+about step density. On the two controls that do have a melody it is in band. Ablating it moves the
+worst genuine track from 7 to 6 while leaving the best fake at 7, i.e. **removing it widens the
+genuine-to-fake gap from 0 to 1.** By the retirement rule at the top of this section it now passes
+(a) and (b) and fails (c). It is left gating and flagged: the case for demoting it to reported-only
+is real but rests on four controls, which is not a sample.
 
 ## The band
 
@@ -377,9 +455,9 @@ scores 5 out-of-band metrics against a budget of 6 and **PASSES**. See the calib
 | `beatStrength` | 0.282 | 0.816 | 0.701 | 0.122 | 0.837 | yes |
 | `pitchClassEntropy` | 2.821 | 3.438 | 3.291 | 2.630 | 3.470 | yes |
 | `chromaChangeRate` | 0.735 | 1.624 | 1.170 | 0.704 | 1.654 | yes |
-| `stepFrac` | 0.176 | 0.458 | 0.271 | 0.111 | 0.638 | yes |
-| `leapFrac` | 0.295 | 0.552 | 0.420 | 0.084 | 0.590 | yes |
-| `bigLeapFrac` | 0.064 | 0.502 | 0.287 | 0.014 | 0.518 | yes |
+| `stepFrac` | 0.037 | 0.424 | 0.188 | 0.014 | 0.671 | yes |
+| `leapFrac` | 0.197 | 0.515 | 0.311 | 0.064 | 0.530 | yes |
+| `bigLeapFrac` | 0.300 | 0.672 | 0.461 | 0.196 | 0.749 | yes |
 | `repeatStrength` | 0.177 | 0.709 | 0.392 | 0.168 | 0.793 | yes |
 | `novelFraction` | 0.357 | 0.882 | 0.757 | 0.343 | 0.920 | yes |
 | `spectralCentroidMean` | 2201.520 | 4670.696 | 3489.504 | 1284.874 | 5427.580 | yes |
@@ -442,44 +520,44 @@ Values are the median across each track's 30 s windows.
 
 | Track | `stepFrac` | `leapFrac` | `bigLeapFrac` | `repeatStrength` | `novelFraction` | `noveltyPerSecond` |
 |---|---:|---:|---:|---:|---:|---:|
-| 3xblast-pop-punk-1 | 0.425 | 0.448 | 0.127 | 0.168 | 0.920 | 0.271 |
-| celestial-8bit-thing | 0.278 | 0.524 | 0.198 | 0.793 | 0.350 | 0.394 |
-| celestial-pulsar | 0.270 | 0.590 | 0.140 | 0.501 | 0.676 | 0.309 |
-| celestial-summer-sunday | 0.397 | 0.084 | 0.518 | 0.695 | 0.358 | 0.310 |
-| centurion-delayed-chips | 0.188 | 0.300 | 0.512 | 0.430 | 0.705 | 0.288 |
-| centurion-unstable-field | 0.223 | 0.453 | 0.341 | 0.438 | 0.729 | 0.271 |
-| congus-lasso-lady | 0.179 | 0.432 | 0.389 | 0.178 | 0.838 | 0.366 |
-| congus-napping-cloud | 0.173 | 0.374 | 0.442 | 0.321 | 0.755 | 0.232 |
-| hydrogene-mechanical-complex | 0.219 | 0.486 | 0.295 | 0.340 | 0.807 | 0.287 |
-| hydrogene-perilous-dungeon | 0.219 | 0.486 | 0.281 | 0.269 | 0.780 | 0.252 |
-| junkala-adv-bossfight | 0.385 | 0.455 | 0.160 | 0.255 | 0.879 | 0.252 |
-| junkala-adv-stage1 | 0.246 | 0.547 | 0.207 | 0.253 | 0.790 | 0.232 |
-| junkala-level1 | 0.400 | 0.543 | 0.071 | 0.384 | 0.730 | 0.349 |
-| junkala-level2 | 0.405 | 0.327 | 0.135 | 0.431 | 0.761 | 0.194 |
-| junkala-level3 | 0.632 | 0.344 | 0.096 | 0.399 | 0.832 | 0.232 |
-| junkala-title-screen | 0.638 | 0.348 | 0.014 | 0.323 | 0.782 | 0.191 |
-| nene-theme-song-8bit | 0.414 | 0.383 | 0.268 | 0.342 | 0.739 | 0.155 |
-| obscure-moon-chime | 0.281 | 0.378 | 0.268 | 0.453 | 0.757 | 0.290 |
-| pmiller-nes-jazz | 0.282 | 0.338 | 0.380 | 0.546 | 0.480 | 0.385 |
-| randommind-old-tower-inn | 0.340 | 0.290 | 0.370 | 0.424 | 0.543 | 0.387 |
-| sketchy-boss | 0.208 | 0.480 | 0.312 | 0.324 | 0.771 | 0.349 |
-| sketchy-mars | 0.194 | 0.305 | 0.501 | 0.464 | 0.603 | 0.176 |
-| sketchy-mercury | 0.307 | 0.548 | 0.146 | 0.466 | 0.753 | 0.155 |
-| sketchy-venus | 0.111 | 0.513 | 0.376 | 0.792 | 0.343 | 0.278 |
-| skrjablin-c64-uptempo | 0.269 | 0.552 | 0.179 | 0.219 | 0.757 | 0.271 |
-| springspring-great-boss | 0.420 | 0.552 | 0.026 | 0.523 | 0.763 | 0.329 |
-| tinyworlds-happy-adventure | 0.405 | 0.409 | 0.186 | 0.654 | 0.531 | 0.294 |
-| wolfgang-battle-loop | 0.273 | 0.448 | 0.280 | 0.412 | 0.555 | 0.267 |
-| wolfgang-haunted-house | 0.409 | 0.297 | 0.293 | 0.405 | 0.575 | 0.331 |
-| zane-100-victories | 0.428 | 0.402 | 0.175 | 0.483 | 0.616 | 0.290 |
-| zane-aura-horizon | 0.233 | 0.453 | 0.275 | 0.498 | 0.709 | 0.232 |
-| zane-dizzy-racing | 0.311 | 0.323 | 0.323 | 0.270 | 0.875 | 0.232 |
-| zane-face-the-facts | 0.233 | 0.345 | 0.437 | 0.170 | 0.898 | 0.310 |
-| zane-insect-factory | 0.229 | 0.296 | 0.459 | 0.328 | 0.797 | 0.349 |
-| zane-poker-night | 0.250 | 0.437 | 0.309 | 0.361 | 0.766 | 0.174 |
-| zane-sinister-abode | 0.176 | 0.340 | 0.457 | 0.357 | 0.808 | 0.271 |
-| zane-space-cadet | 0.196 | 0.463 | 0.341 | 0.272 | 0.876 | 0.271 |
-| zane-starlight-city | 0.262 | 0.395 | 0.350 | 0.218 | 0.852 | 0.290 |
+| 3xblast-pop-punk-1 | 0.182 | 0.235 | 0.583 | 0.168 | 0.920 | 0.271 |
+| celestial-8bit-thing | 0.127 | 0.321 | 0.552 | 0.793 | 0.350 | 0.394 |
+| celestial-pulsar | 0.326 | 0.281 | 0.393 | 0.501 | 0.676 | 0.309 |
+| celestial-summer-sunday | 0.671 | 0.064 | 0.266 | 0.695 | 0.358 | 0.310 |
+| centurion-delayed-chips | 0.351 | 0.342 | 0.307 | 0.430 | 0.705 | 0.288 |
+| centurion-unstable-field | 0.179 | 0.376 | 0.456 | 0.438 | 0.729 | 0.271 |
+| congus-lasso-lady | 0.217 | 0.383 | 0.400 | 0.178 | 0.838 | 0.366 |
+| congus-napping-cloud | 0.174 | 0.336 | 0.465 | 0.321 | 0.755 | 0.232 |
+| hydrogene-mechanical-complex | 0.247 | 0.248 | 0.504 | 0.340 | 0.807 | 0.287 |
+| hydrogene-perilous-dungeon | 0.367 | 0.296 | 0.318 | 0.269 | 0.780 | 0.252 |
+| junkala-adv-bossfight | 0.092 | 0.314 | 0.594 | 0.255 | 0.879 | 0.252 |
+| junkala-adv-stage1 | 0.127 | 0.204 | 0.669 | 0.253 | 0.790 | 0.232 |
+| junkala-level1 | 0.162 | 0.514 | 0.324 | 0.384 | 0.730 | 0.349 |
+| junkala-level2 | 0.093 | 0.216 | 0.691 | 0.431 | 0.761 | 0.194 |
+| junkala-level3 | 0.178 | 0.256 | 0.567 | 0.399 | 0.832 | 0.232 |
+| junkala-title-screen | 0.038 | 0.481 | 0.481 | 0.323 | 0.782 | 0.191 |
+| nene-theme-song-8bit | 0.110 | 0.314 | 0.573 | 0.342 | 0.739 | 0.155 |
+| obscure-moon-chime | 0.237 | 0.315 | 0.409 | 0.453 | 0.757 | 0.290 |
+| pmiller-nes-jazz | 0.032 | 0.413 | 0.556 | 0.546 | 0.480 | 0.385 |
+| randommind-old-tower-inn | 0.311 | 0.213 | 0.509 | 0.424 | 0.543 | 0.387 |
+| sketchy-boss | 0.214 | 0.158 | 0.628 | 0.324 | 0.771 | 0.349 |
+| sketchy-mars | 0.014 | 0.237 | 0.749 | 0.464 | 0.603 | 0.176 |
+| sketchy-mercury | 0.237 | 0.306 | 0.456 | 0.466 | 0.753 | 0.155 |
+| sketchy-venus | 0.172 | 0.522 | 0.306 | 0.792 | 0.343 | 0.278 |
+| skrjablin-c64-uptempo | 0.423 | 0.239 | 0.338 | 0.219 | 0.757 | 0.271 |
+| springspring-great-boss | 0.230 | 0.530 | 0.196 | 0.523 | 0.763 | 0.329 |
+| tinyworlds-happy-adventure | 0.114 | 0.305 | 0.581 | 0.654 | 0.531 | 0.294 |
+| wolfgang-battle-loop | 0.229 | 0.429 | 0.343 | 0.412 | 0.555 | 0.267 |
+| wolfgang-haunted-house | 0.433 | 0.208 | 0.359 | 0.405 | 0.575 | 0.331 |
+| zane-100-victories | 0.190 | 0.389 | 0.423 | 0.483 | 0.616 | 0.290 |
+| zane-aura-horizon | 0.183 | 0.410 | 0.396 | 0.498 | 0.709 | 0.232 |
+| zane-dizzy-racing | 0.272 | 0.325 | 0.414 | 0.270 | 0.875 | 0.232 |
+| zane-face-the-facts | 0.226 | 0.416 | 0.405 | 0.170 | 0.898 | 0.310 |
+| zane-insect-factory | 0.197 | 0.298 | 0.520 | 0.328 | 0.797 | 0.349 |
+| zane-poker-night | 0.140 | 0.249 | 0.612 | 0.361 | 0.766 | 0.174 |
+| zane-sinister-abode | 0.186 | 0.341 | 0.396 | 0.357 | 0.808 | 0.271 |
+| zane-space-cadet | 0.239 | 0.262 | 0.498 | 0.272 | 0.876 | 0.271 |
+| zane-starlight-city | 0.155 | 0.308 | 0.513 | 0.218 | 0.852 | 0.290 |
 
 ### Timbre, voices, silence
 
@@ -576,41 +654,41 @@ acceptance budget of 6 is derived from.
 
 | Track | gating metrics out of band (of 14) |
 |---|---:|
+| celestial-summer-sunday | 7 |
 | celestial-8bit-thing | 6 |
-| celestial-summer-sunday | 6 |
 | 3xblast-pop-punk-1 | 5 |
-| junkala-level3 | 4 |
-| celestial-pulsar | 3 |
-| congus-napping-cloud | 3 |
-| randommind-old-tower-inn | 3 |
-| sketchy-mars | 3 |
+| sketchy-mars | 4 |
+| wolfgang-haunted-house | 4 |
+| junkala-level3 | 3 |
 | sketchy-venus | 3 |
 | tinyworlds-happy-adventure | 3 |
-| wolfgang-haunted-house | 3 |
 | zane-aura-horizon | 3 |
 | zane-face-the-facts | 3 |
 | zane-insect-factory | 3 |
-| junkala-title-screen | 2 |
+| celestial-pulsar | 2 |
+| congus-napping-cloud | 2 |
+| junkala-adv-stage1 | 2 |
+| junkala-level2 | 2 |
 | obscure-moon-chime | 2 |
+| pmiller-nes-jazz | 2 |
+| randommind-old-tower-inn | 2 |
 | springspring-great-boss | 2 |
 | wolfgang-battle-loop | 2 |
 | zane-dizzy-racing | 2 |
-| zane-sinister-abode | 2 |
-| centurion-delayed-chips | 1 |
 | congus-lasso-lady | 1 |
 | hydrogene-mechanical-complex | 1 |
 | junkala-adv-bossfight | 1 |
-| junkala-adv-stage1 | 1 |
 | junkala-level1 | 1 |
-| junkala-level2 | 1 |
+| junkala-title-screen | 1 |
 | nene-theme-song-8bit | 1 |
-| pmiller-nes-jazz | 1 |
+| sketchy-boss | 1 |
 | sketchy-mercury | 1 |
 | skrjablin-c64-uptempo | 1 |
+| zane-sinister-abode | 1 |
 | zane-starlight-city | 1 |
+| centurion-delayed-chips | 0 |
 | centurion-unstable-field | 0 |
 | hydrogene-perilous-dungeon | 0 |
-| sketchy-boss | 0 |
 | zane-100-victories | 0 |
 | zane-poker-night | 0 |
 | zane-space-cadet | 0 |
@@ -648,49 +726,53 @@ tremolos or adding `compand` expansion buys crest only by going near-silent betw
 frames — that is a property of having drums, not of mastering. Crest is non-gating, so no verdict
 depends on it.
 
-### ~~Result: all three controls FAIL, at every variant~~ — FALSIFIED. Three fail; the fourth PASSES.
+### Result: all FOUR controls FAIL, at every variant — but `control-d` passed until the melodic gates were repaired
 
 | Control | variant | gating metrics out of band | budget | verdict |
 |---|---|---:|---:|:--|
 | control-a-sustained-square | peak dead centre | **13** | 6 | **FAIL** |
 | control-a-sustained-square | RMS dead centre | **12** | 6 | **FAIL** |
-| control-b-random-notes | peak dead centre | **10** | 6 | **FAIL** |
-| control-b-random-notes | RMS dead centre | **10** | 6 | **FAIL** |
-| control-c-one-bar-loop | peak dead centre | **9** | 6 | **FAIL** |
-| control-c-one-bar-loop | RMS dead centre | **9** | 6 | **FAIL** |
-| **control-d-long-loop** | raw | **5** | 6 | **PASS** |
-| **control-d-long-loop** | peak dead centre | **6** | 6 | **PASS** |
-| **control-d-long-loop** | RMS dead centre | **6** | 6 | **PASS** |
+| control-b-random-notes | peak dead centre | **8** | 6 | **FAIL** |
+| control-b-random-notes | RMS dead centre | **8** | 6 | **FAIL** |
+| control-c-one-bar-loop | peak dead centre | **10** | 6 | **FAIL** |
+| control-c-one-bar-loop | RMS dead centre | **10** | 6 | **FAIL** |
+| control-d-long-loop | peak dead centre | **8** | 6 | **FAIL** |
+| control-d-long-loop | RMS dead centre | **8** | 6 | **FAIL** |
 
-**`control-d-long-loop` is ninety seconds of the same four bars, and the bar accepts it.**
+**`control-d-long-loop` is ninety seconds of the same four bars.** It exists because `control-c` was
+caught by `noveltyPerSecond` **only because its loop happens to be 2 s** — that gate reads 0.000 for
+verbatim loops of period ≤ 3 s and 0.310–0.426 at ≥ 4 s, and `CFG.novHalfSec = 2.0` makes the novelty
+kernel exactly 4 s wide. So the most-cited result about this bar rested on an accident of the
+control's bar length. `control-d` is the same fake with an 8 s loop and a stronger phrase: four bars
+of I–vi–IV–V with a real melodic line, so the harmony moves and the interval distribution is
+populated. Only the verbatim repetition is wrong.
 
-It exists because `control-c` was caught by `noveltyPerSecond` **only because its loop happens to be
-2 s long** — measured, that gate reads 0.000 for verbatim loops of period ≤ 3 s and 0.310–0.426 at
-≥ 4 s, and `CFG.novHalfSec = 2.0` makes the novelty kernel exactly 4 s wide. So the most-cited result
-about this bar rested on an accident of the control's bar length. `control-d` is the same fake with
-an 8 s loop and a stronger phrase: four bars of I–vi–IV–V with a real melodic line, so the harmony
-moves and the interval distribution is populated. Only the verbatim repetition is wrong.
+**It passed, and then it did not. The sequence is the finding:**
 
-**Of fourteen gates, exactly two respond to the repetition:**
+| | `control-d` raw | peak-centred | RMS-centred | verdict |
+|---|---:|---:|---:|---|
+| when it was added (chroma-era metrics, budget 6) | 5 | 6 | 6 | **PASS — the bar accepted a verbatim loop** |
+| after the melodic gates were repaired | **7** | **8** | **8** | **FAIL** |
 
-| | caught it | let it through |
-|---|---|---|
-| control-c (2 s loop), 10 fails | `pitchClassEntropy` −1.48, `leapFrac` +1.34, `noveltyPerSecond` −0.80, `chromaChangeRate` −0.53, `novelFraction` −0.40, `repeatStrength` +0.37, `stepFrac` −0.25, `beatStrength` +0.24, `spectralCentroidCV` −0.18, `bigLeapFrac` −0.15 | `onsetRate`, `spectralCentroidMean`, `polyphony`, `silenceFraction` |
-| **control-d (8 s loop), 5 fails** | `novelFraction` −0.65, `repeatStrength` +0.51, `beatStrength` +0.20, `spectralCentroidCV` −0.12, `spectralCentroidMean` +0.04 | `onsetRate`, **`pitchClassEntropy`**, **`chromaChangeRate`**, **`stepFrac`**, **`leapFrac`**, **`bigLeapFrac`**, `polyphony`, `silenceFraction`, **`noveltyPerSecond`** |
+When `control-d` was built, five gates moved from FAIL to PASS simply by lengthening the loop from
+2 s to 8 s and giving it a real phrase: both chroma gates, all three melodic-interval gates, and
+`noveltyPerSecond`. Only `repeatStrength` and `novelFraction` were left doing work that was actually
+about repetition, and 5 out-of-band metrics against a budget of 6 is a pass.
 
-Lengthening the loop from 2 s to 8 s and giving it a real phrase moves **five gates from FAIL to
-PASS** — the two chroma gates, all three melodic-interval gates, and `noveltyPerSecond`. Only
-`repeatStrength` and `novelFraction` are left doing work that is actually about repetition.
+**What changed is that the three melodic gates started measuring melodic intervals.** They had been
+tracking the bass (see their rebuild section above), so on `control-d` they reported the accompaniment
+and found it unremarkable. Corrected, `leapFrac` reads 0.111 against a band of 0.197..0.515 and
+`bigLeapFrac` 0.806 against 0.300..0.672 — the loop's melody is a fixed arpeggio figure, which has a
+distinctive and un-melodic interval profile. Ablate either one and **`control-d` passes again.**
 
-**The budget change is not what causes this, and the honest split matters.** The raw variant scores
-5 and would have passed at the old budget of 5 as well. The two *mastered* variants score 6 and flip
-from FAIL to PASS specifically because the budget moved 5 → 6. So: the long-loop hole predates this
-round; the budget loosening widened it from one variant to three.
+So the long-loop hole was real, and it was real *because three gates were broken*. That is a
+different fact from "the bar cannot see repetition", and a better one: the bar could always have seen
+it, through metrics that were not working.
 
-This is the **inversion failure** — previously argued from arithmetic and one spliced experiment, now
-sitting in the calibration set as a control that anyone can re-run.
-
-For comparison, real corpus tracks average **1.97** out-of-band metrics (worst: 6).
+**The margin is now zero, and that is the uncomfortable number.** Worst genuine track (leave-one-out)
+**7**; best-scoring fake **7**. They are indistinguishable by fail count. One genuine corpus track is
+rejected at a budget of 6 (37 of 38 accepted), and it is rejected at exactly the count the best fake
+reaches. This is tighter than any previous round and it is not a result to celebrate.
 
 ### Which metric caught which control, and by how much
 
@@ -768,20 +850,29 @@ rate. Then the mastering tremolo handed it a real 4 Hz envelope and `onsetRate` 
 `beatStrength` additionally drifts +17%/-24% in magnitude under pure resampling — it reports one
 quantity consistently, but not a precise one.
 
-**`stepFrac` passed both the random-note and the one-bar-loop control.** Only `leapFrac` and
-`bigLeapFrac` had teeth on the interval distribution. The melodic line is tracked as the highest
-strong voice confined to a two-octave register around its own median; on dense polyphony it still
-swaps voices, which is why the corpus `bigLeapFrac` band is wide (0.064..0.502).
+**`stepFrac` catches nothing that is not silence.** ~~It passed both the random-note and the
+one-bar-loop control~~ — it now *fails* the one-bar-loop control, but only by reading exactly 0.000,
+the degenerate case where no melodic line is detected at all. On both controls that have a melody it
+is in band. Ablating it moves the worst genuine track from 7 to 6 and leaves the best fake at 7,
+so **removing it would widen the genuine-to-fake gap from 0 to 1.** It is left gating and flagged;
+the case for demoting it to reported-only is real but rests on four controls.
+
+~~The melodic line is tracked as the highest strong voice confined to a two-octave register around
+its own median; on dense polyphony it still swaps voices, which is why the corpus `bigLeapFrac` band
+is wide (0.064..0.502).~~ **FALSIFIED — it took one bass note, not dense polyphony, and the line was
+not the highest strong voice but the bass.** See the rebuild section. `bigLeapFrac`'s band narrowed
+from 0.064..0.502 (width 0.438) to 0.300..0.672 (width 0.372) once the tracker followed the melody.
 
 **`silenceFraction` has never gated anything** — every control measured 0.000. It guards against dead
 air, which is worth having, but it is not a music test and should not be counted as one.
 
-**The margin over real music is real but not comfortable.** The worst genuine corpus track misses 6
-metrics; the best-scoring *crude* fake misses 9. The budget sits at 6 (it was 5 before the chroma
-rebuild — see the Acceptance rule). ~~This band reliably rejects crude fakes~~ **and only crude
-fakes: `control-d-long-loop`, a verbatim 8-second loop of competent-looking harmony, misses 5 and
-passes.** The paragraph below predicted that "a more competent fake would very plausibly land under
-the budget while still being bad music". It did not need to be more competent than four bars. This band reliably rejects *crude*
+**The margin over real music is GONE, not merely uncomfortable.** The worst genuine corpus track
+misses **7** metrics leave-one-out; the best-scoring fake misses **7**. The budget sits at 6, so both
+are rejected — a genuine chiptune track and the best of four deliberate fakes are separated by
+nothing at all. Every earlier version of this paragraph could quote a gap of 2 to 4. **There is no
+gap now.** Whether that means the bar got sharper (three broken gates started working, and the fakes'
+counts rose accordingly) or that the corpus tail is simply indistinguishable from a competent fake is
+not something 38 tracks and 4 controls can settle. This band reliably rejects *crude*
 fakes — a drone, a random-note generator, a single looped bar. A more competent fake (Markov-chain
 melody over a ii-V-I with a genuine repeated 8-bar section and a couple of timbre changes) would
 very plausibly land under the budget while still being bad music. **This is a floor, not a ceiling:
@@ -969,6 +1060,44 @@ ceiling. **The refutation stands on all three methods with no progression anywhe
 **2. The `HARMONIC_SHADOW` removal.** Its justification — fired on 87% of harmony notes, achieved its
 purpose on 17% of those — is symbolic, so the chroma correction cannot touch it. The removal stands
 on exactly the grounds it was made.
+
+## Re-verification after the melodic rebuild — one claim retracted, and the margin closes to zero
+
+Same three-way check, all 38 corpus tracks and all 12 control variants.
+
+| | before melodic rebuild | after | `stepFrac` ablated | `leapFrac` ablated | `bigLeapFrac` ablated | ALL THREE ablated |
+|---|---:|---:|---:|---:|---:|---:|
+| gates | 14 | 14 | 13 | 13 | 13 | 11 |
+| budget | 6 | **6** | 6 | 6 | 6 | 5 |
+| worst genuine (LOO) | 6 | **7** | 6 | 6 | 6 | 6 |
+| corpus accepted | 38/38 | **37/38** | — | — | — | — |
+| best-scoring fake | 5 | **7** | 7 | 6 | 6 | 5 |
+| worst-genuine → best-fake gap | 1 | **0** | 1 | 0 | 0 | −1 |
+| all 12 controls fail | **no** | **YES** | yes | **no** | **no** | **no** |
+| `control-d` verdict | **PASS** | **FAIL** | FAIL | **PASS** | **PASS** | **PASS** |
+
+**(a) The controls all fail — for the first time since `control-d` was added.** The repaired melodic
+gates are what does it, and ablating either `leapFrac` or `bigLeapFrac` lets `control-d` back through.
+**(b) The budget holds at 6.** It did not have to be re-derived.
+**(c) The margin does NOT survive. It closes to zero** — worst genuine 7, best fake 7 — and one
+genuine corpus track is now rejected. The gate got sharper against fakes and simultaneously lost all
+its headroom over the corpus tail.
+**(d) One claim is retracted:** that the melodic line is "confined to a two-octave register around
+its own median" in a way that "kills voice-swap artefacts", and that `bigLeapFrac`'s wide band is
+explained by dense polyphony. Both struck in place above. **The tracked line was the bass, at 0% melody
+frames with a single bass note present, and the band narrows once that is fixed.**
+
+**On the widened bands.** The three melodic bands did not simply widen: `stepFrac` 0.283 → 0.387 and
+`leapFrac` 0.257 → 0.318 widened, while **`bigLeapFrac` 0.438 → 0.372 narrowed** — the one the old
+documentation singled out as suspiciously wide. A band that narrows under a corrected measurement is
+the outcome that argues the correction is real, since nothing about the fix was aimed at that band.
+
+Two caveats, both mine and both load-bearing. **A re-derive is not an independent test** — the corpus
+defines the band it is scored against, so the leave-one-out column is the number to read. And **the
+self-consistency test cannot see the corpus**: it validates the tracker on synthesised melodies with
+a clear top line, and real chiptune often carries its melody as an arpeggio or moves it between
+voices. The corpus `bigLeapFrac` median of 0.461 is either a true property of arpeggiated leads or
+residual voice-swapping, and this round cannot distinguish them.
 
 ## THE GAP THIS OPENS — carry it into every audio verdict
 

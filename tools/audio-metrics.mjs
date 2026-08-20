@@ -758,13 +758,23 @@ function analyzeWindow(x, sr) {
   const voiceCounts = [];
   const peaksSeq = new Array(S2.nFrames);
   for (let f = 0; f < S2.nFrames; f++) {
-    // `noteSalience` is now used for ONE thing: its `peaks`, which feed the
-    // melodic line below. Its `voices` cannot count and its `chroma` cannot
-    // place a bass pitch class; both are computed from the same 3-4 semitone
-    // plateau. See the countVoices and chromaOfFrame headers.
-    const { peaks, active } = noteSalience(S2.spec[f], bands, activeFloor);
-    peaksSeq[f] = active ? peaks : [];
+    // `noteSalience` no longer supplies a single PITCH to this file. Its
+    // `voices` could not count, its `chroma` could not place a bass pitch class,
+    // and its `peaks` could not track a melody past one bass note — all three
+    // from the same 3-4 semitone plateau, which --self-test still measures.
+    //
+    // It survives here as the frame-ACTIVITY gate and nothing else. Replacing
+    // that gate with `frameTot[f] >= activeFloor` is tempting — the shipped test
+    // compares a harmonic-sum salience against a threshold derived from a raw
+    // spectrum sum, which is a unit mismatch — but measured against known
+    // note/silence structure the two agree on 855 of 858 frames and score 92.5%
+    // vs 92.2%. That is no result at n=858, and swapping it moved `polyphony`
+    // by up to 0.48 on the corpus. An unmeasurable change that moves a metric
+    // by half a voice is not a cleanup; the gate stays until someone has a
+    // reason to touch it.
+    const { active } = noteSalience(S2.spec[f], bands, activeFloor);
     const chroma = new Float64Array(12);
+    peaksSeq[f] = [];
     if (active) {
       // ONE F0 search per frame serves both consumers. Salience is
       // non-increasing across the greedy loop — each acceptance only removes
@@ -779,32 +789,52 @@ function analyzeWindow(x, sr) {
       while (v < acc.length && (v === 0 || acc[v].sal >= VOICE.stopRel * first)) v++;
       voiceCounts.push(v);
       for (let p = 0; p < 12; p++) chromaAvg[p] += chroma[p];
+      // the same F0 set, as (midi, relative salience), for the melodic line
+      peaksSeq[f] = acc.map(a => ({ midi: Math.round(a.midi), rel: first > 0 ? a.sal / first : 0 }));
     }
     chromaSeq.push(chroma);
   }
 
-  // Melodic line: two passes.
-  // Pass 1 takes the highest reasonably strong voice per frame — the melody is
-  // conventionally the top line, and the LOUDEST partial is almost always the
-  // bass, so tracking loudness measures the bass line's (near-static) intervals
-  // and calls them the melody.
-  // Pass 2 fixes what pass 1 gets wrong: whenever the top voice drops out for a
-  // frame, pass 1 jumps down to an accompaniment voice an octave or more away
-  // and fabricates a huge leap. Confining the line to a two-octave register
-  // around its own median kills those voice-swap artefacts, which is what makes
-  // the interval distribution discriminative instead of merely wide.
-  const pass1 = [];
+  // Melodic line — the melody is the TOP line, tracked in two passes.
+  //
+  // THE PREVIOUS TRACKER DID NOT TRACK THE MELODY. Its rationale was right and
+  // its implementation inverted it: it observed that the loudest partial is
+  // usually the bass, then centred its search window on the MEDIAN of a pass
+  // that had already been captured by the bass, because `rel >= 0.35` discards
+  // the melody in every frame where the bass is louder. Measured on a melody of
+  // known interval content over a single bass line, `melCentre` landed at midi
+  // 45 against a melody spanning 55..79, and the +-12 window then excluded the
+  // melody outright: **0% of tracked frames were melody notes.** The comment
+  // claiming the second pass "kills those voice-swap artefacts" was the exact
+  // opposite of what it did.
+  //
+  // What that cost, held out from tuning, as slope of reading vs known interval
+  // content (1.000 is true), over three arrangement densities:
+  //     monophonic          step 0.983  leap 0.983  big 0.994   <- always worked
+  //     + one bass line     step 0.253  leap 0.095  big 0.134   <- collapses
+  //     + bass + harmony    step 0.243  leap 0.063  big 0.084
+  // A slope near zero is the tempo estimator's failure again: the reading was
+  // nearly independent of the input. Since every corpus track has a bass, every
+  // corpus value of these three metrics was an artefact of the accompaniment.
+  //
+  // The fix is the same F0 set the counter and chroma already use, plus a
+  // loudness floor high enough to reject accompaniment partials and a window
+  // centred on the median of the TOP voice rather than of whatever was loudest.
+  // Rebuilt, same held-out test: 0.987/1.002/1.018 monophonic,
+  // 0.962/0.961/0.994 with bass, 0.972/0.966/0.986 with bass and harmony.
+  const MEL = { relFloor: 0.40, halfWidth: 15 };
+  const tops = [];
   for (let f = 0; f < S2.nFrames; f++) {
     let m = -1;
-    for (const pk of peaksSeq[f]) if (pk.rel >= 0.35 && pk.midi > m) m = pk.midi;
-    if (m >= 0) pass1.push(m);
+    for (const pk of peaksSeq[f]) if (pk.rel >= MEL.relFloor && pk.midi > m) m = pk.midi;
+    if (m >= 0) tops.push(m);
   }
-  const melCentre = pass1.length ? median(pass1) : 0;
+  const melCentre = tops.length ? median(tops) : 0;
   for (let f = 0; f < S2.nFrames; f++) {
     let m = -1;
     for (const pk of peaksSeq[f]) {
-      if (pk.rel < 0.30) continue;
-      if (Math.abs(pk.midi - melCentre) > 12) continue;
+      if (pk.rel < MEL.relFloor) continue;
+      if (Math.abs(pk.midi - melCentre) > MEL.halfWidth) continue;
       if (pk.midi > m) m = pk.midi;
     }
     domPitch[f] = m;
@@ -1365,7 +1395,28 @@ function selfTest() {
     check('pitchClassEntropy slope vs known content', slope >= 0.80, `slope ${slope.toFixed(3)} intercept ${intercept.toFixed(2)} (n=${pairs.length}, want ~1.0)`);
   }
 
-  // 5. Bass pitch classes land in the right bin — the defect this round fixed.
+  // 5. The retired plateau is still a plateau. `noteSalience` no longer feeds
+  //    any metric; this measures what it does so the reason stays checkable
+  //    rather than becoming folklore.
+  {
+    const bands = buildSalienceBands(sr, N);
+    // width of the salience response to ONE note, in semitones above half the
+    // peak. A usable pitch detector answers 1. This is the plateau, and it is
+    // the single fact behind all three rebuilds in this file.
+    let worst = 0, worstAt = 0;
+    for (const m of [40, 48, 60, 72]) {
+      const spec = midFrame(tone([m]));
+      let tot = 0; for (let k = 1; k < spec.length; k++) tot += spec[k];
+      const r = noteSalience(spec, bands, tot * 0.02);
+      const w = r.peaks.filter(p => p.rel >= 0.5).length;
+      if (w > worst) { worst = w; worstAt = m; }
+    }
+    check('noteSalience response to ONE note is still a plateau',
+      worst > 1,
+      `${worst} semitones above half-peak for a single note at midi ${worstAt} (a usable detector gives 1)`);
+  }
+
+  // 6. Bass pitch classes land in the right bin — the defect this round fixed.
   {
     let ok = 0, n = 0;
     for (let m = 36; m <= 52; m++) {
