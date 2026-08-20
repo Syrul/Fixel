@@ -377,6 +377,22 @@ const VOICE = {
   minEvidence: 1,
   gridStep: 1 / 3,   // semitone resolution of the F0 hypothesis grid
   peakFloorRel: 0.005,
+  // The CHROMA path uses the same F0 selection but a lower stop threshold, and
+  // this is a measured difference rather than a second knob. Counting voices
+  // and distributing pitch-class mass are different questions: a marginal voice
+  // switching on and off between frames costs the count nothing but flips the
+  // template label of a 0.5 s chroma block, so admitting it at low weight is
+  // smoother than gating it. Salience weighting already de-emphasises it.
+  // Measured jointly on the tuning mixtures (slope / intercept, want 1.00/0.00):
+  //     stopRel     pitchClassEntropy      chromaChangeRate
+  //     shipped        0.642 / 1.29          0.814 / 0.04
+  //     0.08           0.716 / 1.06          0.912 / 0.06
+  //     0.12           0.869 / 0.51          0.917 / 0.07     <- both improve
+  //     0.17           0.893 / 0.42          0.794 / 0.28     <- buys entropy,
+  //                                                              sells change-rate
+  // 0.17 is better for entropy alone and worse for change-rate; 0.12 is the
+  // only setting tried that beats the shipped detector on BOTH.
+  chromaStopRel: 0.12,
 };
 
 const hzToMidiC = f => 69 + 12 * Math.log2(f / 440);
@@ -404,12 +420,14 @@ function spectralPeaks(spec, binHz) {
 }
 
 /**
- * Number of simultaneous notes in one magnitude spectrum.
- * Returns { voices, pitches } — pitches in MIDI, strongest first.
+ * The F0s present in one magnitude spectrum, strongest first, each with the
+ * harmonic-sum salience that won it. Shared by `polyphony` (how many) and by
+ * chroma (where the pitch-class mass goes) so the two cannot drift apart.
+ * `stopRel` differs between the two callers — see VOICE.chromaStopRel.
  */
-function countVoices(spec, sr, N, midiLo, midiHi) {
+function acceptedF0s(spec, sr, N, midiLo, midiHi, stopRel = VOICE.stopRel) {
   const peaks = spectralPeaks(spec, sr / N);
-  if (!peaks.length) return { voices: 0, pitches: [] };
+  if (!peaks.length) return [];
   const res = peaks.map(p => p.amp);   // residual amplitude, consumed by cancellation
 
   // Only F0s that some observed peak supports can score above zero, so the
@@ -467,11 +485,55 @@ function countVoices(spec, sr, N, midiLo, midiHi) {
     }
     if (accepted.length && bres.used < VOICE.minEvidence) break;
     if (!accepted.length) firstSal = bs;
-    else if (bs < VOICE.stopRel * firstSal) break;
+    else if (bs < stopRel * firstSal) break;
     accepted.push({ midi: bm, sal: bs });
     for (let h = 1; h <= VOICE.nHarm; h++) { const i = bres.hit[h]; if (i >= 0) res[i] = 0; }
   }
+  return accepted;
+}
+
+/**
+ * Number of simultaneous notes in one magnitude spectrum.
+ * Returns { voices, pitches } — pitches in MIDI, strongest first.
+ */
+function countVoices(spec, sr, N, midiLo, midiHi) {
+  const accepted = acceptedF0s(spec, sr, N, midiLo, midiHi, VOICE.stopRel);
   return { voices: accepted.length, pitches: accepted.map(a => Math.round(a.midi)) };
+}
+
+/**
+ * Pitch-class mass for one frame, from the same F0 set.
+ *
+ * `noteSalience`'s chroma cannot place bass pitch classes. Its salience curve
+ * is a 3-4 semitone plateau (see the countVoices header), so below ~250 Hz the
+ * accepted peak is often a semitone flat and its mass lands in the wrong bin.
+ * Measured on single notes of chiptune timbre, chroma mass on the TRUE pitch
+ * class was 45% in C2-B2 against 100% above C4; on 2-4 note chords in the bass,
+ * 47-49%.
+ *
+ * Raising NC fixes the placement (96% at NC=8192) but is NOT the fix: a longer
+ * analysis window smears chord boundaries, and chromaChangeRate's intercept
+ * goes from 0.04 to 0.36-0.62 — it invents chord changes in music that has
+ * none. Interpolated peaks buy the same frequency precision at an unchanged
+ * 93 ms window.
+ *
+ * MEASURED, held out from tuning (slope of reading vs known content, want
+ * 1.000, and intercept, want 0.00):
+ *   pitchClassEntropy, bass-heavy   0.581 / 1.53  ->  0.845 / 0.63
+ *   pitchClassEntropy, full range   0.675 / 1.17  ->  0.907 / 0.34
+ *   chromaChangeRate                0.819 / 0.19  ->  0.925 / 0.11
+ * The shipped detector read 1.0-1.26 bits of pitch-class entropy for signals
+ * containing exactly ONE pitch class. The rebuilt one reads 0.30-0.49 and is
+ * still not zero: this is a reduced floor, not an eliminated one.
+ */
+function chromaOfFrame(spec, sr, N, midiLo, midiHi) {
+  const accepted = acceptedF0s(spec, sr, N, midiLo, midiHi, VOICE.chromaStopRel);
+  const chroma = new Float64Array(12);
+  for (const a of accepted) {
+    const midi = Math.round(a.midi);
+    chroma[((midi % 12) + 12) % 12] += a.sal;
+  }
+  return chroma;
 }
 
 // ---------------------------------------------------------------------------
@@ -696,12 +758,26 @@ function analyzeWindow(x, sr) {
   const voiceCounts = [];
   const peaksSeq = new Array(S2.nFrames);
   for (let f = 0; f < S2.nFrames; f++) {
-    const { chroma, peaks, active } = noteSalience(S2.spec[f], bands, activeFloor);
+    // `noteSalience` is now used for ONE thing: its `peaks`, which feed the
+    // melodic line below. Its `voices` cannot count and its `chroma` cannot
+    // place a bass pitch class; both are computed from the same 3-4 semitone
+    // plateau. See the countVoices and chromaOfFrame headers.
+    const { peaks, active } = noteSalience(S2.spec[f], bands, activeFloor);
     peaksSeq[f] = active ? peaks : [];
+    const chroma = new Float64Array(12);
     if (active) {
-      // NOT noteSalience's `voices` — that field cannot count. See the
-      // countVoices header above and the retraction in docs/AUDIO-MEASURED.md.
-      voiceCounts.push(countVoices(S2.spec[f], sr, CFG.NC, CFG.midiLo, CFG.midiHi).voices);
+      // ONE F0 search per frame serves both consumers. Salience is
+      // non-increasing across the greedy loop — each acceptance only removes
+      // energy — so the voice-count set at VOICE.stopRel is exactly the prefix
+      // of the chroma set at the lower VOICE.chromaStopRel. Searching once and
+      // truncating is identical to searching twice, and is asserted to be so
+      // under --self-test.
+      const acc = acceptedF0s(S2.spec[f], sr, CFG.NC, CFG.midiLo, CFG.midiHi, VOICE.chromaStopRel);
+      for (const a of acc) chroma[((Math.round(a.midi) % 12) + 12) % 12] += a.sal;
+      const first = acc.length ? acc[0].sal : 0;
+      let v = 0;
+      while (v < acc.length && (v === 0 || acc[v].sal >= VOICE.stopRel * first)) v++;
+      voiceCounts.push(v);
       for (let p = 0; p < 12; p++) chromaAvg[p] += chroma[p];
     }
     chromaSeq.push(chroma);
@@ -1131,6 +1207,123 @@ function makeControls(outDir, sr = 44100, dur = 90) {
 }
 
 // ---------------------------------------------------------------------------
+// Self-test — standing rule 7 carried inside the instrument.
+//
+// Every gating metric rebuilt in this file was justified by a response slope
+// against known input. Those measurements live in the commit and the docs,
+// where they cannot fail. This runs the cheap ones on every invocation of
+// `--self-test`, so a future edit that quietly breaks one is caught by the
+// tool rather than by the next round's re-derive.
+// ---------------------------------------------------------------------------
+
+function lsqSlope(pairs) {
+  const n = pairs.length;
+  const sx = pairs.reduce((s, p) => s + p[0], 0), sy = pairs.reduce((s, p) => s + p[1], 0);
+  const sxx = pairs.reduce((s, p) => s + p[0] * p[0], 0), sxy = pairs.reduce((s, p) => s + p[0] * p[1], 0);
+  const b = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+  return { slope: b, intercept: (sy - b * sx) / n };
+}
+
+function selfTest() {
+  const sr = 44100, N = CFG.NC;
+  let failures = 0;
+  const check = (name, ok, detail) => {
+    if (!ok) failures++;
+    console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${name.padEnd(52)} ${detail}`);
+  };
+  const tone = (midis, dur = 1.2, amp = 0.6) => {
+    const n = Math.round(dur * sr), x = new Float32Array(n);
+    for (const m of midis) {
+      const f = midiHz(m); let ph = 0;
+      for (let i = 0; i < n; i++) {
+        const env = Math.min(1, i / 64) * Math.min(1, (n - i) / 256);
+        x[i] += (amp / midis.length) * env * squareOsc(ph); ph += f / sr;
+      }
+    }
+    return x;
+  };
+  const midFrame = x => { const S = stft(x, N, CFG.HC); return S.spec[Math.max(0, S.nFrames >> 1)]; };
+
+  console.log('\naudio-metrics self-test\n');
+
+  // 1. The optimisation analyzeWindow relies on: one F0 search truncated at the
+  //    higher threshold must equal a second search run at that threshold.
+  {
+    let worst = 0, n = 0;
+    for (const set of [[60], [48, 55], [40, 52, 59], [36, 48, 60, 67], [72, 76, 79]]) {
+      const spec = midFrame(tone(set));
+      const lo = acceptedF0s(spec, sr, N, CFG.midiLo, CFG.midiHi, VOICE.chromaStopRel);
+      const hi = acceptedF0s(spec, sr, N, CFG.midiLo, CFG.midiHi, VOICE.stopRel);
+      const first = lo.length ? lo[0].sal : 0;
+      let v = 0;
+      while (v < lo.length && (v === 0 || lo[v].sal >= VOICE.stopRel * first)) v++;
+      worst = Math.max(worst, Math.abs(v - hi.length)); n++;
+    }
+    check('truncated prefix == second search (voice count)', worst === 0, `max disagreement ${worst} over ${n} spectra`);
+  }
+
+  // 2. Salience must be non-increasing across the greedy loop — the property
+  //    that makes (1) true in the first place.
+  {
+    let bad = 0, n = 0;
+    for (const set of [[60], [43, 50, 57], [36, 43, 55, 62, 69]]) {
+      const acc = acceptedF0s(midFrame(tone(set)), sr, N, CFG.midiLo, CFG.midiHi, 0.01);
+      for (let i = 1; i < acc.length; i++) { n++; if (acc[i].sal > acc[i - 1].sal + 1e-12) bad++; }
+    }
+    check('accepted-F0 salience is non-increasing', bad === 0, `${bad} inversions over ${n} steps`);
+  }
+
+  // 3. Voice count tracks known voice count (the rebuild's headline claim).
+  {
+    const pairs = [];
+    for (const root of [40, 48, 55, 62, 70]) {
+      for (const k of [1, 2, 3, 4]) {
+        const set = []; for (let i = 0; i < k; i++) set.push(root + i * 5);
+        pairs.push([k, countVoices(midFrame(tone(set)), sr, N, CFG.midiLo, CFG.midiHi).voices]);
+      }
+    }
+    const { slope, intercept } = lsqSlope(pairs);
+    check('polyphony response slope vs known voice count', slope >= 0.80, `slope ${slope.toFixed(3)} intercept ${intercept.toFixed(2)} (n=${pairs.length}, want ~1.0)`);
+  }
+
+  // 4. A single pitch class must not read as entropy. This is the defect that
+  //    made the shipped chroma report 1.0-1.26 bits for a monotone.
+  {
+    const pcs = [[0], [0, 7], [0, 4, 7], [0, 2, 4, 5, 7, 9, 11]];
+    const pairs = [];
+    for (const set of pcs) {
+      const acc = new Float64Array(12);
+      // one note per pitch class, low register, where the defect lived
+      for (const pc of set) {
+        const spec = midFrame(tone([36 + pc]));
+        const c = chromaOfFrame(spec, sr, N, CFG.midiLo, CFG.midiHi);
+        for (let p = 0; p < 12; p++) acc[p] += c[p];
+      }
+      pairs.push([Math.log2(set.length), entropyBits(acc)]);
+    }
+    const mono = pairs[0][1];
+    check('one pitch class reads ~0 bits of entropy', mono < 0.35, `reads ${mono.toFixed(3)} bits (shipped detector read 1.0-1.26)`);
+    const { slope, intercept } = lsqSlope(pairs);
+    check('pitchClassEntropy slope vs known content', slope >= 0.80, `slope ${slope.toFixed(3)} intercept ${intercept.toFixed(2)} (n=${pairs.length}, want ~1.0)`);
+  }
+
+  // 5. Bass pitch classes land in the right bin — the defect this round fixed.
+  {
+    let ok = 0, n = 0;
+    for (let m = 36; m <= 52; m++) {
+      const c = chromaOfFrame(midFrame(tone([m])), sr, N, CFG.midiLo, CFG.midiHi);
+      let best = -1, bv = -1;
+      for (let p = 0; p < 12; p++) if (c[p] > bv) { bv = c[p]; best = p; }
+      n++; if (best === ((m % 12) + 12) % 12) ok++;
+    }
+    check('bass notes C2..E3 land on the true pitch class', ok === n, `${ok}/${n} correct`);
+  }
+
+  console.log(`\n${failures === 0 ? 'all self-tests passed' : failures + ' SELF-TEST FAILURE(S)'}\n`);
+  return failures;
+}
+
+// ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 
@@ -1162,6 +1355,8 @@ function main() {
   const argv = process.argv.slice(2);
   const json = argv.includes('--json');
   const get = flag => { const i = argv.indexOf(flag); return i >= 0 ? argv[i + 1] : null; };
+
+  if (argv.includes('--self-test')) { process.exit(selfTest() === 0 ? 0 : 1); }
 
   const mc = get('--make-controls');
   if (mc) { makeControls(path.resolve(mc)); console.log(`controls written to ${path.resolve(mc)}`); return; }

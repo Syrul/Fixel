@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated": "2026-08-20T00:10:45.897Z",
+  "generated": "2026-08-20T00:49:08.799Z",
   "method": "p05..p95 across corpus tracks; per-track value = median across 30 s windows",
   "windowSeconds": 30,
   "corpusSize": 38,
@@ -60,18 +60,18 @@
       "max": 0.8372927998990168
     },
     "pitchClassEntropy": {
-      "lo": 2.7728266449406798,
-      "hi": 3.3009614164270054,
-      "median": 3.1192660817656845,
-      "min": 2.6372728998958843,
-      "max": 3.3707825444175032
+      "lo": 2.820662132193832,
+      "hi": 3.438252026817909,
+      "median": 3.2913451043481237,
+      "min": 2.629917207566399,
+      "max": 3.469712700679146
     },
     "chromaChangeRate": {
-      "lo": 0.99,
-      "hi": 1.575914589442815,
-      "median": 1.3303158949477902,
-      "min": 0.8333333333333334,
-      "max": 1.601599247412982
+      "lo": 0.7354699854499179,
+      "hi": 1.623530450132392,
+      "median": 1.1701408436645306,
+      "min": 0.7038629102526865,
+      "max": 1.6541392285983068
     },
     "stepFrac": {
       "lo": 0.17555419389978213,
@@ -95,18 +95,18 @@
       "max": 0.518440391943386
     },
     "repeatStrength": {
-      "lo": 0.15371644016535194,
-      "hi": 0.6415995933300204,
-      "median": 0.3207896726103797,
-      "min": 0.11652016309054591,
-      "max": 0.7818313422134155
+      "lo": 0.17678090178536116,
+      "hi": 0.7093255417401971,
+      "median": 0.3917428147524494,
+      "min": 0.16843298493703474,
+      "max": 0.7929280686256143
     },
     "novelFraction": {
-      "lo": 0.5030033725275727,
-      "hi": 0.928883726633604,
-      "median": 0.8103486370432418,
-      "min": 0.3971119133574007,
-      "max": 0.9629647457496582
+      "lo": 0.3571278414671828,
+      "hi": 0.8819306739310366,
+      "median": 0.7569691366804152,
+      "min": 0.34299516908212563,
+      "max": 0.9200242528555782
     },
     "spectralCentroidMean": {
       "lo": 2201.51973040981,
@@ -137,11 +137,11 @@
       "max": 0.17164179104477612
     },
     "noveltyPerSecond": {
-      "lo": 0.19364391299460432,
-      "hi": 0.3495166231798215,
-      "median": 0.2881524245136523,
-      "min": 0.17427952169514388,
-      "max": 0.3662109375
+      "lo": 0.1713748630002248,
+      "hi": 0.3849364356171313,
+      "median": 0.27477403516303334,
+      "min": 0.15491513039568344,
+      "max": 0.3943810096153846
     }
   },
   "nonGating": {
@@ -172,34 +172,34 @@
   },
   "acceptance": {
     "rule": "PASS if the number of gating metrics outside their p05..p95 band is <= maxGatingFails",
-    "maxGatingFails": 5,
+    "maxGatingFails": 6,
     "gatingMetricCount": 14,
     "leaveOneOut": {
       "note": "each corpus track scored against a band built from the other tracks",
       "failCounts": {
-        "3xblast-pop-punk-1.wav": 4,
-        "celestial-8bit-thing.wav": 5,
-        "celestial-pulsar.wav": 2,
+        "3xblast-pop-punk-1.wav": 5,
+        "celestial-8bit-thing.wav": 6,
+        "celestial-pulsar.wav": 3,
         "celestial-summer-sunday.wav": 6,
         "centurion-delayed-chips.wav": 1,
         "centurion-unstable-field.wav": 0,
         "congus-lasso-lady.wav": 1,
-        "congus-napping-cloud.wav": 2,
-        "hydrogene-mechanical-complex.wav": 2,
+        "congus-napping-cloud.wav": 3,
+        "hydrogene-mechanical-complex.wav": 1,
         "hydrogene-perilous-dungeon.wav": 0,
-        "junkala-adv-bossfight.wav": 2,
+        "junkala-adv-bossfight.wav": 1,
         "junkala-adv-stage1.wav": 1,
-        "junkala-level1.wav": 3,
-        "junkala-level2.wav": 0,
-        "junkala-level3.wav": 3,
+        "junkala-level1.wav": 1,
+        "junkala-level2.wav": 1,
+        "junkala-level3.wav": 4,
         "junkala-title-screen.wav": 2,
-        "nene-theme-song-8bit.wav": 0,
+        "nene-theme-song-8bit.wav": 1,
         "obscure-moon-chime.wav": 2,
-        "pmiller-nes-jazz.wav": 0,
-        "randommind-old-tower-inn.wav": 4,
+        "pmiller-nes-jazz.wav": 1,
+        "randommind-old-tower-inn.wav": 3,
         "sketchy-boss.wav": 0,
-        "sketchy-mars.wav": 2,
-        "sketchy-mercury.wav": 0,
+        "sketchy-mars.wav": 3,
+        "sketchy-mercury.wav": 1,
         "sketchy-venus.wav": 3,
         "skrjablin-c64-uptempo.wav": 1,
         "springspring-great-boss.wav": 2,
@@ -207,19 +207,19 @@
         "wolfgang-battle-loop.wav": 2,
         "wolfgang-haunted-house.wav": 3,
         "zane-100-victories.wav": 0,
-        "zane-aura-horizon.wav": 5,
+        "zane-aura-horizon.wav": 3,
         "zane-dizzy-racing.wav": 2,
-        "zane-face-the-facts.wav": 2,
+        "zane-face-the-facts.wav": 3,
         "zane-insect-factory.wav": 3,
-        "zane-poker-night.wav": 1,
+        "zane-poker-night.wav": 0,
         "zane-sinister-abode.wav": 2,
         "zane-space-cadet.wav": 0,
         "zane-starlight-city.wav": 1
       },
-      "mean": 1.894736842105263,
+      "mean": 1.9736842105263157,
       "median": 2,
       "max": 6,
-      "acceptedAtThisBudget": 37
+      "acceptedAtThisBudget": 38
     }
   }
 }
