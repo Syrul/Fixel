@@ -1262,3 +1262,102 @@ set, and a calibration set that cannot see an 8-second loop is worth changing.
 **2. `stepFrac`, `leapFrac` and `bigLeapFrac` are commissioned.** They still ride the old peak
 picker, they are byte-identical this round, and **they have never been tested against known
 melodic content.** They are the only remaining consumer of the plateau.
+
+---
+
+# The melodic line was the bass — and the documentation asserted the opposite
+
+The largest of the three instrument findings, and the one that reaches furthest back.
+
+`melCentre` is the median of a pass that keeps peaks above a **relative** threshold. So it lands
+in the **bass register whenever the bass is louder** — and the +/-12 semitone window centred
+there then **EXCLUDES THE MELODY OUTRIGHT.**
+
+Measured: of the tracked frames that are genuinely melody notes, **341/341 when the input is
+monophonic, and 0/341 once a bass is added.** Every corpus track has a bass.
+
+> **So every corpus value of `stepFrac`, `leapFrac` and `bigLeapFrac` — and both of their bands —
+> was an artefact of the accompaniment, for the entire life of this project.**
+
+The existing explanation in `docs/AUDIO-MEASURED.md` blamed voice-swapping on dense polyphony.
+That was inherited and wrong. And the source comment claimed the pass *"kills those voice-swap
+artefacts"*:
+
+> **It described the exact opposite of what it did.** This is the fifth instrument in this
+> project to be measuring something other than its name, and **the first where the documentation
+> actively asserted the inverse of the behaviour** — which is worse than an absent comment,
+> because a reader who checks the code against the comment finds agreement in the words and
+> stops.
+
+## The validation signal, which is the part to remember
+
+`bigLeapFrac`'s band **NARROWED from 0.438 to 0.372** under a correction that was not aimed at
+it and had no reason to touch it.
+
+> **A band that tightens when you were not trying to tighten it is measuring something real.**
+
+That is the strongest validation any of these three rounds produced, and it is worth more than
+any accuracy percentage, because it cannot be obtained by tuning. Nothing was optimising it.
+
+---
+
+# DECISION: the audio band stops here. Recorded as a call, not as work forgotten.
+
+**The margin is zero — worst genuine leave-one-out 7, best fake 7 — and it cannot be resolved
+with anything available in this environment.** The ambiguity is real and symmetric: *either* the
+bar got sharper because three broken gates started working and the fakes' counts rose, *or* the
+corpus tail is genuinely indistinguishable from a competent fake. **38 tracks with two artists
+supplying 15, against 4 controls, cannot settle that. Neither could 50 tracks and 8 controls.**
+
+Three reasons the work stops, stated so that a future reader knows this was decided rather than
+abandoned:
+
+1. **The band already had its verdict and none of this changed it.** It is a **floor that rejects
+   a drone**, never a score that ranks music. A zero margin against a competent fake is not a new
+   failure — it is the same conclusion, measured more precisely. The inversion test said this
+   before any of the three rounds began.
+2. **The pixel side solved this problem and the solution does not transfer.** There, the duel is
+   the bar and the counts are floors. **For audio there is no duel, because nothing in this
+   environment can listen.** That is not a gap better metrics can close — it is the reason the
+   metrics were only ever a floor.
+3. **The user is the only available judge, and they are a good one.** They diagnosed "annoying"
+   and "they all sound kinda the same" in about ten seconds. Both turned out to have precise
+   mechanical causes — a rule detuning 87% of a voice, and a `FORM` table that was a module
+   constant — that **every green gate had missed.** That is the bar. Ship the music.
+
+**One item remains commissioned, and only one:** the **~70 ms note-segmentation floor**, which
+silently discards fast notes and **manufactures intervals between their neighbours**. That is the
+**FOURTH silent discard this project has shipped**, after the fractional typed-array index, the
+float32 depth comparison and the five-argument call to a four-parameter function. It is not a
+calibration question and it is not in scope for the decision above: **it is a correctness bug
+that invents data.** Fix it or make it refuse loudly. Then stop.
+
+`stepFrac` **keeps its gate.** The case for demoting it rested on four controls, and four
+controls is not a sample.
+
+## `control-d` was right, and the result beat the hypothesis
+
+It was added to test a suspected hole. **It passed on arrival — then failed at 7/8/8 after the
+melodic repair.** So the long-loop hole was real **because three gates were broken**, which is a
+sharper and more useful fact than "the bar cannot see repetition", and **it could not have been
+found without building the control.** Build the instrument that tests the thing you already
+believe; it is how you find out the belief was right for the wrong reason.
+
+---
+
+# Standing rule 14: rule 10 applies to REFACTORS, not just to findings
+
+A proposed change came with a genuine, correct unit-mismatch argument — the kind that reads as
+obvious cleanup. Measured, the two implementations agreed on **855 of 858 frames**: no result,
+under standing rule 10. The swap also moved `polyphony` by **0.48**.
+
+The builder reverted it, in its own words:
+
+> **An unmeasurable change that moves an unrelated metric by half a voice is not a cleanup.**
+
+Standing rule 10 was written about findings — *record the margin with the sample count; a margin
+under ~0.02 at n=4 is no result in either direction.* **It applies identically to refactors, and
+nobody had written that down.** A refactor justified by an argument rather than by a measurement,
+which cannot be shown to change the thing it targets but does change something else, is a net
+addition of risk. **"It is more correct in principle" is a hypothesis, and it is tested the same
+way as any other.**
